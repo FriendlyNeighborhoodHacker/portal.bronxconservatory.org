@@ -442,7 +442,7 @@ final class ImportFlowsTest extends TestCase
 
     public function testSampleHoldBlocksCsvParsesAndValidates(): void
     {
-        $path = __DIR__ . '/../../../sample_data/hold_blocks.csv';
+        $path = __DIR__ . '/../../../sample_data/fall_semester/hold_blocks.csv';
         $this->assertFileExists($path);
         $parsed = CsvImport::parseCsv((string)file_get_contents($path), ',');
         $this->assertSame(
