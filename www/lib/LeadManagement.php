@@ -311,28 +311,52 @@ class LeadManagement {
         self::log($ctx, 'lead.checkout_session_attached', ['lead_id' => $leadId]);
     }
 
+    // The PaymentIntent behind the registration form's embedded card fields.
+    // Recorded up front so a payment can be matched back to its lead whether
+    // the news arrives by webhook or by the browser returning.
+    public static function attachPaymentIntent(?UserContext $ctx, int $leadId, string $paymentIntentId): void {
+        self::pdo()->prepare('UPDATE leads SET stripe_payment_intent_id = ? WHERE id = ?')
+            ->execute([$paymentIntentId, $leadId]);
+        self::log($ctx, 'lead.payment_intent_attached', ['lead_id' => $leadId]);
+    }
+
+    // The reference a payment is keyed by: the PaymentIntent for the
+    // embedded card form, or a Checkout Session for anything still in flight
+    // from the hosted-checkout era.
+    public static function paymentReference(array $lead): string {
+        $intent = trim((string)($lead['stripe_payment_intent_id'] ?? ''));
+        return $intent !== '' ? $intent : trim((string)($lead['stripe_checkout_session_id'] ?? ''));
+    }
+
     /**
      * Record a completed Stripe payment on the lead. Idempotent: the guarded
      * UPDATE only fires while the session matches and nothing has been
      * recorded yet, so webhook + return-page races are harmless. Returns
      * whether this call recorded the payment.
      */
-    public static function recordLeadPayment(int $leadId, int $amountCents, string $sessionId, ?string $paymentIntentId): bool {
-        if ($amountCents <= 0 || trim($sessionId) === '') {
+    public static function recordLeadPayment(int $leadId, int $amountCents, string $reference, ?string $paymentIntentId = null): bool {
+        if ($amountCents <= 0 || trim($reference) === '') {
             return false;
         }
+        // $reference is whichever Stripe object the payment came through —
+        // the PaymentIntent (embedded card form) or a Checkout Session — and
+        // has to already be on the lead, so a stray webhook cannot mark an
+        // unrelated registration paid.
         $st = self::pdo()->prepare(
             'UPDATE leads
-             SET amount_paid_cents = ?, stripe_payment_intent_id = ?, paid_at = NOW()
-             WHERE id = ? AND stripe_checkout_session_id = ? AND amount_paid_cents = 0'
+             SET amount_paid_cents = ?,
+                 stripe_payment_intent_id = COALESCE(?, stripe_payment_intent_id),
+                 paid_at = NOW()
+             WHERE id = ? AND amount_paid_cents = 0
+               AND (stripe_payment_intent_id = ? OR stripe_checkout_session_id = ?)'
         );
-        $st->execute([$amountCents, $paymentIntentId, $leadId, $sessionId]);
+        $st->execute([$amountCents, $paymentIntentId, $leadId, $reference, $reference]);
         $recorded = $st->rowCount() > 0;
         if ($recorded) {
             self::log(null, 'lead.payment_recorded', [
                 'lead_id' => $leadId,
                 'amount_cents' => $amountCents,
-                'checkout_session_id' => $sessionId,
+                'reference' => $reference,
             ]);
         }
         return $recorded;
@@ -482,7 +506,9 @@ class LeadManagement {
         $paymentRecorded = false;
         $paymentNotice = null;
         $paidCents = (int)$lead['amount_paid_cents'];
-        $sessionId = (string)($lead['stripe_checkout_session_id'] ?? '');
+        // Whichever Stripe object the money came through — it doubles as the
+        // ledger's idempotency key, so a payment can never be credited twice.
+        $sessionId = self::paymentReference($lead);
         $targetLeadStudentId = (int)($options['payment_target_lead_student_id'] ?? 0);
         if ($paidCents > 0 && $sessionId !== '' && $targetLeadStudentId && isset($studentUserIds[$targetLeadStudentId])) {
             $st = self::pdo()->prepare('SELECT COUNT(*) FROM ledger_entries WHERE stripe_checkout_session_id = ?');

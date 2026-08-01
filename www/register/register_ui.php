@@ -8,7 +8,19 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/SemesterManagement.php';
 require_once __DIR__ . '/../lib/LeadManagement.php';
 
-const REGISTRATION_STEPS = ['Family', 'Students', 'Policies', 'Payment Plan', 'Review'];
+const REGISTRATION_STEPS = ['Family', 'Students', 'Policies', 'Payment Plan', 'Review', 'Checkout'];
+
+// Absolute URL for a path on this site — Stripe needs a real return URL.
+// Prefers the configured site_base_url, falling back to the current request
+// so local development works without configuration.
+function registration_absolute_url(string $path): string {
+    $base = rtrim(Settings::get('site_base_url', ''), '/');
+    if ($base === '') {
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $base = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    }
+    return $base . $path;
+}
 
 /**
  * The semester registration is open for, or renders the friendly "closed"
@@ -80,6 +92,7 @@ function registration_step_url(int $step): string {
         3 => '/register/policies.php',
         4 => '/register/payment_plan.php',
         5 => '/register/review.php',
+        6 => '/register/checkout.php',
     ];
     return $urls[$step] ?? $urls[1];
 }

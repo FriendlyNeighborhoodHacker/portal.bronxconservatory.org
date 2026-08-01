@@ -30,6 +30,16 @@ ApplicationUI::minimalHeaderHtml('Registration Received');
   <?php elseif ($payFlag === 'error' && !$paid): ?>
     <p class="error" style="text-align:left;">We couldn't start the online payment just
       now. Your registration is saved — you can try again below or pay over the phone.</p>
+  <?php elseif ($payFlag === 'later' && !$paid): ?>
+    <p class="flash" style="text-align:left;">No problem — your registration is saved.
+      You can pay below whenever you're ready, or we'll sort it out when we call.</p>
+  <?php elseif ($payFlag === 'processing' && !$paid): ?>
+    <p class="flash" style="text-align:left;">Your payment is still processing. We'll email
+      you when it clears — there's nothing more you need to do.</p>
+  <?php elseif ($payFlag === 'unconfirmed' && !$paid): ?>
+    <p class="flash" style="text-align:left;">We couldn't confirm the payment status just
+      now. If your card was charged it will appear shortly — please don't pay twice; call
+      us at <?=h(Settings::contactPhone())?> if you're unsure.</p>
   <?php endif; ?>
 
   <p>Thank you for registering for the Bronx Conservatory of Music! If you have not

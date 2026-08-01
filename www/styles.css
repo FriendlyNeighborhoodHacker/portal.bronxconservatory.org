@@ -1420,13 +1420,43 @@ body.auth .brand-logo {
 }
 
 /* A full sentence of instructions inside a <label>. Labels are 500-weight,
-   which reads as bold once the text is longer than a field name. */
-.label-prose {
+   which reads as bold once the text is longer than a field name — the
+   selector is scoped to `label` so it outranks that rule for certain. Block
+   + margin lifts the prose clear of the field it introduces instead of
+   letting the two sit flush together. */
+label .label-prose {
+  display: block;
   font-weight: 400;
+  margin-bottom: 8px;
 }
 
 /* A caveat riding along inside a question — smaller and muted (from .small),
    but not carrying the question's bold weight. */
 .form-question .small {
   font-weight: 400;
+}
+
+/* ===== Registration checkout (step 6) ===== */
+
+.checkout-table .checkout-total td {
+  border-top: 2px solid var(--color-border);
+}
+
+/* "Secure" reassurance beside the Billing Information heading. */
+.secure-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0a6e3d;
+  background: #dcf5e7;
+  border-radius: 999px;
+  padding: 3px 10px;
+  margin-left: 8px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Stripe Elements mount points — give the iframes room to breathe. */
+#payment-element,
+#address-element {
+  margin: 6px 0 4px;
 }

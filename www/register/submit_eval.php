@@ -60,35 +60,13 @@ if ($leadId === 0 || !LeadManagement::findLead($leadId)) {
     registration_reset();
 }
 
-// Hand off to Stripe for the due-now amount (or finish unpaid).
+// On to checkout, where the card fields live. When there is nothing to
+// collect — Stripe unconfigured, or a zero quote — the registration simply
+// finishes and BCM follows up about payment.
 $lead = LeadManagement::findLead($leadId);
 if (StripeCheckout::isConfigured() && (int)$lead['amount_paid_cents'] === 0 && (int)$lead['amount_due_now_cents'] > 0) {
-    try {
-        $base = rtrim(Settings::get('site_base_url', ''), '/');
-        if ($base === '') {
-            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            $base = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
-        }
-        $quoteLines = json_decode((string)$lead['quote_json'], true) ?: [];
-        $dueNow = (int)$lead['amount_due_now_cents'];
-        $lines = $dueNow === (int)$lead['amount_quoted_cents']
-            ? $quoteLines
-            : [['label' => 'BCM registration — due today (fees + 50% tuition deposit)', 'amount_cents' => $dueNow]];
-        $session = StripeCheckout::createLeadCheckoutSession(
-            null,
-            $leadId,
-            $lines,
-            $base . '/register/return.php?status=success&session_id={CHECKOUT_SESSION_ID}',
-            $base . '/register/return.php?status=cancel'
-        );
-        LeadManagement::attachCheckoutSession(null, $leadId, $session['id']);
-        header('Location: ' . $session['url']);
-        exit;
-    } catch (\Throwable $e) {
-        // Payment can always happen later by phone; never lose the lead.
-        header('Location: /register/done.php?pay=error');
-        exit;
-    }
+    header('Location: /register/checkout.php');
+    exit;
 }
 
 header('Location: /register/done.php');

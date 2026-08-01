@@ -83,51 +83,77 @@ class StripeCheckout {
     }
 
     /**
-     * Create a Checkout Session for a registration lead (public wizard).
-     * $lines: the due-now breakdown from the lead's frozen quote —
-     * [['label' => string, 'amount_cents' => int], ...]; non-positive lines
-     * are skipped. metadata[lead_id] routes the completed session to
-     * LeadManagement::recordLeadPayment instead of the student ledger.
+     * A PaymentIntent for a registration lead, so the card fields can be
+     * embedded in the registration form itself (Stripe Elements) instead of
+     * sending the family off to a hosted Checkout page. Card details go
+     * straight from the browser to Stripe — the client_secret returned here
+     * is all our page needs, and no card data ever reaches this server.
+     *
+     * metadata[lead_id] is what routes the completed payment back to the
+     * lead (see handlePaymentIntentSucceeded).
      */
-    public static function createLeadCheckoutSession(
+    public static function createLeadPaymentIntent(
         ?UserContext $ctx,
         int $leadId,
-        array $lines,
-        string $successUrl,
-        string $cancelUrl
+        int $amountCents,
+        string $receiptEmail = '',
+        string $description = ''
     ): array {
         self::assertConfigured();
-        $params = [
-            'mode' => 'payment',
-            'success_url' => $successUrl,
-            'cancel_url' => $cancelUrl,
-            'metadata[lead_id]' => (string)$leadId,
-        ];
-        $i = 0;
-        $total = 0;
-        foreach ($lines as $line) {
-            $cents = (int)($line['amount_cents'] ?? 0);
-            if ($cents <= 0) {
-                continue;
-            }
-            $params["line_items[$i][price_data][currency]"] = 'usd';
-            $params["line_items[$i][price_data][unit_amount]"] = (string)$cents;
-            $params["line_items[$i][price_data][product_data][name]"] = (string)($line['label'] ?? 'BCM registration');
-            $params["line_items[$i][quantity]"] = '1';
-            $total += $cents;
-            $i++;
-        }
-        if ($i === 0) {
+        if ($amountCents <= 0) {
             throw new InvalidArgumentException('Nothing to pay.');
         }
 
-        $session = self::request('POST', self::API_BASE . '/checkout/sessions', $params);
-        self::log($ctx, 'stripe.lead_checkout_session_created', [
-            'session_id' => $session['id'] ?? null,
+        $params = [
+            'amount' => (string)$amountCents,
+            'currency' => 'usd',
+            'automatic_payment_methods[enabled]' => 'true',
+            'metadata[lead_id]' => (string)$leadId,
+        ];
+        if ($receiptEmail !== '') {
+            $params['receipt_email'] = $receiptEmail;
+        }
+        if ($description !== '') {
+            $params['description'] = $description;
+        }
+
+        $intent = self::request('POST', self::API_BASE . '/payment_intents', $params);
+        self::log($ctx, 'stripe.lead_payment_intent_created', [
+            'payment_intent_id' => $intent['id'] ?? null,
             'lead_id' => $leadId,
-            'total_cents' => $total,
+            'amount_cents' => $amountCents,
         ]);
-        return ['id' => (string)($session['id'] ?? ''), 'url' => (string)($session['url'] ?? '')];
+        return [
+            'id' => (string)($intent['id'] ?? ''),
+            'client_secret' => (string)($intent['client_secret'] ?? ''),
+        ];
+    }
+
+    public static function retrievePaymentIntent(string $paymentIntentId): array {
+        self::assertConfigured();
+        if (!preg_match('/^pi_[A-Za-z0-9_]+$/', $paymentIntentId)) {
+            throw new InvalidArgumentException('Bad payment intent id.');
+        }
+        return self::request('GET', self::API_BASE . '/payment_intents/' . $paymentIntentId, null);
+    }
+
+    /**
+     * Record a succeeded PaymentIntent against its registration lead.
+     * Idempotent, so the webhook and the browser's return trip can race.
+     * Returns 1 when this call recorded the payment, else 0.
+     */
+    public static function handlePaymentIntentSucceeded(array $intent): int {
+        if ((string)($intent['status'] ?? '') !== 'succeeded') {
+            return 0;
+        }
+        $intentId = (string)($intent['id'] ?? '');
+        $leadId = (int)($intent['metadata']['lead_id'] ?? 0);
+        if ($leadId <= 0 || $intentId === '') {
+            return 0;
+        }
+        require_once __DIR__ . '/LeadManagement.php';
+        $amount = (int)($intent['amount_received'] ?? $intent['amount'] ?? 0);
+        return LeadManagement::recordLeadPayment($leadId, $amount, $intentId) ? 1 : 0;
     }
 
     public static function retrieveCheckoutSession(string $sessionId): array {

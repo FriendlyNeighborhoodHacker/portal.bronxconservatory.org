@@ -85,9 +85,7 @@ ApplicationUI::minimalHeaderHtml('Register — Review');
     <div class="actions">
       <a class="btn-outline" href="/register/payment_plan.php">Back</a>
       <button type="submit" class="btn-cta">
-        <?=$stripeReady
-            ? 'Submit &amp; Pay ' . registration_dollars($quote['due_now_cents'])
-            : 'Submit Registration'?>
+        <?=$stripeReady ? 'Continue to Checkout' : 'Submit Registration'?>
       </button>
     </div>
     <?php if (!$stripeReady): ?>

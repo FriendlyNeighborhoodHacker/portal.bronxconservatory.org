@@ -110,31 +110,84 @@ final class StripeCheckoutTest extends TestCase
         StripeCheckout::retrieveCheckoutSession('cs_test_1');
     }
 
-    public function testLeadSessionEncodesQuoteLinesAndLeadMetadata(): void
+    public function testLeadPaymentIntentCarriesAmountAndLeadMetadata(): void
     {
         $captured = null;
-        StripeCheckout::setHttpTransportForTesting(function ($method, $url, $params) use (&$captured) {
+        $capturedUrl = null;
+        StripeCheckout::setHttpTransportForTesting(function ($method, $url, $params) use (&$captured, &$capturedUrl) {
             $captured = $params;
-            return [200, json_encode(['id' => 'cs_lead_1', 'url' => 'https://checkout.stripe.test/lead'])];
+            $capturedUrl = $url;
+            return [200, json_encode(['id' => 'pi_lead_1', 'client_secret' => 'pi_lead_1_secret_abc'])];
         });
 
-        $session = StripeCheckout::createLeadCheckoutSession(null, 42, [
-            ['label' => 'Registration fee', 'amount_cents' => 3500],
-            ['label' => 'Lucia — 30-minute private lessons', 'amount_cents' => 42000],
-            ['label' => 'Skipped zero line', 'amount_cents' => 0],
-        ], 'https://x/success', 'https://x/cancel');
+        $intent = StripeCheckout::createLeadPaymentIntent(null, 42, 46500, 'rosa@example.org', 'BCM registration — Rosa Ramos');
 
-        $this->assertSame('cs_lead_1', $session['id']);
+        $this->assertStringEndsWith('/payment_intents', $capturedUrl);
+        $this->assertSame('pi_lead_1', $intent['id']);
+        $this->assertSame('pi_lead_1_secret_abc', $intent['client_secret']);
+        $this->assertSame('46500', $captured['amount']);
+        $this->assertSame('usd', $captured['currency']);
         $this->assertSame('42', $captured['metadata[lead_id]']);
-        $this->assertSame('3500', $captured['line_items[0][price_data][unit_amount]']);
-        $this->assertSame('42000', $captured['line_items[1][price_data][unit_amount]']);
-        $this->assertArrayNotHasKey('line_items[2][price_data][unit_amount]', $captured);
-        $this->assertArrayNotHasKey('metadata[student_amounts]', $captured);
+        $this->assertSame('rosa@example.org', $captured['receipt_email']);
+        $this->assertSame('true', $captured['automatic_payment_methods[enabled]']);
     }
 
-    public function testCompletedLeadSessionUpdatesTheLeadNotTheLedger(): void
+    public function testLeadPaymentIntentRefusesAZeroAmount(): void
     {
-        $leadId = LeadManagement::createLead(null, null, [
+        StripeCheckout::setHttpTransportForTesting(fn() => [200, '{}']);
+        $this->expectException(InvalidArgumentException::class);
+        StripeCheckout::createLeadPaymentIntent(null, 42, 0);
+    }
+
+    public function testSucceededPaymentIntentUpdatesTheLeadNotTheLedger(): void
+    {
+        $leadId = $this->makeLead();
+        LeadManagement::attachPaymentIntent(null, $leadId, 'pi_lead_2');
+
+        $intent = [
+            'id' => 'pi_lead_2',
+            'status' => 'succeeded',
+            'amount_received' => 46500,
+            'metadata' => ['lead_id' => (string)$leadId],
+        ];
+
+        $this->assertSame(1, StripeCheckout::handlePaymentIntentSucceeded($intent));
+        // Webhook retry racing the browser's return trip records nothing more.
+        $this->assertSame(0, StripeCheckout::handlePaymentIntentSucceeded($intent));
+
+        $lead = LeadManagement::findLead($leadId);
+        $this->assertSame(46500, (int)$lead['amount_paid_cents']);
+        $this->assertSame('pi_lead_2', $lead['stripe_payment_intent_id']);
+        $this->assertNotNull($lead['paid_at']);
+        // The money stays on the lead — the ledger is untouched until convert.
+        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+    }
+
+    public function testUnsucceededOrUnknownPaymentIntentsRecordNothing(): void
+    {
+        $leadId = $this->makeLead();
+        LeadManagement::attachPaymentIntent(null, $leadId, 'pi_lead_3');
+
+        $base = ['id' => 'pi_lead_3', 'amount_received' => 46500, 'metadata' => ['lead_id' => (string)$leadId]];
+        $this->assertSame(0, StripeCheckout::handlePaymentIntentSucceeded($base + ['status' => 'requires_payment_method']));
+        $this->assertSame(0, StripeCheckout::handlePaymentIntentSucceeded($base + ['status' => 'processing']));
+        // No lead in the metadata at all.
+        $this->assertSame(0, StripeCheckout::handlePaymentIntentSucceeded([
+            'id' => 'pi_lead_3', 'status' => 'succeeded', 'amount_received' => 46500, 'metadata' => [],
+        ]));
+        // An intent that was never attached to this lead cannot mark it paid.
+        $this->assertSame(0, StripeCheckout::handlePaymentIntentSucceeded([
+            'id' => 'pi_somebody_else', 'status' => 'succeeded', 'amount_received' => 46500,
+            'metadata' => ['lead_id' => (string)$leadId],
+        ]));
+
+        $this->assertSame(0, (int)LeadManagement::findLead($leadId)['amount_paid_cents']);
+    }
+
+    /** A minimal registration lead to hang payments off. */
+    private function makeLead(): int
+    {
+        return LeadManagement::createLead(null, null, [
             'first_name' => 'Rosa', 'last_name' => 'Ramos', 'email' => 'rosa@example.org',
             'phone' => '718-555-0110', 'address_street_1' => 'x', 'address_city' => 'Bronx',
             'address_state' => 'NY', 'address_zip' => '10454',
@@ -142,6 +195,11 @@ final class StripeCheckoutTest extends TestCase
             'first_name' => 'Lucia', 'last_name' => 'Ramos', 'class_of' => 2031,
             'instrument' => 'Piano', 'lesson_length_minutes' => 30,
         ]], [], false);
+    }
+
+    public function testCompletedLeadSessionUpdatesTheLeadNotTheLedger(): void
+    {
+        $leadId = $this->makeLead();
         LeadManagement::attachCheckoutSession(null, $leadId, 'cs_lead_2');
 
         $session = [
