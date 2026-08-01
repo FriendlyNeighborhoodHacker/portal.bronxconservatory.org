@@ -1424,3 +1424,9 @@ body.auth .brand-logo {
 .label-prose {
   font-weight: 400;
 }
+
+/* A caveat riding along inside a question — smaller and muted (from .small),
+   but not carrying the question's bold weight. */
+.form-question .small {
+  font-weight: 400;
+}
