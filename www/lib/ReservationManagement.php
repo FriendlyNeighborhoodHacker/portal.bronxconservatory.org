@@ -5,6 +5,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/UserContext.php';
 require_once __DIR__ . '/ActivityLog.php';
 require_once __DIR__ . '/SemesterManagement.php';
+require_once __DIR__ . '/ScheduleConflicts.php';
 require_once __DIR__ . '/Billing.php';
 
 // Semester lesson reservations: a weekly slot (teacher + location + day +
@@ -57,8 +58,11 @@ class ReservationManagement {
         if (!SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $teacherUserId)) {
             throw new InvalidArgumentException('That teacher is not assigned to that location this semester.');
         }
-        if (self::cellIsTaken($semesterId, $locationId, $teacherUserId, $dayOfWeek, $startTime, null)) {
-            throw new InvalidArgumentException('That time slot is already reserved for this teacher.');
+        $conflict = ScheduleConflicts::weeklySlotConflict(
+            $semesterId, $locationId, $teacherUserId, $dayOfWeek, $startTime, $durationMinutes
+        );
+        if ($conflict !== null) {
+            throw new InvalidArgumentException($conflict);
         }
 
         self::pdo()->prepare(
@@ -86,8 +90,15 @@ class ReservationManagement {
 
     /**
      * Move or resize a reservation (day/time/duration/teacher/location).
-     * A confirmed reservation's lessons are regenerated to match: future
-     * lessons move; past lessons stay where they were taught.
+     *
+     * A confirmed reservation's FUTURE lessons follow it. When only the time
+     * or duration changes they are moved IN PLACE, so notes, resources,
+     * attendance marks, substitutes and location overrides survive — see
+     * moveFutureLessonsInPlace() for the two occurrences it deliberately
+     * leaves behind. When the day of week changes the calendar dates no
+     * longer correspond at all, so future lessons are reconciled against the
+     * new date list instead (which does discard their per-occurrence data).
+     * Past lessons always stay where they were taught.
      */
     public static function updateReservation(?UserContext $ctx, int $reservationId, array $fields): void {
         self::assertAdmin($ctx);
@@ -108,9 +119,18 @@ class ReservationManagement {
         if (!SemesterManagement::isTeacherAtLocation((int)$r['semester_id'], $locationId, $teacherUserId)) {
             throw new InvalidArgumentException('That teacher is not assigned to that location this semester.');
         }
-        if (self::cellIsTaken((int)$r['semester_id'], $locationId, $teacherUserId, $dayOfWeek, $startTime, $reservationId)) {
-            throw new InvalidArgumentException('That time slot is already reserved for this teacher.');
+        $conflict = ScheduleConflicts::weeklySlotConflict(
+            (int)$r['semester_id'], $locationId, $teacherUserId, $dayOfWeek,
+            $startTime, $durationMinutes, $reservationId
+        );
+        if ($conflict !== null) {
+            throw new InvalidArgumentException($conflict);
         }
+
+        // The reservation's time BEFORE the update: how we recognise which
+        // lessons are still following the standing schedule.
+        $previousStartTime = (string)$r['start_time'];
+        $dayChanged = (int)$r['day_of_week'] !== $dayOfWeek;
 
         self::pdo()->prepare(
             'UPDATE semester_lesson_reservations
@@ -119,8 +139,11 @@ class ReservationManagement {
         )->execute([$teacherUserId, $locationId, $dayOfWeek, $startTime, $durationMinutes, $reservationId]);
 
         if ($r['status'] === 'confirmed') {
-            self::deleteFutureLessons($reservationId);
-            self::generateLessonsForReservation($ctx, $reservationId);
+            if ($dayChanged) {
+                self::reconcileFutureLessons($ctx, $reservationId);
+            } else {
+                self::moveFutureLessonsInPlace($ctx, $reservationId, $previousStartTime, $startTime, $durationMinutes);
+            }
         }
 
         self::log($ctx, 'reservation.updated', ['reservation_id' => $reservationId]);
@@ -277,32 +300,12 @@ class ReservationManagement {
     public static function resyncLessonsForLocation(?UserContext $ctx, int $semesterId, int $locationId): void {
         self::assertAdmin($ctx);
         $st = self::pdo()->prepare(
-            "SELECT id, day_of_week FROM semester_lesson_reservations
+            "SELECT id FROM semester_lesson_reservations
              WHERE semester_id=? AND location_id=? AND status='confirmed'"
         );
         $st->execute([$semesterId, $locationId]);
         foreach ($st->fetchAll() as $r) {
-            $reservationId = (int)$r['id'];
-            $activeDates = array_column(
-                SemesterManagement::activeDatesForLocationWeekday($semesterId, $locationId, (int)$r['day_of_week']),
-                'date'
-            );
-            $activeSet = array_flip($activeDates);
-
-            // Future lessons on dates that are no longer active go away.
-            $lessons = self::pdo()->prepare(
-                'SELECT id, DATE(start_datetime) AS d FROM lessons
-                 WHERE semester_lesson_reservation_id=? AND start_datetime > NOW()'
-            );
-            $lessons->execute([$reservationId]);
-            foreach ($lessons->fetchAll() as $lesson) {
-                if (!isset($activeSet[$lesson['d']])) {
-                    self::pdo()->prepare('DELETE FROM lessons WHERE id=?')->execute([(int)$lesson['id']]);
-                }
-            }
-
-            self::generateLessonsForReservation($ctx, $reservationId);
-            self::renumberLessons($reservationId, $activeDates);
+            self::reconcileFutureLessons($ctx, (int)$r['id']);
         }
         self::log($ctx, 'reservation.lessons_resynced', ['semester_id' => $semesterId, 'location_id' => $locationId]);
     }
@@ -390,18 +393,93 @@ class ReservationManagement {
         return $row;
     }
 
-    private static function cellIsTaken(int $semesterId, int $locationId, int $teacherUserId, int $dayOfWeek, string $startTime, ?int $excludeReservationId): bool {
-        $sql = "SELECT 1 FROM semester_lesson_reservations
-                WHERE semester_id=? AND location_id=? AND teacher_user_id=? AND day_of_week=? AND start_time=?
-                  AND status <> 'deleted'";
-        $params = [$semesterId, $locationId, $teacherUserId, $dayOfWeek, $startTime];
-        if ($excludeReservationId !== null) {
-            $sql .= ' AND id <> ?';
-            $params[] = $excludeReservationId;
+    /**
+     * Retime the reservation's FUTURE lessons without deleting them, so their
+     * notes, resources, attendance and overrides survive. Two lessons are
+     * deliberately left where they are:
+     *   - one whose time no longer matches the reservation's PREVIOUS time.
+     *     Someone moved that week by hand (LessonManagement::rescheduleWithinDay);
+     *     a schedule-wide shift shouldn't undo their decision.
+     *   - one that would land on top of something else. The rest of the
+     *     reservation still moves; only the colliding week stays put.
+     */
+    private static function moveFutureLessonsInPlace(
+        ?UserContext $ctx,
+        int $reservationId,
+        string $previousStartTime,
+        string $newStartTime,
+        int $newDurationMinutes
+    ): void {
+        $st = self::pdo()->prepare(
+            'SELECT l.id, l.start_datetime, DATE(l.start_datetime) AS d, TIME(l.start_datetime) AS t,
+                    COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) AS effective_teacher_user_id
+             FROM lessons l
+             JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             WHERE l.semester_lesson_reservation_id=? AND l.start_datetime > NOW()
+             ORDER BY l.start_datetime'
+        );
+        $st->execute([$reservationId]);
+        $lessons = $st->fetchAll();
+
+        $update = self::pdo()->prepare('UPDATE lessons SET start_datetime=?, duration_minutes=? WHERE id=?');
+        $moved = 0;
+        $keptCustomized = 0;
+        $keptConflicting = 0;
+
+        foreach ($lessons as $lesson) {
+            if ((string)$lesson['t'] !== $previousStartTime) {
+                $keptCustomized++;
+                continue;
+            }
+            $newStart = (string)$lesson['d'] . ' ' . $newStartTime;
+            $conflict = ScheduleConflicts::occurrenceConflict(
+                (int)$lesson['effective_teacher_user_id'], $newStart, $newDurationMinutes, (int)$lesson['id']
+            );
+            if ($conflict !== null) {
+                $keptConflicting++;
+                continue;
+            }
+            $update->execute([$newStart, $newDurationMinutes, (int)$lesson['id']]);
+            $moved++;
         }
-        $st = self::pdo()->prepare($sql . ' LIMIT 1');
-        $st->execute($params);
-        return (bool)$st->fetchColumn();
+
+        if ($moved || $keptCustomized || $keptConflicting) {
+            self::log($ctx, 'reservation.lessons_moved', [
+                'reservation_id' => $reservationId, 'moved' => $moved,
+                'kept_customized' => $keptCustomized, 'kept_conflicting' => $keptConflicting,
+            ]);
+        }
+    }
+
+    /**
+     * The reservation's day of week changed, so its future lessons are on the
+     * wrong dates entirely: drop the ones that no longer match, generate the
+     * new dates, and renumber. Per-occurrence data on the dropped lessons is
+     * lost — there is no corresponding date to carry it to.
+     */
+    private static function reconcileFutureLessons(?UserContext $ctx, int $reservationId): void {
+        $r = self::requireReservation($reservationId);
+        $activeDates = array_column(
+            SemesterManagement::activeDatesForLocationWeekday(
+                (int)$r['semester_id'], (int)$r['location_id'], (int)$r['day_of_week']
+            ),
+            'date'
+        );
+        $activeSet = array_flip($activeDates);
+
+        $st = self::pdo()->prepare(
+            'SELECT id, DATE(start_datetime) AS d FROM lessons
+             WHERE semester_lesson_reservation_id=? AND start_datetime > NOW()'
+        );
+        $st->execute([$reservationId]);
+        foreach ($st->fetchAll() as $lesson) {
+            if (!isset($activeSet[$lesson['d']])) {
+                self::pdo()->prepare('DELETE FROM lessons WHERE id=?')->execute([(int)$lesson['id']]);
+            }
+        }
+
+        self::generateLessonsForReservation($ctx, $reservationId);
+        self::renumberLessons($reservationId, $activeDates);
     }
 
     private static function deleteFutureLessons(int $reservationId): void {

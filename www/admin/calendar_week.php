@@ -6,6 +6,7 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/schedule_grid.php';
 require_once __DIR__ . '/../lib/SemesterManagement.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
+require_once __DIR__ . '/../lib/HoldBlockManagement.php';
 require_once __DIR__ . '/../lib/NotesManagement.php';
 require_once __DIR__ . '/../lib/LessonUIManager.php';
 Application::init();
@@ -29,6 +30,7 @@ $weekEnd = date('Y-m-d', strtotime('+6 days', $weekStartTs));
 
 $columns = SemesterManagement::locationTeachers($semesterId);
 $lessons = LessonManagement::lessonsBetween($weekStart, $weekEnd, $semesterId);
+$holdBlocks = HoldBlockManagement::holdBlocksBetween($weekStart, $weekEnd, $semesterId);
 
 // Notes per lesson (for prefilling the modal's note box with MY note).
 $myUserId = (int)current_user()['id'];
@@ -40,10 +42,11 @@ foreach ($lessons as $lesson) {
     }
 }
 
-// Days shown: any weekday this week having lessons or scheduled class dates.
+// Days shown: any weekday this week having lessons, hold blocks, or
+// scheduled class dates.
 $days = [];
-foreach ($lessons as $lesson) {
-    $days[(int)date('w', strtotime((string)$lesson['start_datetime']))] = true;
+foreach (array_merge($lessons, $holdBlocks) as $entry) {
+    $days[(int)date('w', strtotime((string)$entry['start_datetime']))] = true;
 }
 foreach (SemesterManagement::locationDates($semesterId) as $dateRow) {
     if ($dateRow['date'] >= $weekStart && $dateRow['date'] <= $weekEnd) {
@@ -61,23 +64,37 @@ $bounds = [];
 foreach ($days as $day) {
     $bounds[$day] = $defaultBounds;
 }
-$cellIndex = [];
+// Lessons and hold blocks share the grid: both are things occupying a
+// teacher's column at a moment in the week.
+$occupants = [];
 foreach ($lessons as $lesson) {
-    $ts = strtotime((string)$lesson['start_datetime']);
+    $lesson['kind'] = 'lesson';
+    $lesson['_teacher_user_id'] = (int)$lesson['effective_teacher_user_id'];
+    $occupants[] = $lesson;
+}
+foreach ($holdBlocks as $hold) {
+    $hold['kind'] = 'hold';
+    $hold['_teacher_user_id'] = (int)$hold['teacher_user_id'];
+    $occupants[] = $hold;
+}
+
+$cellIndex = [];
+foreach ($occupants as $occupant) {
+    $ts = strtotime((string)$occupant['start_datetime']);
     $day = (int)date('w', $ts);
     $minutes = (int)date('G', $ts) * 60 + (int)date('i', $ts);
     $slot = intdiv($minutes, 30) * 30;
     $bounds[$day][0] = min($bounds[$day][0] ?? $slot, $slot);
     $bounds[$day][1] = max($bounds[$day][1] ?? $slot, $slot);
-    $key = $lesson['location_id'] . ':' . $lesson['effective_teacher_user_id'] . ':' . $day . ':' . $slot;
-    $cellIndex[$key] = $lesson;
+    $key = $occupant['location_id'] . ':' . $occupant['_teacher_user_id'] . ':' . $day . ':' . $slot;
+    $cellIndex[$key] = $occupant;
 }
 $rows = schedule_row_slots($days, $bounds);
 
 $cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson) {
     $columnKey = $column['location_id'] . ':' . $column['teacher_user_id'];
-    $lesson = $cellIndex[$columnKey . ':' . $row['day'] . ':' . $row['minutes']] ?? null;
-    if ($lesson === null) {
+    $occupant = $cellIndex[$columnKey . ':' . $row['day'] . ':' . $row['minutes']] ?? null;
+    if ($occupant === null) {
         for ($back = 30; $back <= 210; $back += 30) {
             $prior = $cellIndex[$columnKey . ':' . $row['day'] . ':' . ($row['minutes'] - $back)] ?? null;
             if ($prior && (int)ceil((int)$prior['duration_minutes'] / 30) * 30 > $back) {
@@ -87,6 +104,22 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson) 
         return ['html' => '', 'class' => '', 'attrs' => []];
     }
 
+    if ($occupant['kind'] === 'hold') {
+        // No data-lesson-id, so LessonUIManager's delegated handler ignores it.
+        return [
+            'html' => '<span class="cell-student">' . h((string)$occupant['effective_title']) . '</span>'
+                    . '<span class="cell-status">Held</span>',
+            'class' => 'res-hold',
+            'rowspan' => max(1, (int)ceil((int)$occupant['duration_minutes'] / 30)),
+            'attrs' => [
+                'data-context' => date('D M j · g:i a', strtotime((string)$occupant['start_datetime']))
+                    . ' · ' . ((int)$occupant['duration_minutes']) . ' min'
+                    . ' · ' . $occupant['location_name'],
+            ],
+        ];
+    }
+
+    $lesson = $occupant;
     $studentName = trim($lesson['student_first_name'] . ' ' . $lesson['student_last_name']);
     $missed = $lesson['attended'] !== null && (int)$lesson['attended'] === 0;
     $attendedValue = $lesson['attended'] === null ? '' : (string)(int)$lesson['attended'];
@@ -137,12 +170,13 @@ header_html('Calendar Week', ['wide' => true]);
   </span>
 </div>
 
-<?php if (!$lessons): ?>
-  <div class="card"><p>No lessons this week.</p></div>
+<?php if (!$lessons && !$holdBlocks): ?>
+  <div class="card"><p>Nothing scheduled this week.</p></div>
 <?php else: ?>
   <?=schedule_grid_html($columns, $rows, $cellFn)?>
   <p class="small" style="margin-top:10px;">Click a lesson to reschedule it within the day,
-  mark it missed, assign a substitute, or add a note.</p>
+  mark it missed, assign a substitute, or add a note. Grey cells are hold blocks —
+  edit those on the <a href="/admin/schedule.php">Semester Schedule</a>.</p>
 <?php endif; ?>
 
 <?php LessonUIManager::renderModal(); ?>

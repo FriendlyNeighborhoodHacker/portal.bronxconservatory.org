@@ -6,6 +6,7 @@ require_once __DIR__ . '/UserContext.php';
 require_once __DIR__ . '/ActivityLog.php';
 require_once __DIR__ . '/SemesterManagement.php';
 require_once __DIR__ . '/ReservationManagement.php';
+require_once __DIR__ . '/HoldBlockManagement.php';
 
 // The location-dates CSV (semester wizard step 3c): one row per class date
 // per location. $context requires ['semester_id' => n].
@@ -130,9 +131,11 @@ class LocationDatesCsvImport {
             }
         }
 
-        // Confirmed reservations track calendar edits (once per location).
+        // Confirmed reservations and hold blocks track calendar edits (once
+        // per location).
         foreach (array_keys($touchedLocations) as $locationId) {
             ReservationManagement::resyncLessonsForLocation($ctx, $semesterId, $locationId);
+            HoldBlockManagement::resyncHoldBlocksForLocation($ctx, $semesterId, $locationId);
         }
 
         return ['created' => $added, 'updated' => $updated, 'skipped' => $skipped];

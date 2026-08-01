@@ -374,6 +374,56 @@ CREATE TABLE lessons (
 CREATE INDEX idx_l_start ON lessons(start_datetime);
 CREATE INDEX idx_l_reservation_start ON lessons(semester_lesson_reservation_id, start_datetime);
 
+-- ===== Semester hold block reservations =====
+-- A teacher's non-lesson time at a location: lunch, an errand, a standing
+-- break. Structurally the same weekly slot as a lesson reservation, but held
+-- for the teacher rather than a student, so it has a title instead of a
+-- student and no billing or confirmation state — its blocks materialize as
+-- soon as it is created. Deleting soft-deletes (status='deleted') and removes
+-- future blocks; past blocks are kept as a record of the teacher's day.
+CREATE TABLE semester_hold_block_reservations (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  semester_id INT NOT NULL,
+  teacher_user_id INT NOT NULL,
+  location_id INT NOT NULL,
+  status ENUM('active','deleted') NOT NULL DEFAULT 'active',
+  day_of_week TINYINT NOT NULL COMMENT '0=Sunday ... 6=Saturday (PHP date("w"))',
+  start_time TIME NOT NULL,
+  duration_minutes INT NOT NULL DEFAULT 30,
+  title VARCHAR(200) NOT NULL COMMENT '"Lunch", "Errand" — shown in the grid cell',
+  created_by_user_id INT DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_shbr_semester FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE CASCADE,
+  CONSTRAINT fk_shbr_teacher FOREIGN KEY (teacher_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_shbr_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_shbr_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_shbr_grid ON semester_hold_block_reservations(semester_id, location_id, teacher_user_id, status);
+
+-- ===== Semester hold blocks (occurrences) =====
+-- One row per actual held slot on the calendar, generated from a hold block
+-- reservation exactly the way lessons are generated from a lesson
+-- reservation. Unlike lessons these carry no ordinal (a lunch break has no
+-- "number"), so the unique key is on the datetime instead. title_override
+-- lets one week say something different from the standing title.
+CREATE TABLE semester_hold_blocks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  semester_hold_block_reservation_id INT NOT NULL,
+  start_datetime DATETIME NOT NULL,
+  duration_minutes INT NOT NULL DEFAULT 30,
+  title_override VARCHAR(200) DEFAULT NULL,
+  created_by_user_id INT DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_hold_block_start (semester_hold_block_reservation_id, start_datetime),
+  CONSTRAINT fk_shb_reservation FOREIGN KEY (semester_hold_block_reservation_id) REFERENCES semester_hold_block_reservations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_shb_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_shb_start ON semester_hold_blocks(start_datetime);
+
 -- ===== Lesson notes =====
 -- Notes written after a lesson by the teacher (auto-save upsert on the
 -- teacher dashboard) or by an admin (from the calendar's lesson modal).

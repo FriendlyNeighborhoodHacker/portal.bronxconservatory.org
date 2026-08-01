@@ -44,6 +44,7 @@ header_html('Semesters');
     &middot; <?=count($columns)?> teacher assignment<?=count($columns) === 1 ? '' : 's'?>
   </div>
   <div class="actions">
+    <a class="button" href="/admin/semester/edit.php?semester_id=<?=$semesterId?>">Edit</a>
     <a class="button" href="/admin/semester/locations.php?semester_id=<?=$semesterId?>">Locations</a>
     <a class="button" href="/admin/import/upload.php?flow=location_dates&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Class Dates</a>
     <a class="button" href="/admin/import/upload.php?flow=location_teachers&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Location Teachers</a>

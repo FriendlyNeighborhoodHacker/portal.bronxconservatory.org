@@ -25,6 +25,8 @@ DELETE FROM lesson_resources;
 DELETE FROM lesson_notes;
 DELETE FROM lessons;
 DELETE FROM semester_lesson_reservations;
+DELETE FROM semester_hold_blocks;
+DELETE FROM semester_hold_block_reservations;
 DELETE FROM semester_location_teachers;
 DELETE FROM semester_location_dates;
 DELETE FROM semester_locations;

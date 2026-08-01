@@ -1,8 +1,9 @@
 <?php
-// Teacher Calendar — weekly view: that week's lessons in chronological
-// order; each row links to the lesson page.
+// Teacher Calendar — weekly view: that week's lessons and hold blocks in
+// chronological order; each lesson row links to the lesson page.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
+require_once __DIR__ . '/../lib/HoldBlockManagement.php';
 Application::init();
 require_login();
 
@@ -22,7 +23,17 @@ $weekStartTs = strtotime('-' . date('w', $anchorTs) . ' days', $anchorTs);
 $weekStart = date('Y-m-d', $weekStartTs);
 $weekEnd = date('Y-m-d', strtotime('+6 days', $weekStartTs));
 
-$lessons = LessonManagement::lessonsBetweenForTeacher((int)$me['id'], $weekStart, $weekEnd);
+// Lessons and hold blocks interleave into one chronological list.
+$entries = [];
+foreach (LessonManagement::lessonsBetweenForTeacher((int)$me['id'], $weekStart, $weekEnd) as $lesson) {
+    $lesson['kind'] = 'lesson';
+    $entries[] = $lesson;
+}
+foreach (HoldBlockManagement::holdBlocksBetweenForTeacher((int)$me['id'], $weekStart, $weekEnd) as $hold) {
+    $hold['kind'] = 'hold';
+    $entries[] = $hold;
+}
+usort($entries, fn(array $a, array $b) => strcmp((string)$a['start_datetime'], (string)$b['start_datetime']));
 
 header_html('My Week');
 ?>
@@ -36,16 +47,28 @@ header_html('My Week');
 </div>
 
 <div class="card">
-  <?php if (!$lessons): ?><p class="small">No lessons this week.</p><?php endif; ?>
-  <?php foreach ($lessons as $lesson): ?>
-  <?php $missed = $lesson['attended'] !== null && (int)$lesson['attended'] === 0; ?>
+  <?php if (!$entries): ?><p class="small">Nothing scheduled this week.</p><?php endif; ?>
+  <?php foreach ($entries as $entry): ?>
+
+  <?php if ($entry['kind'] === 'hold'): ?>
+  <div class="lesson-row lesson-hold">
+    <span class="lesson-row-time"><?=lesson_time_html($entry['start_datetime'], (int)$entry['duration_minutes'])?></span>
+    <span><strong><?=h((string)$entry['effective_title'])?></strong></span>
+    <span><?=h($entry['location_name'])?></span>
+    <span class="small">held</span>
+  </div>
+
+  <?php else: ?>
+  <?php $missed = $entry['attended'] !== null && (int)$entry['attended'] === 0; ?>
   <div class="lesson-row<?=$missed ? ' lesson-cancelled' : ''?>">
-    <span class="lesson-row-time"><?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?></span>
-    <span><a href="/teacher/lesson.php?id=<?=(int)$lesson['id']?>">
-      <strong><?=h(trim(($lesson['student_preferred_name'] ?: $lesson['student_first_name']) . ' ' . $lesson['student_last_name']))?></strong></a></span>
-    <span><?=h($lesson['location_name'])?></span>
+    <span class="lesson-row-time"><?=lesson_time_html($entry['start_datetime'], (int)$entry['duration_minutes'])?></span>
+    <span><a href="/teacher/lesson.php?id=<?=(int)$entry['id']?>">
+      <strong><?=h(trim(($entry['student_preferred_name'] ?: $entry['student_first_name']) . ' ' . $entry['student_last_name']))?></strong></a></span>
+    <span><?=h($entry['location_name'])?></span>
     <?php if ($missed): ?><span class="small">missed</span><?php endif; ?>
   </div>
+  <?php endif; ?>
+
   <?php endforeach; ?>
 </div>
 

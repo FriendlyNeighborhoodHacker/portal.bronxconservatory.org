@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/UserContext.php';
 require_once __DIR__ . '/ActivityLog.php';
+require_once __DIR__ . '/ScheduleConflicts.php';
 
 // Lesson occurrences. Lessons are only ever created by
 // ReservationManagement::generateLessonsForReservation; this class reads
@@ -162,19 +163,13 @@ class LessonManagement {
         $date = date('Y-m-d', strtotime((string)$lesson['start_datetime']));
         $newStart = $date . ' ' . $newStartTime;
 
-        // Conflict check against the effective teacher's other lessons that day.
-        $teacherId = (int)$lesson['effective_teacher_user_id'];
-        $newStartTs = strtotime($newStart);
-        $newEndTs = $newStartTs + ((int)$lesson['duration_minutes']) * 60;
-        foreach (self::lessonsForTeacherOnDate($teacherId, $date) as $other) {
-            if ((int)$other['id'] === $lessonId) {
-                continue;
-            }
-            $otherStart = strtotime((string)$other['start_datetime']);
-            $otherEnd = $otherStart + ((int)$other['duration_minutes']) * 60;
-            if ($newStartTs < $otherEnd && $otherStart < $newEndTs) {
-                throw new InvalidArgumentException('That time overlaps another lesson for this teacher.');
-            }
+        // Conflict check against the effective teacher's other lessons AND
+        // hold blocks at that moment.
+        $conflict = ScheduleConflicts::occurrenceConflict(
+            (int)$lesson['effective_teacher_user_id'], $newStart, (int)$lesson['duration_minutes'], $lessonId
+        );
+        if ($conflict !== null) {
+            throw new InvalidArgumentException($conflict);
         }
 
         self::pdo()->prepare('UPDATE lessons SET start_datetime=? WHERE id=?')

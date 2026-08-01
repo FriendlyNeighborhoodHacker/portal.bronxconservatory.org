@@ -20,18 +20,7 @@ class SemesterManagement {
 
     public static function createSemester(?UserContext $ctx, string $season, int $year, string $startDate, string $endDate): int {
         self::assertAdmin($ctx);
-        $season = strtolower(trim($season));
-        if (!in_array($season, self::SEASONS, true)) {
-            throw new InvalidArgumentException('Season must be one of: ' . implode(', ', self::SEASONS) . '.');
-        }
-        if ($year < 2000 || $year > 2200) {
-            throw new InvalidArgumentException('Year looks invalid.');
-        }
-        $start = self::normalizeDate($startDate, 'Start date');
-        $end = self::normalizeDate($endDate, 'End date');
-        if ($end < $start) {
-            throw new InvalidArgumentException('End date must be on or after the start date.');
-        }
+        [$season, $year, $start, $end] = self::validateSemesterFields($season, $year, $startDate, $endDate);
         try {
             self::pdo()->prepare(
                 'INSERT INTO semesters (season, year, start_date, end_date, created_by_user_id) VALUES (?,?,?,?,?)'
@@ -47,16 +36,63 @@ class SemesterManagement {
         return $id;
     }
 
-    public static function updateSemester(?UserContext $ctx, int $semesterId, string $startDate, string $endDate): void {
+    /**
+     * Edit a semester's identity and date range. The dates here are only used
+     * to resolve the "current" semester and to sanity-check imports — the
+     * class calendar that actually drives lessons is semester_location_dates,
+     * so nothing needs to be regenerated when they change.
+     */
+    public static function updateSemester(
+        ?UserContext $ctx,
+        int $semesterId,
+        string $season,
+        int $year,
+        string $startDate,
+        string $endDate
+    ): void {
         self::assertAdmin($ctx);
+        if (!self::find($semesterId)) {
+            throw new InvalidArgumentException('Semester not found.');
+        }
+        [$season, $year, $start, $end] = self::validateSemesterFields($season, $year, $startDate, $endDate);
+        try {
+            self::pdo()->prepare('UPDATE semesters SET season=?, year=?, start_date=?, end_date=? WHERE id=?')
+                ->execute([$season, $year, $start, $end, $semesterId]);
+        } catch (PDOException $e) {
+            if ((string)$e->getCode() === '23000') {
+                throw new InvalidArgumentException(ucfirst($season) . ' ' . $year . ' already exists.');
+            }
+            throw $e;
+        }
+        self::log($ctx, 'semester.updated', [
+            'semester_id' => $semesterId, 'season' => $season, 'year' => $year,
+        ]);
+    }
+
+    /** How many of the semester's class dates fall outside the given range. */
+    public static function countLocationDatesOutsideRange(int $semesterId, string $startDate, string $endDate): int {
+        $st = self::pdo()->prepare(
+            'SELECT COUNT(*) FROM semester_location_dates WHERE semester_id=? AND (date < ? OR date > ?)'
+        );
+        $st->execute([$semesterId, $startDate, $endDate]);
+        return (int)$st->fetchColumn();
+    }
+
+    /** Shared create/update validation. Returns [season, year, start, end]. */
+    private static function validateSemesterFields(string $season, int $year, string $startDate, string $endDate): array {
+        $season = strtolower(trim($season));
+        if (!in_array($season, self::SEASONS, true)) {
+            throw new InvalidArgumentException('Season must be one of: ' . implode(', ', self::SEASONS) . '.');
+        }
+        if ($year < 2000 || $year > 2200) {
+            throw new InvalidArgumentException('Year looks invalid.');
+        }
         $start = self::normalizeDate($startDate, 'Start date');
         $end = self::normalizeDate($endDate, 'End date');
         if ($end < $start) {
             throw new InvalidArgumentException('End date must be on or after the start date.');
         }
-        self::pdo()->prepare('UPDATE semesters SET start_date=?, end_date=? WHERE id=?')
-            ->execute([$start, $end, $semesterId]);
-        self::log($ctx, 'semester.updated', ['semester_id' => $semesterId]);
+        return [$season, $year, $start, $end];
     }
 
     public static function find(int $semesterId): ?array {

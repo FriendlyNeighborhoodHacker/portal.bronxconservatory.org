@@ -27,6 +27,7 @@
   --res-balance-full-bg: #fdf3c8;  /* confirmed, full semester due — yellow pastel */
   --res-balance-half-bg: #e9dcf7;  /* confirmed, half semester due — purple pastel */
   --res-balance-custom-bg: #1e3a5f;/* confirmed, custom balance — dark blue */
+  --res-hold-bg: #e4e6ea;          /* hold block (lunch, errand) — neutral grey */
   --font-display: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --topbar-height: 56px;
@@ -648,6 +649,31 @@ button:disabled {
   overflow-y: auto;
 }
 
+/* In-modal tabs (schedule add modal: student lesson vs hold block) */
+.modal-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-border);
+  margin: 12px 0 16px;
+}
+
+.modal-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 12px;
+  margin-bottom: -1px;
+  font: inherit;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.modal-tab.active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+  font-weight: 600;
+}
+
 .modal .close {
   position: absolute;
   right: 8px;
@@ -855,6 +881,11 @@ body.auth .brand-logo {
 
 .lesson-cancelled {
   text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
+/* A hold block in the teacher's week list — their own time, not a lesson. */
+.lesson-row.lesson-hold {
   color: var(--color-text-muted);
 }
 
@@ -1164,6 +1195,16 @@ a.cal-day-num:hover {
 
 .grid-cell.res-balance-custom .cell-status {
   color: #cfe0f5;
+}
+
+/* Hold blocks: the teacher's own time, no student, deliberately drab so it
+   reads as "not bookable" rather than as another reservation state. */
+.grid-cell.res-hold {
+  background: var(--res-hold-bg);
+  background-image: repeating-linear-gradient(
+    -45deg, rgba(0, 0, 0, 0.04) 0 6px, transparent 6px 12px
+  );
+  color: var(--color-text-muted);
 }
 
 /* Condensed mode: narrower columns, short names, status by color only */
