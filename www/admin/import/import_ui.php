@@ -232,7 +232,9 @@ function import_columns_help_html(array $flow): string {
             ];
             $example = "Location Name,Date,Start Time,End Time,Status,Notes\n"
                 . "Bronx Community College,9/12/2026,9:00 am,5:00 pm,active,Day 1\n"
-                . "Bronx Community College,9/19/2026,9:00 am,5:00 pm,inactive,Holiday Week";
+                . "Bronx Community College,9/19/2026,9:00 am,5:00 pm,inactive,Holiday Week\n"
+                . "Access Bronx Charter School,9/12/2026,9:00 am,5:00 pm,active,Day 1\n"
+                . "Access Bronx Charter School,9/19/2026,9:00 am,5:00 pm,inactive,Holiday Week";
             break;
 
         case 'location_teachers':
@@ -262,8 +264,8 @@ function import_columns_help_html(array $flow): string {
                 ['Title', 'required', 'what the time is for, e.g. "Lunch"'],
             ];
             $example = "Teacher Name,Location Name,Day,Start Time,End Time,Title\n"
-                . "Marisol Vega,Access Bronx Charter School,Saturday,12:00 pm,1:30 pm,Lunch\n"
-                . "Andre Baptiste,Bronx Community College,Saturday,12:00 pm,1:30 pm,Lunch";
+                . "Marisol Vega,Bronx Community College,Saturday,12:00 pm,1:30 pm,Lunch\n"
+                . "James Okafor,Access Bronx Charter School,Saturday,12:00 pm,1:30 pm,Lunch";
             break;
 
         case 'reservations':
@@ -283,8 +285,8 @@ function import_columns_help_html(array $flow): string {
                 ['Status', 'optional', 'pending reach out (default), pending confirmation, or confirmed'],
             ];
             $example = "Student Name,Teacher Name,Location Name,Day,Start Time,Duration Minutes,Status\n"
-                . "Lucia Ramos,Marisol Vega,Access Bronx Charter School,Saturday,10:00 am,30,confirmed\n"
-                . "Devon Brown,Sofia Petrov,Access Bronx Charter School,Saturday,11:00 am,60,pending confirmation";
+                . "Lucia Ramos,Marisol Vega,Bronx Community College,Saturday,10:00 am,30,confirmed\n"
+                . "Devon Brown,James Okafor,Access Bronx Charter School,Saturday,11:00 am,60,pending confirmation";
             break;
 
         case 'ledger_entries':
