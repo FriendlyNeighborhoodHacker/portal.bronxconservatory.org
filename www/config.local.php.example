@@ -29,3 +29,15 @@ define('REMEMBER_TOKEN_KEY', '');
 define('STRIPE_SECRET_KEY', '');
 define('STRIPE_PUBLISHABLE_KEY', '');
 define('STRIPE_WEBHOOK_SECRET', '');
+
+// ===== GitHub deploy webhook (gitwebhook.php) =====
+// Shared secret for the GitHub deploy webhook. Must match the secret
+// configured on the GitHub webhook settings page for the repository.
+// Generate with: php -r "echo bin2hex(random_bytes(32));"
+// Leave empty to disable the webhook (it returns 500 "Webhook not configured").
+define('GIT_WEBHOOK_SECRET', '');
+
+// Per-machine deploy paths used by gitwebhook.php (optional — the defaults
+// below are what the file uses when these are not defined).
+// define('DEPLOY_SCRIPT', '/home/lillydebate/deploy_scripts/portal.bronxconservatory.org.sh');
+// define('DEPLOY_LOG',    '/home/lillydebate/deploy_scripts/logs/portal.bronxconservatory.org.webhook.log');
