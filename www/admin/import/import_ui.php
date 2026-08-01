@@ -12,12 +12,19 @@ require_once __DIR__ . '/../../partials.php';
 require_once __DIR__ . '/../../lib/CsvImport.php';
 require_once __DIR__ . '/../../lib/TeacherCsvImport.php';
 require_once __DIR__ . '/../../lib/PeopleCsvImport.php';
+require_once __DIR__ . '/../../lib/LocationCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationDatesCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationTeachersCsvImport.php';
 require_once __DIR__ . '/../../lib/SemesterManagement.php';
 
 function import_flows(): array {
     return [
+        'locations' => [
+            'title' => 'Import Locations',
+            'class' => 'LocationCsvImport',
+            'needs_semester' => false,
+            'default_next' => '/admin/locations.php',
+        ],
         'teachers' => [
             'title' => 'Import Teachers',
             'class' => 'TeacherCsvImport',
@@ -110,6 +117,21 @@ function import_columns_help_html(array $flow): string {
     $intro = '';
 
     switch ($flow['key']) {
+        case 'locations':
+            $intro = 'One row per teaching location. Rows are matched to existing locations by '
+                . 'name, so re-importing updates addresses instead of creating duplicates. These '
+                . 'exact names are what the semester\'s class-dates and teacher-assignment CSVs '
+                . 'must reference later — importing them here keeps everything consistent.';
+            $columns = [
+                ['Location Name', 'required', 'used everywhere the location is referenced'],
+                ['Address', 'optional', ''],
+                ['Status', 'optional', '"active" or "inactive" — blank means active'],
+            ];
+            $example = "Location Name,Address\n"
+                . "Access Bronx Charter School,\"1180 Rev. James A. Polite Ave, Bronx, NY 10459\"\n"
+                . "Bronx Community College,\"2155 University Ave, Bronx, NY 10453\"";
+            break;
+
         case 'teachers':
             $intro = 'One row per teacher. First and last name are required, plus an email '
                 . 'or a cell phone number (used to match people who are already in the system).';

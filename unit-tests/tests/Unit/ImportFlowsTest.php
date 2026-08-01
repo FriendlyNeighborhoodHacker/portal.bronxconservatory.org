@@ -58,6 +58,41 @@ final class ImportFlowsTest extends TestCase
         $this->assertStringContainsString('existing user (Phil Phone)', $validated[0]['changes']);
     }
 
+    // ── Locations ──────────────────────────────────────────────────────────
+
+    public function testLocationImportCreatesUpdatesAndFlagsErrors(): void
+    {
+        // "Bronx Community College" is seeded by schema.sql.
+        $rows = [
+            ['name' => 'bronx community college', 'address' => '2155 University Ave, Bronx, NY 10453'],
+            ['name' => 'St. Ann\'s Church', 'address' => '295 St Ann\'s Ave, Bronx, NY 10454'],
+            ['name' => 'Old Annex', 'status' => 'inactive'],
+            ['name' => '', 'address' => 'No name'],                     // error
+            ['name' => 'St. Ann\'s Church'],                            // error: duplicate in file
+            ['name' => 'Somewhere', 'status' => 'maybe'],               // error: bad status
+        ];
+        $validated = LocationCsvImport::validateRows($rows);
+        $this->assertSame(['valid', 'valid', 'valid', 'error', 'error', 'error'],
+            array_column($validated, 'status'));
+        $this->assertStringContainsString('Update existing location (Bronx Community College)', $validated[0]['changes']);
+        $this->assertSame('Create location', $validated[1]['changes']);
+
+        $summary = LocationCsvImport::commit($this->ctx, $validated);
+        $this->assertSame(['created' => 2, 'updated' => 1, 'skipped' => 3], $summary);
+
+        $all = LocationManagement::all();
+        $byName = array_column($all, null, 'name');
+        $this->assertSame('2155 University Ave, Bronx, NY 10453', $byName['Bronx Community College']['address']);
+        $this->assertSame(0, (int)$byName['Old Annex']['is_active']);
+        $this->assertSame(1, (int)$byName["St. Ann's Church"]['is_active']);
+
+        // Re-import: everything matches, nothing duplicates.
+        $again = LocationCsvImport::validateRows([['name' => "St. Ann's Church"]]);
+        $this->assertStringContainsString('Update existing location', $again[0]['changes']);
+        LocationCsvImport::commit($this->ctx, $again);
+        $this->assertCount(count($all), LocationManagement::all());
+    }
+
     // ── Students & parents (one file) ─────────────────────────────────────
 
     public function testPeopleImportBuildsFamiliesFromOneFile(): void

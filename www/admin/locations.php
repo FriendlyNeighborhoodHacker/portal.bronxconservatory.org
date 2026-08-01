@@ -10,13 +10,18 @@ $locations = LocationManagement::all();
 
 $flash = $_SESSION['location_flash'] ?? null;
 $flashError = $_SESSION['location_flash_error'] ?? null;
-unset($_SESSION['location_flash'], $_SESSION['location_flash_error']);
+$importFlash = $_SESSION['import_flash'] ?? null;
+unset($_SESSION['location_flash'], $_SESSION['location_flash_error'], $_SESSION['import_flash']);
 
 header_html('Locations');
 ?>
 
-<h2>Locations</h2>
+<div class="page-head">
+  <h2>Locations</h2>
+  <a class="button" href="/admin/import/upload.php?flow=locations&next=<?=h(urlencode('/admin/locations.php'))?>">Upload Locations CSV</a>
+</div>
 <?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
+<?php if ($importFlash): ?><p class="flash"><?=h($importFlash)?></p><?php endif; ?>
 <?php if ($flashError): ?><p class="error"><?=h($flashError)?></p><?php endif; ?>
 
 <div class="card">

@@ -30,12 +30,16 @@ this page disappears once a semester exists.</p>
   <h3>Step 1 · Locations
     <?php if ($locations): ?><span class="badge success"><?=count($locations)?> active</span><?php endif; ?>
   </h3>
-  <p class="small">Confirm the places lessons happen (add or deactivate as needed).</p>
+  <p class="small">Confirm the places lessons happen (add or deactivate as needed).
+  The names entered here are what the class-dates and teacher-assignment CSVs
+  reference later, so importing them from a CSV keeps everything consistent.</p>
   <?php foreach ($locations as $location): ?>
     <div><?=h($location['name'])?></div>
   <?php endforeach; ?>
   <div class="actions" style="margin-top:10px;">
-    <a class="button<?=$locations ? '' : ' primary'?>" href="/admin/locations.php">Manage Locations</a>
+    <a class="button<?=$locations ? '' : ' primary'?>"
+       href="/admin/import/upload.php?flow=locations&next=<?=h(urlencode('/admin/setup/index.php'))?>">Upload Locations CSV</a>
+    <a class="button" href="/admin/locations.php">Manage Locations</a>
   </div>
 </div>
 

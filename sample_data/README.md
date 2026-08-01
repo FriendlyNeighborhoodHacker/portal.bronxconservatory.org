@@ -3,8 +3,8 @@
 Realistic test CSVs for walking through first-time setup end to end.
 Reset first with `./reset_db.sh`, then upload in this order:
 
-0. In setup Step 1, add the two locations these files reference:
-   **Access Bronx Charter School** and **Bronx Community College**
+0. **locations.csv** — setup Step 1 > Upload Locations CSV. Creates the two
+   locations every later file references by name.
 1. **teachers.csv** — Admin > Teachers > Upload CSV (or setup Step 2)
 2. **people.csv** — Admin > Students > Upload Students & Parents CSV
    (optional setup stage). One file for the whole roster: parent rows carry
