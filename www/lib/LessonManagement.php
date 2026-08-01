@@ -279,6 +279,32 @@ class LessonManagement {
         return (bool)$st->fetchColumn();
     }
 
+    /**
+     * Has this one occurrence drifted off the standing weekly slot — a
+     * different time of day, or a different length, than its reservation?
+     * That is what rescheduleWithinDay leaves behind, and the calendars flag
+     * it so nobody turns up at the usual hour. Needs a row from a query that
+     * carries reservation_start_time / reservation_duration_minutes.
+     */
+    public static function isTimeMoved(array $lesson): bool {
+        if (!isset($lesson['reservation_start_time'], $lesson['reservation_duration_minutes'])) {
+            return false;
+        }
+        $lessonTime = substr((string)$lesson['start_datetime'], 11, 8);
+        $reservationTime = substr((string)$lesson['reservation_start_time'], 0, 8);
+        return $lessonTime !== $reservationTime
+            || (int)$lesson['duration_minutes'] !== (int)$lesson['reservation_duration_minutes'];
+    }
+
+    /** "Substitute teacher: Grace Lin", or "" when the regular teacher has it. */
+    public static function substituteNote(array $lesson): string {
+        if (empty($lesson['substitute_teacher_user_id'])) {
+            return '';
+        }
+        $name = trim(((string)($lesson['substitute_first_name'] ?? '')) . ' ' . ((string)($lesson['substitute_last_name'] ?? '')));
+        return $name === '' ? '' : 'Substitute teacher: ' . $name;
+    }
+
     /** Is $userId the lesson's effective teacher (substitute wins)? */
     public static function isEffectiveTeacher(int $userId, array $lesson): bool {
         $effective = $lesson['effective_teacher_user_id']

@@ -428,6 +428,91 @@ class SemesterManagement {
         return $st->fetchAll();
     }
 
+    /**
+     * The grid's columns, widened to cover pairs that are not part of the
+     * semester's assignments. A substitute may teach a week at a location
+     * they have no column in; without this the lesson would simply not be
+     * drawn. $pairs: [['location_id' => n, 'teacher_user_id' => n], ...].
+     *
+     * Added columns are marked is_extra = true and are appended to their
+     * location's group, so locations stay contiguous (the grid's location
+     * header spans depend on that).
+     */
+    public static function locationTeachersIncluding(array $columns, array $pairs): array {
+        $known = [];
+        foreach ($columns as $column) {
+            $known[$column['location_id'] . ':' . $column['teacher_user_id']] = true;
+        }
+        $missing = [];
+        foreach ($pairs as $pair) {
+            $locationId = (int)($pair['location_id'] ?? 0);
+            $teacherUserId = (int)($pair['teacher_user_id'] ?? 0);
+            $key = $locationId . ':' . $teacherUserId;
+            if ($locationId <= 0 || $teacherUserId <= 0 || isset($known[$key]) || isset($missing[$key])) {
+                continue;
+            }
+            $missing[$key] = ['location_id' => $locationId, 'teacher_user_id' => $teacherUserId];
+        }
+        if (!$missing) {
+            return $columns;
+        }
+
+        // Group by location, keeping the order locations already appear in,
+        // then any brand-new location by name.
+        $groups = [];
+        foreach ($columns as $column) {
+            $groups[(int)$column['location_id']][] = $column;
+        }
+        $newLocationIds = [];
+        foreach ($missing as $pair) {
+            $row = self::extraColumnRow($pair['location_id'], $pair['teacher_user_id']);
+            if (!$row) {
+                continue; // location or user vanished
+            }
+            if (!isset($groups[$pair['location_id']])) {
+                $newLocationIds[$pair['location_id']] = (string)$row['location_name'];
+            }
+            $groups[$pair['location_id']][] = $row;
+        }
+        asort($newLocationIds);
+
+        $out = [];
+        foreach (array_keys($groups) as $locationId) {
+            if (isset($newLocationIds[$locationId])) {
+                continue;
+            }
+            foreach ($groups[$locationId] as $column) {
+                $out[] = $column;
+            }
+        }
+        foreach (array_keys($newLocationIds) as $locationId) {
+            foreach ($groups[$locationId] as $column) {
+                $out[] = $column;
+            }
+        }
+        return $out;
+    }
+
+    /** One synthetic grid column, shaped like a locationTeachers() row. */
+    private static function extraColumnRow(int $locationId, int $teacherUserId): ?array {
+        $st = self::pdo()->prepare(
+            'SELECT l.id AS location_id, l.name AS location_name,
+                    u.id AS teacher_user_id, u.first_name AS teacher_first_name,
+                    u.last_name AS teacher_last_name, u.preferred_name AS teacher_preferred_name
+             FROM locations l JOIN users u ON u.id = ?
+             WHERE l.id = ? LIMIT 1'
+        );
+        $st->execute([$teacherUserId, $locationId]);
+        $row = $st->fetch();
+        if (!$row) {
+            return null;
+        }
+        $row['semester_id'] = null;
+        $row['sort_order'] = null;
+        $row['is_extra'] = true;
+        return $row;
+    }
+
     /** Is this teacher assigned to this location for this semester? */
     public static function isTeacherAtLocation(int $semesterId, int $locationId, int $teacherUserId): bool {
         $st = self::pdo()->prepare(

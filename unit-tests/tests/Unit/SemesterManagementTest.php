@@ -232,4 +232,38 @@ final class SemesterManagementTest extends TestCase
         $this->assertTrue(SemesterManagement::isTeacherAtLocation($semesterId, $loc, $t1));
         $this->assertFalse(SemesterManagement::isTeacherAtLocation($semesterId, fx_second_location_id(), $t1));
     }
+
+    public function testColumnsWidenForPairsWithNoAssignment(): void
+    {
+        $semesterId = fx_semester($this->ctx);
+        $loc = fx_location_id();
+        $other = fx_second_location_id();
+        $assigned = fx_teacher('Alice', 'Alpha');
+        $sub = fx_teacher('Sue', 'Substitute');
+        SemesterManagement::setLocationTeachers($this->ctx, $semesterId, [[$loc, $assigned]]);
+        $columns = SemesterManagement::locationTeachers($semesterId);
+
+        // Nothing missing: the spine is returned untouched.
+        $this->assertSame(
+            $columns,
+            SemesterManagement::locationTeachersIncluding($columns, [
+                ['location_id' => $loc, 'teacher_user_id' => $assigned],
+            ])
+        );
+
+        // A substitute covering at the assigned location, and one covering at
+        // a location this semester doesn't use at all.
+        $widened = SemesterManagement::locationTeachersIncluding($columns, [
+            ['location_id' => $loc, 'teacher_user_id' => $sub],
+            ['location_id' => $loc, 'teacher_user_id' => $sub],   // deduped
+            ['location_id' => $other, 'teacher_user_id' => $sub],
+        ]);
+        $this->assertCount(3, $widened);
+        $this->assertSame([$assigned, $sub, $sub], array_map('intval', array_column($widened, 'teacher_user_id')));
+        // Locations stay contiguous — the grid's header spans depend on it.
+        $this->assertSame([$loc, $loc, $other], array_map('intval', array_column($widened, 'location_id')));
+        $this->assertSame('Sue', $widened[1]['teacher_first_name']);
+        $this->assertTrue($widened[1]['is_extra']);
+        $this->assertArrayNotHasKey('is_extra', $widened[0]);
+    }
 }

@@ -59,13 +59,22 @@ header_html('My Week');
   </div>
 
   <?php else: ?>
-  <?php $missed = $entry['attended'] !== null && (int)$entry['attended'] === 0; ?>
+  <?php
+    $missed = $entry['attended'] !== null && (int)$entry['attended'] === 0;
+    // A week that was moved off the standing slot, and whose lesson this
+    // really is — this list includes weeks you are covering for someone.
+    $notes = array_filter([
+        LessonManagement::isTimeMoved($entry) ? 'Time moved' : '',
+        LessonManagement::substituteNote($entry),
+    ]);
+  ?>
   <div class="lesson-row<?=$missed ? ' lesson-cancelled' : ''?>">
     <span class="lesson-row-time"><?=lesson_time_html($entry['start_datetime'], (int)$entry['duration_minutes'])?></span>
     <span><a href="/teacher/lesson.php?id=<?=(int)$entry['id']?>">
       <strong><?=h(trim(($entry['student_preferred_name'] ?: $entry['student_first_name']) . ' ' . $entry['student_last_name']))?></strong></a></span>
     <span><?=h($entry['location_name'])?></span>
     <?php if ($missed): ?><span class="small">missed</span><?php endif; ?>
+    <?php if ($notes): ?><span class="small"><?=h(implode(' · ', $notes))?></span><?php endif; ?>
   </div>
   <?php endif; ?>
 

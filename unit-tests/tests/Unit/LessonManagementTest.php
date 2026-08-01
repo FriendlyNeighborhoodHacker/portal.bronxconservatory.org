@@ -130,6 +130,42 @@ final class LessonManagementTest extends TestCase
         $this->assertFalse(LessonManagement::canUserViewLesson($parent, $lessonId));
     }
 
+    public function testTimeMovedTracksTheReservationsStandingSlot(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed('2030-09-07', 3, '10:00');
+
+        // Straight off the reservation: nothing has moved.
+        $lesson = LessonManagement::getLesson($lessonIds[0]);
+        $this->assertSame('10:00:00', $lesson['reservation_start_time']);
+        $this->assertSame(30, (int)$lesson['reservation_duration_minutes']);
+        $this->assertFalse(LessonManagement::isTimeMoved($lesson));
+
+        // One week pushed later — only that week is flagged.
+        LessonManagement::rescheduleWithinDay($this->ctx, $lessonIds[0], '11:30');
+        $this->assertTrue(LessonManagement::isTimeMoved(LessonManagement::getLesson($lessonIds[0])));
+        $this->assertFalse(LessonManagement::isTimeMoved(LessonManagement::getLesson($lessonIds[1])));
+
+        // A different length counts as moved too.
+        pdo()->exec('UPDATE lessons SET duration_minutes=45 WHERE id=' . $lessonIds[1]);
+        $this->assertTrue(LessonManagement::isTimeMoved(LessonManagement::getLesson($lessonIds[1])));
+
+        // Rows from queries that don't carry the reservation's slot never claim a move.
+        $this->assertFalse(LessonManagement::isTimeMoved(['start_datetime' => '2030-09-07 11:30:00']));
+    }
+
+    public function testSubstituteNoteNamesWhoeverIsCovering(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        $this->assertSame('', LessonManagement::substituteNote(LessonManagement::getLesson($lessonIds[0])));
+
+        $sub = fx_teacher('Sue', 'Substitute');
+        LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], $sub);
+        $this->assertSame(
+            'Substitute teacher: Sue Substitute',
+            LessonManagement::substituteNote(LessonManagement::getLesson($lessonIds[0]))
+        );
+    }
+
     public function testStudentQueries(): void
     {
         [, $student] = $this->makeConfirmed();

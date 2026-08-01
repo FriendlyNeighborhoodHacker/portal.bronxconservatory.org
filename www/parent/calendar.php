@@ -29,9 +29,8 @@ header_html('Family Calendar');
 <?=semester_timeline_html($entries, function (array $lesson): string {
     $child = trim(($lesson['student_preferred_name'] ?: $lesson['student_first_name'])
         . ' ' . $lesson['student_last_name']);
-    $first = $lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name'];
-    $last = $lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'];
-    return $child . ' with ' . trim($first . ' ' . $last);
+    // The regular teacher; a covered week names the substitute on its own line.
+    return $child . ' with ' . trim($lesson['teacher_first_name'] . ' ' . $lesson['teacher_last_name']);
 })?>
 
 <?php footer_html(); ?>

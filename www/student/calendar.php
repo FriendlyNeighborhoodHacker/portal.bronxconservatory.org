@@ -29,10 +29,9 @@ header_html('My Calendar');
 </div>
 
 <?=semester_timeline_html($entries, function (array $lesson): string {
-    // The substitute is who the student will actually see that week.
-    $first = $lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name'];
-    $last = $lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'];
-    return 'with ' . trim($first . ' ' . $last);
+    // Their regular teacher; a week someone else is covering says so on its
+    // own line, so both names are visible rather than one silently swapped.
+    return 'with ' . trim($lesson['teacher_first_name'] . ' ' . $lesson['teacher_last_name']);
 })?>
 
 <?php footer_html(); ?>

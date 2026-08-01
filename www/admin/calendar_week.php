@@ -29,7 +29,6 @@ $weekStartTs = strtotime('-' . date('w', $anchorTs) . ' days', $anchorTs); // Su
 $weekStart = date('Y-m-d', $weekStartTs);
 $weekEnd = date('Y-m-d', strtotime('+6 days', $weekStartTs));
 
-$columns = SemesterManagement::locationTeachers($semesterId);
 $lessons = LessonManagement::lessonsBetween($weekStart, $weekEnd, $semesterId);
 $holdBlocks = HoldBlockManagement::holdBlocksBetween($weekStart, $weekEnd, $semesterId);
 
@@ -78,6 +77,17 @@ foreach ($holdBlocks as $hold) {
     $hold['_teacher_user_id'] = (int)$hold['teacher_user_id'];
     $occupants[] = $hold;
 }
+
+// Columns follow the EFFECTIVE teacher, so a lesson someone is substituting
+// shows up in their column — including when they have no column at that
+// location this semester, which is exactly when it would otherwise vanish.
+$columns = SemesterManagement::locationTeachersIncluding(
+    SemesterManagement::locationTeachers($semesterId),
+    array_map(
+        fn(array $o): array => ['location_id' => (int)$o['location_id'], 'teacher_user_id' => $o['_teacher_user_id']],
+        $occupants
+    )
+);
 
 // Each key holds a LIST: double-booking is prevented, but if one ever slips
 // through, the cell shows every commitment rather than hiding one.
@@ -141,18 +151,24 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson) 
         $substituteName = $lesson['substitute_teacher_user_id']
             ? trim(($lesson['substitute_first_name'] ?? '') . ' ' . ($lesson['substitute_last_name'] ?? ''))
             : '';
+        $timeMoved = LessonManagement::isTimeMoved($lesson);
         $statusBits = [];
         if ($missed) {
             $statusBits[] = 'Missed';
         } elseif ($lesson['attended'] !== null) {
             $statusBits[] = 'Attended';
         }
+        if ($timeMoved) {
+            $statusBits[] = 'Time moved';
+        }
         if ($substituteName !== '') {
-            $statusBits[] = 'Sub: ' . $substituteName;
+            $statusBits[] = LessonManagement::substituteNote($lesson);
         }
         $context = date('D M j · g:i a', strtotime((string)$lesson['start_datetime']))
             . ' · Lesson #' . (int)$lesson['lesson_number']
-            . ' · ' . $lesson['location_name'];
+            . ' · ' . $lesson['location_name']
+            . ($timeMoved ? ' · Time moved from ' . date('g:i a', strtotime((string)$lesson['reservation_start_time'])) : '')
+            . ($substituteName !== '' ? ' · ' . LessonManagement::substituteNote($lesson) : '');
         $contexts[] = $context;
         $soleClass = $missed ? 'res-reach-out' : 'res-paid';
 

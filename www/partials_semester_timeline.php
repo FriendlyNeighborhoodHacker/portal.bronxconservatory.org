@@ -10,6 +10,7 @@
 // play each row is tagged so a date is never ambiguous.
 require_once __DIR__ . '/partials.php';
 require_once __DIR__ . '/lib/ScheduleTimeline.php';
+require_once __DIR__ . '/lib/LessonManagement.php';
 
 /**
  * @param array    $entries  from ScheduleTimeline::forTeacher/forStudents
@@ -48,13 +49,22 @@ function semester_timeline_html(array $entries, callable $whoFn): string {
         $missed = $lesson['attended'] !== null && (int)$lesson['attended'] === 0;
         $start = strtotime((string)$lesson['start_datetime']);
         $end = $start + ((int)$lesson['duration_minutes']) * 60;
+        // This week only: a time that no longer matches the standing slot, and
+        // whoever is actually covering it.
+        $timeMoved = LessonManagement::isTimeMoved($lesson);
+        $substituteNote = LessonManagement::substituteNote($lesson);
 
         $html .= '<div class="sem-date sem-date-active' . ($missed ? ' sem-date-missed' : '') . '">'
             . '<div class="sem-date-head"><strong>' . h(date('D M j, Y', $start)) . '</strong>'
-            . ($missed ? ' <span class="badge">Missed</span>' : '') . $tag
+            . ($missed ? ' <span class="badge">Missed</span>' : '')
+            . ($timeMoved ? ' <span class="badge">Time moved</span>' : '') . $tag
             . '<span class="sem-date-time">' . h(date('g:i a', $start) . '–' . date('g:i a', $end)) . '</span></div>';
 
-        $detail = array_filter([trim((string)$whoFn($lesson)), (string)$lesson['location_name']]);
+        $detail = array_filter([
+            trim((string)$whoFn($lesson)),
+            $substituteNote,
+            (string)$lesson['location_name'],
+        ]);
         if ($detail) {
             $html .= '<div class="sem-date-locations">' . h(implode(' · ', $detail)) . '</div>';
         }
