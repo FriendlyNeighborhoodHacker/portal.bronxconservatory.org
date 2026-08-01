@@ -84,14 +84,13 @@ h1, h2, h3, .page-title {
   align-items: center;
 }
 
-.topbar-brand .brand-mark {
-  font-size: 22px;
-  margin-right: 8px;
-  vertical-align: -2px;
-}
-
-.brand-short {
-  display: none;
+/* The white treble-clef logo (Images/BCM-logo-white-transparent-cropped.png):
+   tall mark, sized by height, only visible on dark backgrounds. */
+.brand-logo {
+  height: 36px;
+  width: auto;
+  margin-right: 10px;
+  flex: none;
 }
 
 .topbar-nav {
@@ -358,6 +357,8 @@ body.minimal {
   font-weight: 200;
   font-size: 20px;
   padding: 14px 20px;
+  display: flex;
+  align-items: center;
 }
 
 .minimal-content {
@@ -716,12 +717,13 @@ details summary {
     display: inline-flex;
   }
 
+  /* On phones the logo stands alone (the name would crowd the bar) */
   .brand-full {
     display: none;
   }
 
-  .brand-short {
-    display: inline;
+  .brand-logo {
+    margin-right: 0;
   }
 
   .topbar {
