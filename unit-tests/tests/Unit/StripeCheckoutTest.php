@@ -109,4 +109,57 @@ final class StripeCheckoutTest extends TestCase
         $this->expectExceptionMessage('Your card was declined.');
         StripeCheckout::retrieveCheckoutSession('cs_test_1');
     }
+
+    public function testLeadSessionEncodesQuoteLinesAndLeadMetadata(): void
+    {
+        $captured = null;
+        StripeCheckout::setHttpTransportForTesting(function ($method, $url, $params) use (&$captured) {
+            $captured = $params;
+            return [200, json_encode(['id' => 'cs_lead_1', 'url' => 'https://checkout.stripe.test/lead'])];
+        });
+
+        $session = StripeCheckout::createLeadCheckoutSession(null, 42, [
+            ['label' => 'Registration fee', 'amount_cents' => 3500],
+            ['label' => 'Lucia — 30-minute private lessons', 'amount_cents' => 42000],
+            ['label' => 'Skipped zero line', 'amount_cents' => 0],
+        ], 'https://x/success', 'https://x/cancel');
+
+        $this->assertSame('cs_lead_1', $session['id']);
+        $this->assertSame('42', $captured['metadata[lead_id]']);
+        $this->assertSame('3500', $captured['line_items[0][price_data][unit_amount]']);
+        $this->assertSame('42000', $captured['line_items[1][price_data][unit_amount]']);
+        $this->assertArrayNotHasKey('line_items[2][price_data][unit_amount]', $captured);
+        $this->assertArrayNotHasKey('metadata[student_amounts]', $captured);
+    }
+
+    public function testCompletedLeadSessionUpdatesTheLeadNotTheLedger(): void
+    {
+        $leadId = LeadManagement::createLead(null, null, [
+            'first_name' => 'Rosa', 'last_name' => 'Ramos', 'email' => 'rosa@example.org',
+            'phone' => '718-555-0110', 'address_street_1' => 'x', 'address_city' => 'Bronx',
+            'address_state' => 'NY', 'address_zip' => '10454',
+        ], [[
+            'first_name' => 'Lucia', 'last_name' => 'Ramos', 'age' => 9,
+            'instrument' => 'Piano', 'lesson_length_minutes' => 30,
+        ]], [], false);
+        LeadManagement::attachCheckoutSession(null, $leadId, 'cs_lead_2');
+
+        $session = [
+            'id' => 'cs_lead_2',
+            'payment_status' => 'paid',
+            'payment_intent' => 'pi_lead_2',
+            'amount_total' => 46500,
+            'metadata' => ['lead_id' => (string)$leadId],
+        ];
+
+        $this->assertSame(1, StripeCheckout::handleCheckoutSessionCompleted($session));
+        // Race replay records nothing more.
+        $this->assertSame(0, StripeCheckout::handleCheckoutSessionCompleted($session));
+
+        $lead = LeadManagement::findLead($leadId);
+        $this->assertSame(46500, (int)$lead['amount_paid_cents']);
+        $this->assertSame('pi_lead_2', $lead['stripe_payment_intent_id']);
+        // The money stays on the lead — the ledger is untouched until convert.
+        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+    }
 }

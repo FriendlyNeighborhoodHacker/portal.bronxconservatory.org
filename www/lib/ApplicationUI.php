@@ -107,6 +107,7 @@ class ApplicationUI {
     /** Script-name prefixes that count as "the Admin section" (subnav shown). */
     private static function adminSectionPrefixes(): array {
         return [
+            '/admin/leads.php', '/admin/lead.php', '/admin/lead_',
             '/admin/announcements.php', '/admin/announcement_',
             '/admin/locations.php', '/admin/location_',
             '/admin/semesters.php', '/admin/semester/',
@@ -128,6 +129,7 @@ class ApplicationUI {
      */
     private static function adminSubnavItems(): array {
         $items = [
+            ['path' => '/admin/leads.php', 'label' => 'Leads', 'prefixes' => ['/admin/lead']],
             ['path' => '/admin/announcements.php', 'label' => 'Announcements', 'prefixes' => ['/admin/announcement']],
             ['path' => '/admin/locations.php', 'label' => 'Locations', 'prefixes' => ['/admin/location']],
             ['path' => '/admin/semesters.php', 'label' => 'Semesters', 'prefixes' => ['/admin/semester', '/admin/setup/', '/admin/import/']],

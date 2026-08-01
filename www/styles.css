@@ -1359,3 +1359,31 @@ body.auth .brand-logo {
 .detail-grid dd.detail-empty {
   color: var(--color-text-muted);
 }
+
+/* ===== Lead status pills (Admin > Leads) ===== */
+
+.status-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lead-new { background: #fdecd3; color: #8a5a00; }
+.lead-contacted { background: #e8effa; color: #2b5ea0; }
+.lead-scheduled { background: #ece3f7; color: #5b3a8a; }
+.lead-converted { background: #dcf5e7; color: #0a6e3d; }
+.lead-declined { background: #eceae7; color: #6b6660; }
+
+.lead-paid-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #dcf5e7;
+  color: #0a6e3d;
+  white-space: nowrap;
+}

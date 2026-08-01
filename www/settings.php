@@ -57,6 +57,37 @@ class Settings {
         return self::dollarsToCents(self::get('recital_fee', '0'));
     }
 
+    // ── Public registration wizard pricing ──────────────────────────────
+    // These price the quote on the public registration form (leads).
+    // registrationCostCents (once per family) and recitalFeeCents (per
+    // lesson block) are shared with the semester-confirmation charges above.
+
+    public static function tuition30Cents(): int {
+        return self::dollarsToCents(self::get('tuition_30', '0'));
+    }
+
+    public static function tuition60Cents(): int {
+        return self::dollarsToCents(self::get('tuition_60', '0'));
+    }
+
+    public static function tuitionEnsembleCents(): int {
+        return self::dollarsToCents(self::get('tuition_ensemble', '0'));
+    }
+
+    public static function installmentFeeCents(): int {
+        return self::dollarsToCents(self::get('installment_fee', '0'));
+    }
+
+    // The semester the public registration wizard is open for; null means
+    // registration is closed (the wizard shows a friendly closed page).
+    public static function registrationSemesterId(): ?int {
+        $value = self::get('registration_semester_id', '');
+        if ($value === '' || !is_numeric($value) || (int)$value <= 0) {
+            return null;
+        }
+        return (int)$value;
+    }
+
     private static function dollarsToCents(string $dollars): int {
         $dollars = trim(str_replace(['$', ','], '', $dollars));
         if ($dollars === '' || !is_numeric($dollars)) {

@@ -352,3 +352,73 @@ function send_password_reset_email(string $email, string $token, string $firstNa
   
   return send_email($email, 'Reset your ' . $siteTitle . ' password', $html, $name);
 }
+
+/**
+ * Confirmation for a public registration-form submission (a lead): the
+ * thank-you copy plus a full review of what the family entered. $lead and
+ * $students are the freshly created leads/lead_students rows; $quoteLines is
+ * the frozen quote ([['label','amount_cents'],...]).
+ */
+function send_lead_registration_email(array $lead, array $students, array $quoteLines): bool {
+  $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+  $dollars = fn(int $cents) => '$' . number_format($cents / 100, 2);
+
+  $semesterLabel = '';
+  if (!empty($lead['season']) && !empty($lead['year'])) {
+    $semesterLabel = ' for the ' . ucfirst((string)$lead['season']) . ' ' . $lead['year'] . ' term';
+  }
+
+  $studentRows = '';
+  foreach ($students as $student) {
+    $detail = $e($student['instrument']) . ', ' . (int)$student['lesson_length_minutes'] . '-minute lessons';
+    if (!empty($student['guitar_ensemble'])) {
+      $detail .= ' + Guitar Ensemble';
+    }
+    $studentRows .= '<li>' . $e($student['first_name'] . ' ' . $student['last_name'])
+      . (!empty($student['age']) ? ' (age ' . (int)$student['age'] . ')' : '')
+      . ' — ' . $detail . '</li>';
+  }
+
+  $quoteRows = '';
+  foreach ($quoteLines as $line) {
+    $quoteRows .= '<tr><td style="padding:2px 12px 2px 0;">' . $e($line['label']) . '</td>'
+      . '<td style="text-align:right;">' . $dollars((int)$line['amount_cents']) . '</td></tr>';
+  }
+  $quoteRows .= '<tr><td style="padding:6px 12px 2px 0;font-weight:bold;">Total</td>'
+    . '<td style="text-align:right;font-weight:bold;">' . $dollars((int)$lead['amount_quoted_cents']) . '</td></tr>';
+  if ((int)$lead['amount_due_now_cents'] !== (int)$lead['amount_quoted_cents']) {
+    $quoteRows .= '<tr><td style="padding:2px 12px 2px 0;">Due today (installment plan)</td>'
+      . '<td style="text-align:right;">' . $dollars((int)$lead['amount_due_now_cents']) . '</td></tr>';
+  }
+
+  $days = json_decode((string)($lead['preferred_days'] ?? '[]'), true) ?: [];
+  $blocks = json_decode((string)($lead['availability_blocks'] ?? '[]'), true) ?: [];
+
+  $html = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#0D1B2A;">'
+    . '<p>Hello ' . $e($lead['parent_first_name']) . ',</p>'
+    . '<p>Thank you for registering' . $semesterLabel . ' at the Bronx Conservatory of Music! '
+    . 'If you have not heard from our team within 5 business days of registering, please reach '
+    . 'out via email or phone at info@bronxconservatory.org or ' . $e(Settings::contactPhone()) . '. '
+    . 'Thank you and we can\'t wait to make music together!</p>'
+    . '<p><strong>Students</strong></p><ul>' . $studentRows . '</ul>'
+    . '<p><strong>Scheduling preferences</strong><br>'
+    . 'Location: ' . $e($lead['location_preference'] ?: 'No preference') . '<br>'
+    . 'Days: ' . $e($days ? implode(', ', $days) : '—') . '<br>'
+    . 'Times: ' . $e($blocks ? implode(', ', $blocks) : '—')
+    . (trim((string)($lead['scheduling_notes'] ?? '')) !== '' ? '<br>Notes: ' . $e($lead['scheduling_notes']) : '')
+    . '</p>'
+    . '<p><strong>Tuition &amp; fees</strong></p>'
+    . '<table style="border-collapse:collapse;">' . $quoteRows . '</table>'
+    . '<p>Payment: ' . (!empty($lead['installment_plan'])
+        ? 'installment plan — fees and 50% of tuition now, the remainder due by week 4 of the semester.'
+        : 'full tuition and fees.') . '</p>'
+    . '<p>— The Bronx Conservatory of Music</p>'
+    . '</div>';
+
+  return send_email(
+    (string)$lead['email'],
+    'Welcome to the Bronx Conservatory of Music!',
+    $html,
+    trim($lead['parent_first_name'] . ' ' . $lead['parent_last_name'])
+  );
+}

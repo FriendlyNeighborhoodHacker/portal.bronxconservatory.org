@@ -41,7 +41,7 @@ $SETTINGS_DEF = [
   ],
   'registration_cost' => [
     'label' => 'Registration cost ($)',
-    'hint'  => 'Charged once per student when their semester reservation is confirmed.',
+    'hint'  => 'Charged once per student when their semester reservation is confirmed. Also prices the public registration form (once per family there).',
     'type'  => 'text',
   ],
   'semester_lesson_cost' => [
@@ -51,8 +51,33 @@ $SETTINGS_DEF = [
   ],
   'recital_fee' => [
     'label' => 'Recital fee ($)',
-    'hint'  => 'Charged with the semester; opt-outs get a custom ledger credit.',
+    'hint'  => 'Charged with the semester; opt-outs get a custom ledger credit. Also prices the public registration form (per lesson block there).',
     'type'  => 'text',
+  ],
+  'tuition_30' => [
+    'label' => '30-minute lesson tuition ($/semester)',
+    'hint'  => 'Public registration form: full-semester price for weekly 30-minute private lessons.',
+    'type'  => 'text',
+  ],
+  'tuition_60' => [
+    'label' => '60-minute lesson tuition ($/semester)',
+    'hint'  => 'Public registration form: full-semester price for weekly 60-minute private lessons.',
+    'type'  => 'text',
+  ],
+  'tuition_ensemble' => [
+    'label' => 'Guitar Ensemble tuition ($/semester)',
+    'hint'  => 'Public registration form: full-semester price for the 30-minute Guitar Ensemble class.',
+    'type'  => 'text',
+  ],
+  'installment_fee' => [
+    'label' => 'Installment plan fee ($)',
+    'hint'  => 'Public registration form: one-time per-family fee for paying tuition in two installments.',
+    'type'  => 'text',
+  ],
+  'registration_semester_id' => [
+    'label' => 'Registration open for',
+    'hint'  => 'The semester the public Register form signs families up for. "Registration closed" hides the form.',
+    'type'  => 'semester',
   ],
 ];
 
@@ -162,6 +187,17 @@ header_html('Manage Settings');
           <select name="s[<?=h($key)?>]">
             <?php foreach ($zones as $z): ?>
               <option value="<?=h($z)?>" <?= $current[$key] === $z ? 'selected' : '' ?>><?=h($z)?></option>
+            <?php endforeach; ?>
+          </select>
+        <?php elseif ($typ === 'semester'): ?>
+          <?php
+            require_once __DIR__ . '/../lib/SemesterManagement.php';
+            $semesterOptions = SemesterManagement::listSemesters();
+          ?>
+          <select name="s[<?=h($key)?>]">
+            <option value="">— Registration closed —</option>
+            <?php foreach ($semesterOptions as $semesterOption): ?>
+              <option value="<?=(int)$semesterOption['id']?>" <?= (string)$current[$key] === (string)$semesterOption['id'] ? 'selected' : '' ?>><?=h(SemesterManagement::label($semesterOption))?></option>
             <?php endforeach; ?>
           </select>
         <?php elseif ($typ === 'checkbox'): ?>

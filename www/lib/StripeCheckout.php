@@ -82,6 +82,54 @@ class StripeCheckout {
         return ['id' => (string)($session['id'] ?? ''), 'url' => (string)($session['url'] ?? '')];
     }
 
+    /**
+     * Create a Checkout Session for a registration lead (public wizard).
+     * $lines: the due-now breakdown from the lead's frozen quote —
+     * [['label' => string, 'amount_cents' => int], ...]; non-positive lines
+     * are skipped. metadata[lead_id] routes the completed session to
+     * LeadManagement::recordLeadPayment instead of the student ledger.
+     */
+    public static function createLeadCheckoutSession(
+        ?UserContext $ctx,
+        int $leadId,
+        array $lines,
+        string $successUrl,
+        string $cancelUrl
+    ): array {
+        self::assertConfigured();
+        $params = [
+            'mode' => 'payment',
+            'success_url' => $successUrl,
+            'cancel_url' => $cancelUrl,
+            'metadata[lead_id]' => (string)$leadId,
+        ];
+        $i = 0;
+        $total = 0;
+        foreach ($lines as $line) {
+            $cents = (int)($line['amount_cents'] ?? 0);
+            if ($cents <= 0) {
+                continue;
+            }
+            $params["line_items[$i][price_data][currency]"] = 'usd';
+            $params["line_items[$i][price_data][unit_amount]"] = (string)$cents;
+            $params["line_items[$i][price_data][product_data][name]"] = (string)($line['label'] ?? 'BCM registration');
+            $params["line_items[$i][quantity]"] = '1';
+            $total += $cents;
+            $i++;
+        }
+        if ($i === 0) {
+            throw new InvalidArgumentException('Nothing to pay.');
+        }
+
+        $session = self::request('POST', self::API_BASE . '/checkout/sessions', $params);
+        self::log($ctx, 'stripe.lead_checkout_session_created', [
+            'session_id' => $session['id'] ?? null,
+            'lead_id' => $leadId,
+            'total_cents' => $total,
+        ]);
+        return ['id' => (string)($session['id'] ?? ''), 'url' => (string)($session['url'] ?? '')];
+    }
+
     public static function retrieveCheckoutSession(string $sessionId): array {
         self::assertConfigured();
         if (!preg_match('/^cs_[A-Za-z0-9_]+$/', $sessionId)) {
@@ -124,9 +172,12 @@ class StripeCheckout {
     }
 
     /**
-     * Record a completed Checkout Session's payments in the ledger — one
-     * credit per student from metadata[student_amounts]. Idempotent (unique
-     * key per session + student). Returns how many credits were recorded.
+     * Record a completed Checkout Session. Two shapes, told apart by
+     * metadata: metadata[lead_id] → the payment is held on the registration
+     * lead (LeadManagement::recordLeadPayment); otherwise
+     * metadata[student_amounts] → one ledger credit per student. Both are
+     * idempotent, so the webhook and the success-redirect fallback can race
+     * freely. Returns how many payments were recorded.
      */
     public static function handleCheckoutSessionCompleted(array $session): int {
         if ((string)($session['payment_status'] ?? '') !== 'paid') {
@@ -135,6 +186,14 @@ class StripeCheckout {
         $sessionId = (string)($session['id'] ?? '');
         $paymentIntentId = isset($session['payment_intent']) ? (string)$session['payment_intent'] : null;
         $metadata = (array)($session['metadata'] ?? []);
+
+        $leadId = (int)($metadata['lead_id'] ?? 0);
+        if ($leadId > 0 && $sessionId !== '') {
+            require_once __DIR__ . '/LeadManagement.php';
+            $amount = (int)($session['amount_total'] ?? 0);
+            return LeadManagement::recordLeadPayment($leadId, $amount, $sessionId, $paymentIntentId) ? 1 : 0;
+        }
+
         $semesterId = (int)($metadata['semester_id'] ?? 0) ?: null;
         $studentAmounts = json_decode((string)($metadata['student_amounts'] ?? ''), true);
         if (!is_array($studentAmounts) || $sessionId === '') {

@@ -30,6 +30,12 @@ define('STRIPE_SECRET_KEY', '');
 define('STRIPE_PUBLISHABLE_KEY', '');
 define('STRIPE_WEBHOOK_SECRET', '');
 
+// Google reCAPTCHA v2 checkbox (https://www.google.com/recaptcha/admin) —
+// protects the public registration form against bots. Empty values hide the
+// widget and skip verification (fine for local development).
+define('RECAPTCHA_SITE_KEY', '');
+define('RECAPTCHA_SECRET_KEY', '');
+
 // ===== GitHub deploy webhook (gitwebhook.php) =====
 // Shared secret for the GitHub deploy webhook. Must match the secret
 // configured on the GitHub webhook settings page for the repository.

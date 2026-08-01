@@ -17,7 +17,7 @@ class ReservationManagement {
 
     public const STATUSES = ['pending_reach_out', 'pending_confirmation', 'confirmed'];
 
-    private const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    public const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
     private static function pdo(): PDO {
         return pdo();
