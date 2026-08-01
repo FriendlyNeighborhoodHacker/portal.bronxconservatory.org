@@ -1166,6 +1166,56 @@ a.cal-day-num:hover {
   color: #cfe0f5;
 }
 
+/* Condensed mode: narrower columns, short names, status by color only */
+.schedule-grid.compact th,
+.schedule-grid.compact td {
+  padding: 2px 4px;
+  font-size: 11px;
+}
+
+.schedule-grid.compact th.grid-teacher {
+  min-width: 92px;
+}
+
+.schedule-grid.compact th.grid-time {
+  width: 72px;
+}
+
+.schedule-grid.compact .cell-status {
+  display: none;
+}
+
+.schedule-grid.compact .grid-cell {
+  height: 28px;
+}
+
+/* Columns hidden by the pager */
+.col-hidden {
+  display: none;
+}
+
+/* The column pager above the grid (only shown when paging is needed) */
+.schedule-pager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  flex-wrap: wrap;
+}
+
+.schedule-pager select {
+  width: auto;
+  flex: 1;
+  min-width: 160px;
+  max-width: 340px;
+}
+
+.schedule-pager-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-navy);
+}
+
 .grid-legend {
   display: flex;
   flex-wrap: wrap;

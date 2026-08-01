@@ -32,12 +32,39 @@ function schedule_row_slots(array $days, array $bounds): array {
     return $rows;
 }
 
+/** "Lucia Ramos" -> "Lucia R.", single word unchanged. */
+function schedule_short_person_name(string $full): string {
+    $parts = preg_split('/\s+/', trim($full)) ?: [];
+    if (count($parts) < 2) {
+        return trim($full);
+    }
+    $last = array_pop($parts);
+    return $parts[0] . ' ' . mb_substr($last, 0, 1) . '.';
+}
+
+/** "Marisol Vega" -> "M. Vega" (condensed column header). */
+function schedule_short_teacher_name(string $full): string {
+    $parts = preg_split('/\s+/', trim($full)) ?: [];
+    if (count($parts) < 2) {
+        return trim($full);
+    }
+    $first = array_shift($parts);
+    return mb_substr($first, 0, 1) . '. ' . implode(' ', $parts);
+}
+
 /**
  * Render the grid. $columns from SemesterManagement::locationTeachers().
  * $rows from schedule_row_slots(). $cellFn(array $column, array $row):
  * ?array — null for an empty-but-clickable cell, or
  * ['html' => ..., 'class' => ..., 'attrs' => [k=>v], 'rowspan' => n,
  *  'skip' => bool] (skip = covered by an earlier rowspan).
+ *
+ * The markup carries everything main.js's setupScheduleGrid() needs to
+ * condense and paginate columns client-side: data-col on every teacher
+ * header and body cell, data-loc-key + data-label on location headers,
+ * data-short / data-student-short for the condensed name swaps, and the
+ * column spine as data-columns JSON on the table. The wrapper includes the
+ * (initially hidden) pager mount.
  */
 function schedule_grid_html(array $columns, array $rows, callable $cellFn): string {
     if (!$columns) {
@@ -45,37 +72,60 @@ function schedule_grid_html(array $columns, array $rows, callable $cellFn): stri
              . '<a href="/admin/semesters.php">Import location teachers</a> to build the grid.</p></div>';
     }
 
-    // Location header cells (colspan per location, preserving column order).
+    // Location header cells (colspan per location, preserving column order),
+    // and the machine-readable column spine.
     $locationSpans = [];
+    $spine = [];
     foreach ($columns as $column) {
         $name = (string)$column['location_name'];
-        if (!$locationSpans || $locationSpans[count($locationSpans) - 1]['name'] !== $name) {
-            $locationSpans[] = ['name' => $name, 'span' => 0];
+        $locKey = (string)$column['location_id'];
+        if (!$locationSpans || $locationSpans[count($locationSpans) - 1]['key'] !== $locKey) {
+            $locationSpans[] = ['key' => $locKey, 'name' => $name, 'span' => 0];
         }
         $locationSpans[count($locationSpans) - 1]['span']++;
+
+        $teacherName = trim((string)($column['teacher_preferred_name'] ?: $column['teacher_first_name']) . ' ' . $column['teacher_last_name']);
+        $spine[] = ['loc' => $locKey, 'locName' => $name, 'teacher' => $teacherName];
     }
 
-    $html = '<div class="schedule-scroll"><table class="schedule-grid">';
+    $html = '<div class="schedule-widget">';
+    $html .= '<div class="schedule-pager hidden"></div>';
+    $html .= '<div class="schedule-scroll"><table class="schedule-grid" data-columns="' . h(json_encode($spine)) . '">';
     $html .= '<thead><tr><th class="grid-time"></th>';
     foreach ($locationSpans as $span) {
-        $html .= '<th class="grid-loc" colspan="' . (int)$span['span'] . '">' . h($span['name']) . '</th>';
+        $html .= '<th class="grid-loc" colspan="' . (int)$span['span'] . '"'
+            . ' data-loc-key="' . h($span['key']) . '" data-label="' . h($span['name']) . '">'
+            . h($span['name']) . '</th>';
     }
     $html .= '</tr><tr><th class="grid-time"></th>';
-    foreach ($columns as $column) {
-        $teacherName = trim((string)($column['teacher_preferred_name'] ?: $column['teacher_first_name']) . ' ' . $column['teacher_last_name']);
-        $html .= '<th class="grid-teacher">' . h($teacherName) . '</th>';
+    foreach ($columns as $i => $column) {
+        $teacherName = $spine[$i]['teacher'];
+        $html .= '<th class="grid-teacher" data-col="' . $i . '"'
+            . ' data-loc-key="' . h($spine[$i]['loc']) . '"'
+            . ' data-short="' . h(schedule_short_teacher_name($teacherName)) . '">'
+            . h($teacherName) . '</th>';
     }
     $html .= '</tr></thead><tbody>';
 
     foreach ($rows as $row) {
         $html .= '<tr><th class="grid-time">' . h($row['label']) . '</th>';
-        foreach ($columns as $column) {
+        foreach ($columns as $i => $column) {
             $cell = $cellFn($column, $row);
             if ($cell !== null && !empty($cell['skip'])) {
                 continue; // covered by a rowspan above
             }
+            $cellAttrs = (array)($cell['attrs'] ?? []);
+            $cellAttrs['data-col'] = $i;
+            // Condensed cells lose their status line, so the full context
+            // rides along as a hover tooltip and a short-name swap target.
+            if (!empty($cellAttrs['data-context']) && !isset($cellAttrs['title'])) {
+                $cellAttrs['title'] = $cellAttrs['data-context'];
+            }
+            if (!empty($cellAttrs['data-student-name']) && !isset($cellAttrs['data-student-short'])) {
+                $cellAttrs['data-student-short'] = schedule_short_person_name((string)$cellAttrs['data-student-name']);
+            }
             $attrs = '';
-            foreach (($cell['attrs'] ?? []) as $name => $value) {
+            foreach ($cellAttrs as $name => $value) {
                 $attrs .= ' ' . $name . '="' . h((string)$value) . '"';
             }
             $rowspan = (int)($cell['rowspan'] ?? 1);
@@ -87,7 +137,7 @@ function schedule_grid_html(array $columns, array $rows, callable $cellFn): stri
         }
         $html .= '</tr>';
     }
-    $html .= '</tbody></table></div>';
+    $html .= '</tbody></table></div></div>';
     return $html;
 }
 

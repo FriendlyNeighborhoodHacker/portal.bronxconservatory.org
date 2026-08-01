@@ -195,6 +195,234 @@ function bcmTypeahead(opts) {
   });
 }
 
+// Semester Schedule / weekly calendar grid: condense columns as the screen
+// narrows, then paginate them when even condensed columns can't fit.
+//
+//   fit_normal  = floor((width - 90) / 130)   all columns, normal density
+//   fit_compact = floor((width - 72) / 92)    all columns, .compact
+//   otherwise                                 .compact + paging, where pages
+//   pack whole locations greedily; a location splits across pages only when
+//   it alone exceeds a page ("Bronx CC (1 of 2)").
+//
+// On narrow screens (perPage <= 2) the pager's label becomes a column
+// <select> so a specific teacher is one tap away. The first visible column
+// index is kept in sessionStorage so the modals' post-save reloads return to
+// the same page.
+function setupScheduleGrid() {
+  var widget = document.querySelector('.schedule-widget');
+  if (!widget) return;
+  var table = widget.querySelector('table[data-columns]');
+  var pagerEl = widget.querySelector('.schedule-pager');
+  if (!table || !pagerEl) return;
+
+  var columns;
+  try {
+    columns = JSON.parse(table.getAttribute('data-columns')) || [];
+  } catch (e) {
+    return;
+  }
+  if (!columns.length) return;
+
+  var GUTTER_NORMAL = 90, COL_NORMAL = 130;
+  var GUTTER_COMPACT = 72, COL_COMPACT = 92;
+  var storageKey = 'scheduleGrid:' + window.location.pathname;
+  var pages = [];         // [{cols: [indexes], label: 'Location (1 of 2)'}]
+  var currentPage = 0;
+  var resizeTimer = null;
+
+  // Location groups in column order.
+  var groups = [];
+  columns.forEach(function (col, i) {
+    var lastGroup = groups[groups.length - 1];
+    if (!lastGroup || lastGroup.key !== col.loc) {
+      groups.push({ key: col.loc, name: col.locName, cols: [] });
+    }
+    groups[groups.length - 1].cols.push(i);
+  });
+
+  function setCompact(on) {
+    if (table.classList.contains('compact') === on) return;
+    table.classList.toggle('compact', on);
+    // Swap teacher headers and student names to their short forms (and back).
+    table.querySelectorAll('th.grid-teacher').forEach(function (th) {
+      if (!th.dataset.full) th.dataset.full = th.textContent;
+      th.textContent = on ? (th.dataset.short || th.dataset.full) : th.dataset.full;
+    });
+    table.querySelectorAll('td.grid-cell .cell-student').forEach(function (el) {
+      var td = el.closest('td');
+      if (!el.dataset.full) el.dataset.full = el.textContent;
+      var shortName = td && td.dataset.studentShort;
+      el.textContent = on && shortName ? shortName : el.dataset.full;
+    });
+  }
+
+  function buildPages(perPage) {
+    var built = [];
+    groups.forEach(function (group) {
+      if (group.cols.length > perPage) {
+        // A single location wider than a page: split it.
+        var parts = Math.ceil(group.cols.length / perPage);
+        for (var p = 0; p < parts; p++) {
+          built.push({
+            cols: group.cols.slice(p * perPage, (p + 1) * perPage),
+            label: group.name + ' (' + (p + 1) + ' of ' + parts + ')',
+            splitPart: p + 1,
+            splitOf: parts,
+            names: [group.name]
+          });
+        }
+        return;
+      }
+      var open = built[built.length - 1];
+      if (!open || open.splitOf || open.cols.length + group.cols.length > perPage) {
+        built.push({ cols: [], label: '', names: [] });
+        open = built[built.length - 1];
+      }
+      open.cols = open.cols.concat(group.cols);
+      open.names.push(group.name);
+      open.label = open.names.join(' · ');
+    });
+    return built;
+  }
+
+  function applyVisibility(visibleCols) {
+    var visible = {};
+    visibleCols.forEach(function (i) { visible[i] = true; });
+    table.querySelectorAll('[data-col]').forEach(function (el) {
+      el.classList.toggle('col-hidden', !visible[el.getAttribute('data-col')]);
+    });
+    // Location header row: recompute colspans for this page.
+    var page = pages[currentPage];
+    table.querySelectorAll('th.grid-loc').forEach(function (th) {
+      var key = th.getAttribute('data-loc-key');
+      var count = 0;
+      visibleCols.forEach(function (i) { if (columns[i].loc === key) count++; });
+      th.classList.toggle('col-hidden', count === 0);
+      if (count > 0) {
+        th.colSpan = count;
+        var label = th.getAttribute('data-label');
+        if (page && page.splitOf && columns[visibleCols[0]].loc === key) {
+          label += ' (' + page.splitPart + ' of ' + page.splitOf + ')';
+        }
+        th.textContent = label;
+      }
+    });
+  }
+
+  function renderPager() {
+    pagerEl.innerHTML = '';
+    pagerEl.classList.remove('hidden');
+
+    var prev = document.createElement('button');
+    prev.type = 'button';
+    prev.className = 'button';
+    prev.textContent = '◀';
+    prev.setAttribute('aria-label', 'Previous page');
+    prev.disabled = currentPage === 0;
+    prev.addEventListener('click', function () { goToPage(currentPage - 1); });
+
+    var next = document.createElement('button');
+    next.type = 'button';
+    next.className = 'button';
+    next.textContent = '▶';
+    next.setAttribute('aria-label', 'Next page');
+    next.disabled = currentPage >= pages.length - 1;
+    next.addEventListener('click', function () { goToPage(currentPage + 1); });
+
+    pagerEl.appendChild(prev);
+
+    if (useSelectPager) {
+      // Phone-sized: jump straight to a teacher.
+      var select = document.createElement('select');
+      select.setAttribute('aria-label', 'Jump to teacher');
+      columns.forEach(function (col, i) {
+        var option = document.createElement('option');
+        option.value = i;
+        option.textContent = col.teacher + ' — ' + col.locName;
+        select.appendChild(option);
+      });
+      select.value = String(pages[currentPage].cols[0]);
+      select.addEventListener('change', function () {
+        var target = parseInt(select.value, 10);
+        for (var p = 0; p < pages.length; p++) {
+          if (pages[p].cols.indexOf(target) >= 0) { goToPage(p); return; }
+        }
+      });
+      pagerEl.appendChild(select);
+    } else {
+      var label = document.createElement('span');
+      label.className = 'schedule-pager-label';
+      label.textContent = 'Page ' + (currentPage + 1) + ' of ' + pages.length
+        + ' — ' + pages[currentPage].label;
+      pagerEl.appendChild(label);
+    }
+
+    pagerEl.appendChild(next);
+  }
+
+  var useSelectPager = false; // phones: jump-to-teacher dropdown instead of a label
+
+  function goToPage(p) {
+    currentPage = Math.max(0, Math.min(pages.length - 1, p));
+    try {
+      sessionStorage.setItem(storageKey, String(pages[currentPage].cols[0]));
+    } catch (e) { /* private browsing */ }
+    applyVisibility(pages[currentPage].cols);
+    renderPager();
+  }
+
+  function layout() {
+    var width = widget.clientWidth || document.documentElement.clientWidth;
+    var fitNormal = Math.floor((width - GUTTER_NORMAL) / COL_NORMAL);
+    var fitCompact = Math.floor((width - GUTTER_COMPACT) / COL_COMPACT);
+
+    if (columns.length <= fitNormal) {
+      setCompact(false);
+      pages = [{ cols: columns.map(function (c, i) { return i; }), label: '' }];
+      currentPage = 0;
+      applyVisibility(pages[0].cols);
+      pagerEl.classList.add('hidden');
+      return;
+    }
+    if (columns.length <= fitCompact) {
+      setCompact(true);
+      pages = [{ cols: columns.map(function (c, i) { return i; }), label: '' }];
+      currentPage = 0;
+      applyVisibility(pages[0].cols);
+      pagerEl.classList.add('hidden');
+      return;
+    }
+
+    // Condensed AND paged.
+    setCompact(true);
+    var perPage = Math.max(1, fitCompact);
+    useSelectPager = width <= 768; // phones jump by teacher, not by page
+    pages = buildPages(perPage);
+
+    // Stay on (or restore to) the page holding the anchor column.
+    var anchor = null;
+    try {
+      var stored = sessionStorage.getItem(storageKey);
+      if (stored !== null) anchor = parseInt(stored, 10);
+    } catch (e) { /* ignore */ }
+    if (anchor === null && pages[currentPage]) anchor = pages[currentPage].cols[0];
+    currentPage = 0;
+    if (anchor !== null) {
+      for (var p = 0; p < pages.length; p++) {
+        if (pages[p].cols.indexOf(anchor) >= 0) { currentPage = p; break; }
+      }
+    }
+    applyVisibility(pages[currentPage].cols);
+    renderPager();
+  }
+
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(layout, 150);
+  });
+  layout();
+}
+
 // Utility functions
 function escapeHtml(text) {
   const div = document.createElement('div');
@@ -280,6 +508,7 @@ function setupUnsavedChangesWarning() {
 document.addEventListener('DOMContentLoaded', function() {
   setupTopNav();
   setupModals();
+  setupScheduleGrid();
   setupAutoSubmit();
   setupUnsavedChangesWarning();
   
