@@ -1,7 +1,8 @@
 -- Bronx Conservatory of Music Portal — application schema
 -- Create the database, then load this file. This file always represents the
--- complete current schema; migrations in db_migrations/ exist only to upgrade
--- older production installations (tracked in schema_migrations, applied via
+-- complete current schema; migrations in db_migrations/ (a sibling of this
+-- file at the top level, outside the web root) exist only to upgrade older
+-- production installations (tracked in schema_migrations, applied via
 -- Admin > Migrations).
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
