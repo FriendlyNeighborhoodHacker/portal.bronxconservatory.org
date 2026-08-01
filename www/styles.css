@@ -28,6 +28,9 @@
   --res-balance-half-bg: #e9dcf7;  /* confirmed, half semester due — purple pastel */
   --res-balance-custom-bg: #1e3a5f;/* confirmed, custom balance — dark blue */
   --res-hold-bg: #e4e6ea;          /* hold block (lunch, errand) — neutral grey */
+  /* Semester-wide date list: the left rule that marks each date's status */
+  --sem-date-active-line: #2e9e63;   /* a class day — green */
+  --sem-date-inactive-line: #7c4dbd; /* a break or holiday — purple */
   --font-display: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --topbar-height: 56px;
@@ -1136,6 +1139,68 @@ body.auth .brand-logo {
   background: #ffe8e8;
   color: #7a0000;
   text-decoration: line-through;
+}
+
+/* ===== Semester-wide date list (Admin > Calendar) ===== */
+/* A month grid is mostly empty for a semester that meets once a week, so the
+   dates are listed instead. The left rule carries the status: green = a class
+   day, purple = a break or holiday. */
+.sem-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sem-date {
+  border-left: 3px solid transparent;
+  padding: 8px 0 8px 12px;
+}
+
+.sem-date + .sem-date {
+  border-top: 1px solid var(--color-border);
+}
+
+.sem-date-active {
+  border-left-color: var(--sem-date-active-line);
+}
+
+.sem-date-inactive {
+  border-left-color: var(--sem-date-inactive-line);
+  color: var(--color-text-muted);
+}
+
+.sem-date-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.sem-date-time {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.sem-date-locations {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+  padding-left: 16px;
+}
+
+/* A legend swatch shaped like the list's left rule. */
+.swatch.swatch-line {
+  width: 3px;
+  border-radius: 2px;
+}
+
+.swatch-line.sem-date-active {
+  background: var(--sem-date-active-line);
+}
+
+.swatch-line.sem-date-inactive {
+  background: var(--sem-date-inactive-line);
 }
 
 /* ===== BCM: semester schedule grid ===== */

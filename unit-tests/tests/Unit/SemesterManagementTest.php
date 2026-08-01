@@ -89,6 +89,61 @@ final class SemesterManagementTest extends TestCase
         $this->assertSame(0, SemesterManagement::countLocationDatesOutsideRange($semesterId, '2030-09-01', '2030-12-31'));
     }
 
+    public function testSemesterWideDateListGroupsAndSplits(): void
+    {
+        $semesterId = fx_semester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+        $a = fx_location_id();
+        $b = fx_second_location_id();
+        SemesterManagement::setActiveLocations($this->ctx, $semesterId, [$a, $b]);
+        $nameA = (string)pdo()->query("SELECT name FROM locations WHERE id=$a")->fetchColumn();
+        $nameB = (string)pdo()->query("SELECT name FROM locations WHERE id=$b")->fetchColumn();
+
+        // Sep 14: same status and title at both locations -> one entry.
+        SemesterManagement::upsertLocationDate($this->ctx, $semesterId, $a, '2030-09-14', '09:00:00', '17:00:00', 'active', 'Day 1');
+        SemesterManagement::upsertLocationDate($this->ctx, $semesterId, $b, '2030-09-14', '09:00:00', '17:00:00', 'active', 'Day 1');
+        // Sep 21: same title, different status -> two entries.
+        SemesterManagement::upsertLocationDate($this->ctx, $semesterId, $a, '2030-09-21', '09:00:00', '17:00:00', 'active', 'Day 2');
+        SemesterManagement::upsertLocationDate($this->ctx, $semesterId, $b, '2030-09-21', '09:00:00', '17:00:00', 'inactive', 'Day 2');
+        // Sep 28: same status, different title -> two entries.
+        SemesterManagement::upsertLocationDate($this->ctx, $semesterId, $a, '2030-09-28', '09:00:00', '17:00:00', 'active', 'Day 3');
+        SemesterManagement::upsertLocationDate($this->ctx, $semesterId, $b, '2030-09-28', '09:00:00', '17:00:00', 'active', 'Recital');
+        // Oct 5: grouped, but the locations keep different hours.
+        SemesterManagement::upsertLocationDate($this->ctx, $semesterId, $a, '2030-10-05', '09:00:00', '17:00:00', 'active', 'Day 4');
+        SemesterManagement::upsertLocationDate($this->ctx, $semesterId, $b, '2030-10-05', '10:00:00', '16:00:00', 'active', 'Day 4');
+
+        $entries = SemesterManagement::locationDatesGroupedForSemester($semesterId);
+
+        // Chronological, with the active listing before the inactive one.
+        $this->assertSame(
+            ['2030-09-14', '2030-09-21', '2030-09-21', '2030-09-28', '2030-09-28', '2030-10-05'],
+            array_column($entries, 'date')
+        );
+
+        // Sep 14: consolidated across both locations.
+        $this->assertSame('Day 1', $entries[0]['title']);
+        $this->assertSame('active', $entries[0]['status']);
+        $this->assertSame([$nameA, $nameB], array_column($entries[0]['locations'], 'name'));
+        $this->assertTrue($entries[0]['uniform_time']);
+
+        // Sep 21: split by status, one location each.
+        $this->assertSame(['active', 'inactive'], [$entries[1]['status'], $entries[2]['status']]);
+        $this->assertCount(1, $entries[1]['locations']);
+        $this->assertCount(1, $entries[2]['locations']);
+
+        // Sep 28: split by title.
+        $this->assertSame(['Day 3', 'Recital'], [$entries[3]['title'], $entries[4]['title']]);
+
+        // Oct 5: grouped, but the differing hours are flagged for the view.
+        $this->assertCount(2, $entries[5]['locations']);
+        $this->assertFalse($entries[5]['uniform_time']);
+    }
+
+    public function testSemesterWideDateListIsEmptyWithoutDates(): void
+    {
+        $semesterId = fx_semester($this->ctx);
+        $this->assertSame([], SemesterManagement::locationDatesGroupedForSemester($semesterId));
+    }
+
     public function testNonAdminCannotUpdate(): void
     {
         $id = SemesterManagement::createSemester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');

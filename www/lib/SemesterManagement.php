@@ -252,6 +252,53 @@ class SemesterManagement {
     }
 
     /**
+     * The semester's class dates as a chronological list, for the
+     * semester-wide view. Locations that share a date, status AND title are
+     * consolidated into one entry; a date where locations disagree on either
+     * (one is a holiday, or they call it something different) stays split, so
+     * the difference is visible rather than averaged away.
+     *
+     * Each entry: date, status, title, locations [[name, start_time,
+     * end_time], ...], and uniform_time (true when every location in the
+     * group keeps the same hours, which lets the view show one time range).
+     */
+    public static function locationDatesGroupedForSemester(int $semesterId): array {
+        $groups = [];
+        foreach (self::locationDates($semesterId) as $row) {
+            $title = (string)($row['title'] ?? '');
+            $key = $row['date'] . '|' . $row['status'] . '|' . $title;
+            if (!isset($groups[$key])) {
+                $groups[$key] = [
+                    'date' => (string)$row['date'],
+                    'status' => (string)$row['status'],
+                    'title' => $title,
+                    'locations' => [],
+                    'uniform_time' => true,
+                    'start_time' => (string)$row['start_time'],
+                    'end_time' => (string)$row['end_time'],
+                ];
+            }
+            if ((string)$row['start_time'] !== $groups[$key]['start_time']
+                || (string)$row['end_time'] !== $groups[$key]['end_time']) {
+                $groups[$key]['uniform_time'] = false;
+            }
+            $groups[$key]['locations'][] = [
+                'name' => (string)$row['location_name'],
+                'start_time' => (string)$row['start_time'],
+                'end_time' => (string)$row['end_time'],
+            ];
+        }
+
+        // locationDates() is already ordered by date; keep that, and put an
+        // active listing before an inactive one when a date has both.
+        $out = array_values($groups);
+        usort($out, function (array $a, array $b): int {
+            return [$a['date'], $a['status'], $a['title']] <=> [$b['date'], $b['status'], $b['title']];
+        });
+        return $out;
+    }
+
+    /**
      * The location's ACTIVE dates falling on the given weekday, date order —
      * the input to lesson generation. $dayOfWeek uses PHP date('w'): 0=Sunday.
      */
