@@ -134,39 +134,40 @@ class ApplicationUI {
     }
 
     /**
-     * The current page's contextual submenu items (or [] when the section has
-     * none). Rendered as a full-width bar in normal document flow — it pushes
-     * the page content down rather than overlaying it — and repeated inside
-     * the mobile drawer.
+     * The page's submenu bars. Each entry:
+     *   ['id' => element id, 'owner' => top-nav label that toggles it,
+     *    'items' => [['path','label','active'], ...]]
+     * A submenu renders as a full-width bar in normal document flow (it
+     * pushes the content down, never overlays it) but stays HIDDEN until the
+     * user clicks its top-level menu item — every page load starts closed.
+     * The same items repeat inside the mobile drawer.
      */
-    private static function subnavItems(array $user): array {
+    private static function subnavGroups(array $user): array {
         $script = $_SERVER['SCRIPT_NAME'] ?? '';
+        $groups = [];
 
-        // Admin section: persistent submenu across all its pages.
+        // Admin submenu: available on every page for admins, toggled by the
+        // "Admin" top-nav item (cub_scouts admin-bar behavior).
         if (!empty($user['is_admin'])) {
-            foreach (self::adminSectionPrefixes() as $prefix) {
-                if (strpos($script, $prefix) === 0) {
-                    $items = [];
-                    foreach (self::adminSubnavItems() as $item) {
-                        $active = false;
-                        foreach ($item['prefixes'] as $p) {
-                            if (strpos($script, $p) === 0) { $active = true; break; }
-                        }
-                        $items[] = ['path' => $item['path'], 'label' => $item['label'], 'active' => $active];
-                    }
-                    return $items;
+            $items = [];
+            foreach (self::adminSubnavItems() as $item) {
+                $active = false;
+                foreach ($item['prefixes'] as $p) {
+                    if (strpos($script, $p) === 0) { $active = true; break; }
                 }
+                $items[] = ['path' => $item['path'], 'label' => $item['label'], 'active' => $active];
             }
+            $groups[] = ['id' => 'subnavAdmin', 'owner' => 'Admin', 'items' => $items];
         }
 
-        // Calendar pages: Month / Week views, preserving the date in view.
+        // Calendar pages: Month / Week views, preserving the date in view,
+        // toggled by the "Calendar" top-nav item.
         $calendarPairs = [
             '/admin/calendar' => ['/admin/calendar.php', '/admin/calendar_week.php'],
             '/teacher/calendar' => ['/teacher/calendar.php', '/teacher/calendar_week.php'],
         ];
         foreach ($calendarPairs as $prefix => [$monthPath, $weekPath]) {
             if (strpos($script, $prefix) === 0) {
-                // Keep the date in view when switching between Month and Week.
                 $date = (string)($_GET['date'] ?? '');
                 $month = (string)($_GET['month'] ?? '');
                 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
@@ -175,16 +176,17 @@ class ApplicationUI {
                 if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
                     $month = $date !== '' ? substr($date, 0, 7) : '';
                 }
-                return [
+                $groups[] = ['id' => 'subnavCalendar', 'owner' => 'Calendar', 'items' => [
                     ['path' => $monthPath . ($month !== '' ? '?month=' . $month : ''),
                      'label' => 'Month', 'active' => $script === $monthPath],
                     ['path' => $weekPath . ($date !== '' ? '?date=' . $date : ''),
                      'label' => 'Week', 'active' => $script === $weekPath],
-                ];
+                ]];
+                break;
             }
         }
 
-        return [];
+        return $groups;
     }
 
     /** The admin semester selector (only when at least one semester exists). */
@@ -262,10 +264,28 @@ class ApplicationUI {
 
         if ($u) {
             $navItems = self::topNavItems($u);
-            $subnavItems = self::subnavItems($u);
+            $subnavGroups = self::subnavGroups($u);
             $semesterSelector = self::semesterSelectorHtml($u, 'semester-select');
 
-            $link = function (array $item) {
+            // Which top-nav label toggles which submenu bar.
+            $togglesByOwner = [];
+            foreach ($subnavGroups as $group) {
+                $togglesByOwner[$group['owner']] = $group['id'];
+            }
+
+            $link = function (array $item) use ($togglesByOwner) {
+                $subnavId = $togglesByOwner[$item['label']] ?? null;
+                $attrs = '';
+                if ($subnavId !== null) {
+                    // Clicking toggles the submenu bar instead of navigating
+                    // (main.js setupTopNav intercepts data-subnav-toggle).
+                    $attrs = ' data-subnav-toggle="' . h($subnavId) . '"'
+                        . ' aria-expanded="false" aria-controls="' . h($subnavId) . '" role="button"';
+                }
+                return '<a href="' . h($item['path']) . '"' . ($item['active'] ? ' class="active"' : '') . $attrs . '>'
+                    . h($item['label']) . '</a>';
+            };
+            $plainLink = function (array $item) {
                 return '<a href="' . h($item['path']) . '"' . ($item['active'] ? ' class="active"' : '') . '>'
                     . h($item['label']) . '</a>';
             };
@@ -293,25 +313,28 @@ class ApplicationUI {
             echo '</header>';
 
             // Mobile drawer: full-width panel in normal flow under the header.
+            // The drawer itself is user-opened, so submenu items just show
+            // indented beneath the main links.
             echo '<div id="mobileNav" class="mobile-nav">';
             foreach ($navItems as $item) {
-                echo $link($item);
+                echo $plainLink($item);
             }
-            if ($subnavItems) {
+            foreach ($subnavGroups as $group) {
                 echo '<div class="mobile-nav-sub">';
-                foreach ($subnavItems as $item) {
-                    echo $link($item);
+                foreach ($group['items'] as $item) {
+                    echo $plainLink($item);
                 }
                 echo '</div>';
             }
             echo self::semesterSelectorHtml($u, 'semester-select mobile');
             echo '</div>';
 
-            // Contextual submenu: a full-width bar that pushes content down.
-            if ($subnavItems) {
-                echo '<div class="subnav" aria-label="Section">';
-                foreach ($subnavItems as $item) {
-                    echo $link($item);
+            // Contextual submenu bars: full-width, in normal flow (they push
+            // the content down), hidden until their top-nav item is clicked.
+            foreach ($subnavGroups as $group) {
+                echo '<div class="subnav hidden" id="' . h($group['id']) . '" aria-label="Section">';
+                foreach ($group['items'] as $item) {
+                    echo $plainLink($item);
                 }
                 echo '</div>';
             }

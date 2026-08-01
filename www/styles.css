@@ -122,6 +122,17 @@ h1, h2, h3, .page-title {
   font-weight: 600;
 }
 
+/* Items that open a submenu bar get a small caret */
+.topbar-nav a[data-subnav-toggle]::after {
+  content: ' \25BE';
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.topbar-nav a[data-subnav-toggle][aria-expanded="true"]::after {
+  content: ' \25B4';
+}
+
 /* Semester selector (admin): compact select in the top bar */
 .semester-select {
   margin-left: 6px;

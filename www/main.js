@@ -38,6 +38,19 @@ function setupTopNav() {
     });
   }
 
+  // Submenu bars: closed on every page load; the owning top-nav item
+  // (e.g. Admin) toggles its bar open/closed instead of navigating.
+  document.addEventListener('click', function (e) {
+    var toggle = e.target.closest ? e.target.closest('[data-subnav-toggle]') : null;
+    if (!toggle) return;
+    var subnav = document.getElementById(toggle.getAttribute('data-subnav-toggle'));
+    if (!subnav) return; // no bar on this page — follow the link normally
+    e.preventDefault();
+    var open = subnav.classList.contains('hidden');
+    subnav.classList.toggle('hidden', !open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       setAvatar(false);
