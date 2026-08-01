@@ -117,12 +117,12 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
 <h3>Students</h3>
 <div class="card">
   <table class="list">
-    <thead><tr><th>Name</th><th>Age</th><th>Instrument</th><th>Lesson</th><th>Guitar Ensemble</th><th>Converted</th></tr></thead>
+    <thead><tr><th>Name</th><th>Class of</th><th>Instrument</th><th>Lesson</th><th>Guitar Ensemble</th><th>Converted</th></tr></thead>
     <tbody>
       <?php foreach ($students as $student): ?>
       <tr>
         <td><?=h($student['first_name'] . ' ' . $student['last_name'])?></td>
-        <td><?=h($student['age'] ?? '—')?></td>
+        <td><?=h($student['class_of'] ?: '—')?></td>
         <td><?=h($student['instrument'])?></td>
         <td><?=(int)$student['lesson_length_minutes']?> min</td>
         <td><?=!empty($student['guitar_ensemble']) ? 'Yes' : '—'?></td>

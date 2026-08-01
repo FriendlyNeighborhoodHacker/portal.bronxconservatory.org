@@ -139,7 +139,7 @@ final class StripeCheckoutTest extends TestCase
             'phone' => '718-555-0110', 'address_street_1' => 'x', 'address_city' => 'Bronx',
             'address_state' => 'NY', 'address_zip' => '10454',
         ], [[
-            'first_name' => 'Lucia', 'last_name' => 'Ramos', 'age' => 9,
+            'first_name' => 'Lucia', 'last_name' => 'Ramos', 'class_of' => 2031,
             'instrument' => 'Piano', 'lesson_length_minutes' => 30,
         ]], [], false);
         LeadManagement::attachCheckoutSession(null, $leadId, 'cs_lead_2');

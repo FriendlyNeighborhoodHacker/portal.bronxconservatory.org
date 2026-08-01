@@ -33,7 +33,7 @@ final class LeadManagementTest extends TestCase
     private function student(array $overrides = []): array
     {
         return $overrides + [
-            'first_name' => 'Lucia', 'last_name' => 'Ramos', 'age' => 9,
+            'first_name' => 'Lucia', 'last_name' => 'Ramos', 'class_of' => 2031,
             'instrument' => 'Piano', 'lesson_length_minutes' => 30, 'guitar_ensemble' => 0,
         ];
     }
@@ -151,6 +151,7 @@ final class LeadManagementTest extends TestCase
         $this->assertCount(2, $students);
         $this->assertSame('Cello/Bass', $students[1]['instrument']);
         $this->assertSame(60, (int)$students[1]['lesson_length_minutes']);
+        $this->assertSame(2031, (int)$students[0]['class_of']);
 
         // Deliberately NOT live data: no users, profiles, or reservations.
         $this->assertSame(1, (int)pdo()->query('SELECT COUNT(*) FROM users')->fetchColumn()); // just the fx admin
@@ -166,6 +167,7 @@ final class LeadManagementTest extends TestCase
             'bad instrument' => [[$this->parent(), [$this->student(['instrument' => 'Theremin'])]]],
             'bad length' => [[$this->parent(), [$this->student(['lesson_length_minutes' => 45])]]],
             'short phone' => [[$this->parent(['phone' => '123']), [$this->student()]]],
+            'class of is an age' => [[$this->parent(), [$this->student(['class_of' => 9])]]],
         ];
         foreach ($cases as $label => [[$parent, $students]]) {
             try {
@@ -263,6 +265,11 @@ final class LeadManagementTest extends TestCase
         // Family structure exists.
         $this->assertTrue(StudentTeacherManagement::isParentOf($parentId, $studentId));
         $this->assertSame(['Cello'], InstrumentCatalog::namesForStudent($studentId)); // Cello/Bass default
+
+        // "Class of" carries through to the real student profile.
+        $st = pdo()->prepare('SELECT class_of FROM student_profiles WHERE user_id = ?');
+        $st->execute([$studentId]);
+        $this->assertSame(2031, (int)$st->fetchColumn());
         $parentRow = UserManagement::findById($parentId);
         $this->assertSame('rosa@example.org', $parentRow['email']);
         $this->assertSame('100 Willis Ave', $parentRow['address_street_1']);

@@ -122,7 +122,7 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
             <?php endforeach; ?>
           </select>
         </label>
-        <label>Date of birth (optional; age given: <?=h($student['age'] ?? '?')?>)
+        <label>Date of birth (optional<?=$student['class_of'] ? '; they gave Class of ' . h($student['class_of']) : ''?>)
           <input type="date" name="students[<?=$lsId?>][date_of_birth]" value="<?=h($oldRow['date_of_birth'] ?? '')?>">
         </label>
       </div>

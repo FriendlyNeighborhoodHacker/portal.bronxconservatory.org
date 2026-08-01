@@ -19,7 +19,7 @@ foreach ((array)($_POST['students'] ?? []) as $student) {
     $students[] = [
         'first_name' => trim((string)($student['first_name'] ?? '')),
         'last_name' => trim((string)($student['last_name'] ?? '')),
-        'age' => trim((string)($student['age'] ?? '')),
+        'class_of' => trim((string)($student['class_of'] ?? '')),
         'instrument' => (string)($student['instrument'] ?? ''),
         'lesson_length_minutes' => (int)($student['lesson_length_minutes'] ?? 30),
         'guitar_ensemble' => !empty($student['guitar_ensemble']) ? 1 : 0,
@@ -78,8 +78,15 @@ foreach ($students as $i => $student) {
     if (!in_array($student['instrument'], LeadManagement::INSTRUMENT_CHOICES, true)) {
         registration_fail('Please choose an instrument for student ' . ($i + 1) . '.', '/register/students.php');
     }
-    if ($student['age'] === '' || (int)$student['age'] < 1 || (int)$student['age'] > 120) {
-        registration_fail('Please enter student ' . ($i + 1) . '\'s age.', '/register/students.php');
+    // "Class of" is optional — only a value that was actually typed is checked.
+    if ($student['class_of'] !== ''
+        && (!preg_match('/^\d{4}$/', $student['class_of'])
+            || (int)$student['class_of'] < 1900 || (int)$student['class_of'] > 2200)) {
+        registration_fail(
+            'Student ' . ($i + 1) . '\'s "Class of" should be a four-digit graduation year, for example '
+                . ((int)date('Y') + 6) . ' — or leave it blank.',
+            '/register/students.php'
+        );
     }
     $complete++;
 }

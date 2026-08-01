@@ -41,8 +41,9 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
         <label>Last name
           <input type="text" name="students[<?=$i?>][last_name]" value="<?=h($student['last_name'] ?? '')?>">
         </label>
-        <label>Age (years)
-          <input type="number" name="students[<?=$i?>][age]" min="1" max="120" value="<?=h($student['age'] ?? '')?>">
+        <label>Class of <span class="small">(graduation year, optional)</span>
+          <input type="number" name="students[<?=$i?>][class_of]" min="1900" max="2200" step="1"
+            placeholder="<?=(int)date('Y') + 6?>" value="<?=h($student['class_of'] ?? '')?>">
         </label>
         <label>Instrument
           <select name="students[<?=$i?>][instrument]">

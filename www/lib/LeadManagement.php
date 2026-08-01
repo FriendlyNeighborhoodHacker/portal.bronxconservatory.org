@@ -153,11 +153,10 @@ class LeadManagement {
             if (!in_array($length, self::LESSON_LENGTHS, true)) {
                 throw new InvalidArgumentException('Please choose a lesson length for ' . $sFirst . '.');
             }
-            $age = (int)($student['age'] ?? 0);
             $cleanStudents[] = [
                 'first_name' => $sFirst,
                 'last_name' => $sLast,
-                'age' => ($age >= 1 && $age <= 120) ? $age : null,
+                'class_of' => self::normalizeClassOf($student['class_of'] ?? null),
                 'instrument' => $instrument,
                 'lesson_length_minutes' => $length,
                 'guitar_ensemble' => !empty($student['guitar_ensemble']) ? 1 : 0,
@@ -204,12 +203,12 @@ class LeadManagement {
             $leadId = (int)$pdo->lastInsertId();
 
             $insert = $pdo->prepare(
-                'INSERT INTO lead_students (lead_id, first_name, last_name, age, instrument, lesson_length_minutes, guitar_ensemble)
+                'INSERT INTO lead_students (lead_id, first_name, last_name, class_of, instrument, lesson_length_minutes, guitar_ensemble)
                  VALUES (?,?,?,?,?,?,?)'
             );
             foreach ($cleanStudents as $student) {
                 $insert->execute([
-                    $leadId, $student['first_name'], $student['last_name'], $student['age'],
+                    $leadId, $student['first_name'], $student['last_name'], $student['class_of'],
                     $student['instrument'], $student['lesson_length_minutes'], $student['guitar_ensemble'],
                 ]);
             }
@@ -422,6 +421,7 @@ class LeadManagement {
             ]);
             StudentTeacherManagement::ensureStudentProfile($ctx, $studentUserId, [
                 'date_of_birth' => $opts['date_of_birth'] ?? null,
+                'class_of' => $leadStudent['class_of'] ?? null,
             ]);
             $instrumentId = (int)($opts['instrument_id'] ?? 0)
                 ?: self::instrumentIdForChoice((string)$leadStudent['instrument']);
@@ -518,6 +518,25 @@ class LeadManagement {
         if ($v === null) return null;
         $v = trim((string)$v);
         return $v === '' ? null : $v;
+    }
+
+    // "Class of" is optional, but a value that is given has to be a real
+    // graduation year — a stray age or a mistyped digit is worth catching
+    // while the family is still on the form.
+    private static function normalizeClassOf($value): ?int {
+        if ($value === null) {
+            return null;
+        }
+        $value = trim((string)$value);
+        if ($value === '') {
+            return null;
+        }
+        if (!preg_match('/^\d{4}$/', $value) || (int)$value < 1900 || (int)$value > 2200) {
+            throw new InvalidArgumentException(
+                'Class of should be a four-digit graduation year, for example ' . (date('Y') + 6) . '.'
+            );
+        }
+        return (int)$value;
     }
 
     private static function log(?UserContext $ctx, string $action, array $meta): void {
