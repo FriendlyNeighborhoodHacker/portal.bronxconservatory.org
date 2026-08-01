@@ -39,8 +39,11 @@ if ($returnTo === '' || $returnTo[0] !== '/') $returnTo = '/index.php';
 // Validate target + permissions
 if ($userId <= 0) redirect_back($returnTo, ['err' => 'missing_user_id']);
 
-// Only allow users to upload their own photos (or admins can upload for anyone)
-if ($currentId !== $userId && empty($u['is_admin'])) {
+// Users may set their own photo, parents their children's, admins anyone's
+// (the same rule UserManagement applies to profile edits).
+require_once __DIR__ . '/lib/StudentTeacherManagement.php';
+if ($currentId !== $userId && empty($u['is_admin'])
+    && !StudentTeacherManagement::isParentOf($currentId, $userId)) {
   http_response_code(403);
   exit('Forbidden: cannot upload photo for this user');
 }

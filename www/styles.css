@@ -1337,3 +1337,25 @@ body.auth .brand-logo {
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px 16px;
 }
+
+/* Read-only label/value pairs (My Profile) */
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) 1fr;
+  gap: 4px 16px;
+  margin: 0 0 16px;
+}
+
+.detail-grid dt {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.detail-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.detail-grid dd.detail-empty {
+  color: var(--color-text-muted);
+}

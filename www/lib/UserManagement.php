@@ -47,12 +47,20 @@ class UserManagement {
         }
     }
 
+    // Admins may update anyone; everyone else may update their own row and
+    // the rows of their own children (parents keep their family's details
+    // current from My Profile).
     private static function assertCanUpdate(?UserContext $ctx, int $targetUserId): void {
-        if (!$ctx) { 
-            throw new RuntimeException('Login required'); 
+        require_once __DIR__ . '/StudentTeacherManagement.php';
+
+        if (!$ctx) {
+            throw new RuntimeException('Login required');
         }
-        if (!$ctx->admin && $ctx->id !== $targetUserId) { 
-            throw new RuntimeException('Forbidden (assertCanUpdate)'); 
+        if ($ctx->admin || $ctx->id === $targetUserId) {
+            return;
+        }
+        if (!StudentTeacherManagement::isParentOf($ctx->id, $targetUserId)) {
+            throw new RuntimeException('Forbidden (assertCanUpdate)');
         }
     }
 

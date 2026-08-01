@@ -1,12 +1,15 @@
 <?php
 // My Profile — view page. Editing happens on profile/edit.php.
 require_once __DIR__ . '/../partials.php';
+require_once __DIR__ . '/../partials_person_form.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
+require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../lib/Files.php';
 Application::init();
 require_login();
 
 $me = current_user();
+$children = StudentTeacherManagement::childrenOfParent((int)$me['id']);
 
 // One-shot flash from eval pages
 $msg = $_SESSION['success'] ?? null;
@@ -47,5 +50,40 @@ $mePhotoUrl = Files::profilePhotoUrl($me['photo_public_file_id'] ?? null, 80);
     </div>
   </div>
 </div>
+
+<div class="card">
+  <?= person_details_html($me) ?>
+  <div class="actions"><a class="button" href="/profile/edit.php">Edit Profile</a></div>
+</div>
+
+<?php if ($children): ?>
+<h3>My Children</h3>
+<div class="card-grid">
+  <?php foreach ($children as $child): ?>
+  <?php
+    $childName = trim($child['first_name'] . ' ' . $child['last_name']);
+    $childPhotoUrl = Files::profilePhotoUrl($child['photo_public_file_id'] ?? null, 56);
+    $childInitials = strtoupper(substr((string)$child['first_name'], 0, 1) . substr((string)$child['last_name'], 0, 1));
+  ?>
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <?php if ($childPhotoUrl !== ''): ?>
+        <img src="<?=h($childPhotoUrl)?>" alt="" style="width:56px;height:56px;border-radius:50%;object-fit:cover;">
+      <?php else: ?>
+        <span aria-hidden="true" style="width:56px;height:56px;border-radius:50%;background:var(--color-primary);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;"><?=h($childInitials)?></span>
+      <?php endif; ?>
+      <div>
+        <h3 style="margin:0;"><a href="/parent/child_edit.php?id=<?=(int)$child['id']?>"><?=h($childName)?></a></h3>
+        <div class="card-sub" style="margin:0;"><?=h(implode(', ', $child['instruments'] ?: ['No instrument yet']))?></div>
+      </div>
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+      <a class="button" href="/parent/child_edit.php?id=<?=(int)$child['id']?>">Edit Profile</a>
+      <a class="button" href="/parent/child.php?id=<?=(int)$child['id']?>">Schedule &amp; notes</a>
+    </div>
+  </div>
+  <?php endforeach; ?>
+</div>
+<?php endif; ?>
 
 <?php footer_html(); ?>

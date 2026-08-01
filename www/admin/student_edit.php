@@ -2,7 +2,7 @@
 // Edit Student: photo, basic information, parents (+Add Parent modal),
 // instruments, charges & payments, and soft delete.
 require_once __DIR__ . '/../partials.php';
-require_once __DIR__ . '/person_form.php';
+require_once __DIR__ . '/../partials_person_form.php';
 require_once __DIR__ . '/../partials_parent_modal.php';
 require_once __DIR__ . '/../partials_confirm_modal.php';
 require_once __DIR__ . '/../lib/UserManagement.php';

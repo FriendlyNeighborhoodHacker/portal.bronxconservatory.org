@@ -1,6 +1,7 @@
 <?php
 // Edit my profile — form. Evaluates to profile/edit_eval.php.
 require_once __DIR__ . '/../partials.php';
+require_once __DIR__ . '/../partials_person_form.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
 Application::init();
 require_login();
@@ -12,9 +13,8 @@ $err = $_SESSION['error'] ?? null;
 $form = $_SESSION['form_data'] ?? [];
 unset($_SESSION['error'], $_SESSION['form_data']);
 
-$firstName = $form['first_name'] ?? $me['first_name'];
-$lastName = $form['last_name'] ?? $me['last_name'];
-$email = $form['email'] ?? $me['email'];
+// Repopulate from the rejected post where there is one, otherwise the saved row.
+$values = $form ? array_merge($me, $form) : $me;
 
 header_html('Edit Profile');
 ?>
@@ -22,19 +22,10 @@ header_html('Edit Profile');
 <?php if ($err): ?><p class="error"><?=h($err)?></p><?php endif; ?>
 
 <div class="card">
-  <form method="post" action="/profile/edit_eval.php" class="stack">
+  <form method="post" action="/profile/edit_eval.php" class="stack" data-warn-unsaved>
     <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
-      <label>First name
-        <input type="text" name="first_name" value="<?=h($firstName)?>" required>
-      </label>
-      <label>Last name
-        <input type="text" name="last_name" value="<?=h($lastName)?>" required>
-      </label>
-      <label>Email
-        <input type="email" name="email" value="<?=h($email)?>" required>
-      </label>
-    </div>
+    <?php person_basic_info_fields_html($values); ?>
+    <?php person_other_fields_html($values); ?>
 
     <div class="actions">
       <button class="primary" type="submit">Save Profile</button>

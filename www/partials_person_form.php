@@ -1,10 +1,12 @@
 <?php
-// Shared pieces of the Edit Student / Edit Teacher / Edit Parent screens:
-// the profile-photo card and the Basic Information form fields (the spec's
-// name / identifiers / address / contact / emergency-contact set), plus the
-// matching $_POST collector for the eval side.
-require_once __DIR__ . '/../partials.php';
-require_once __DIR__ . '/../lib/Files.php';
+// Shared pieces of the person screens — Edit Student / Edit Teacher /
+// Edit Parent (admin) and My Profile / Edit Child (self-service): the
+// profile-photo card, the Basic Information form fields (the spec's
+// name / identifiers / address / contact / emergency-contact set), the
+// matching $_POST collector for the eval side, and the read-only rendering
+// of the same field set.
+require_once __DIR__ . '/partials.php';
+require_once __DIR__ . '/lib/Files.php';
 
 // Photo (current photo or an initials placeholder) with the upload button
 // top right, posting to the existing /upload_photo.php.
@@ -74,17 +76,79 @@ function person_basic_info_fields_html(array $form): void {
     <?php
 }
 
-/** Collect the Basic Information fields from $_POST for updateProfile. */
+/** The "Other" inputs, shown on the self-service profile screens. */
+function person_other_fields_html(array $form): void {
+    ?>
+    <h3>Other</h3>
+    <div class="grid-2">
+      <label>Shirt size <input type="text" name="shirt_size" value="<?=h((string)($form['shirt_size'] ?? ''))?>"></label>
+    </div>
+    <?php
+}
+
+/**
+ * Collect the person fields from $_POST for updateProfile. Only keys the
+ * form actually posted are returned, so a screen that omits a section (the
+ * admin screens have no "Other" section) leaves those columns untouched.
+ */
 function person_basic_info_fields_from_post(): array {
     $fields = [];
-    foreach ([
-        'first_name', 'last_name', 'suffix', 'preferred_name', 'email', 'cell_phone',
-        'address_street_1', 'address_street_2', 'address_city', 'address_state', 'address_zip',
-        'secondary_email', 'home_phone', 'emergency_contact_name', 'emergency_contact_phone',
-    ] as $key) {
+    foreach (person_field_labels() as $key => $_label) {
         if (array_key_exists($key, $_POST)) {
             $fields[$key] = (string)$_POST[$key];
         }
     }
     return $fields;
+}
+
+/** Every person field, in display order, mapped to its human label. */
+function person_field_labels(): array {
+    return [
+        'first_name' => 'First name',
+        'last_name' => 'Last name',
+        'suffix' => 'Suffix',
+        'preferred_name' => 'Preferred name',
+        'email' => 'Email',
+        'cell_phone' => 'Cell phone',
+        'address_street_1' => 'Street 1',
+        'address_street_2' => 'Street 2',
+        'address_city' => 'City',
+        'address_state' => 'State',
+        'address_zip' => 'Zip',
+        'secondary_email' => 'Secondary email',
+        'home_phone' => 'Home phone',
+        'emergency_contact_name' => 'Contact name',
+        'emergency_contact_phone' => 'Contact phone',
+        'shirt_size' => 'Shirt size',
+    ];
+}
+
+/**
+ * Read-only rendering of the person field set, grouped the same way the
+ * edit form groups it. Empty fields are still listed (as a muted dash) so
+ * it is obvious what is missing.
+ */
+function person_details_html(array $user): string {
+    $labels = person_field_labels();
+    $sections = [
+        'Name' => ['first_name', 'last_name', 'suffix', 'preferred_name'],
+        'Contact' => ['email', 'cell_phone', 'secondary_email', 'home_phone'],
+        'Address' => ['address_street_1', 'address_street_2', 'address_city', 'address_state', 'address_zip'],
+        'Emergency Contact' => ['emergency_contact_name', 'emergency_contact_phone'],
+        'Other' => ['shirt_size'],
+    ];
+
+    $html = '';
+    foreach ($sections as $heading => $keys) {
+        $html .= '<h3>' . h($heading) . '</h3><dl class="detail-grid">';
+        foreach ($keys as $key) {
+            $value = trim((string)($user[$key] ?? ''));
+            $html .= '<dt>' . h($labels[$key]) . '</dt>';
+            $html .= $value === ''
+                ? '<dd class="detail-empty">—</dd>'
+                : '<dd>' . h($value) . '</dd>';
+        }
+        $html .= '</dl>';
+    }
+    return $html;
 }

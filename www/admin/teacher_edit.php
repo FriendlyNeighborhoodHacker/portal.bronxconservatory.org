@@ -2,7 +2,7 @@
 // Edit Teacher: photo, basic information, instruments, students this
 // semester (linked), and soft delete.
 require_once __DIR__ . '/../partials.php';
-require_once __DIR__ . '/person_form.php';
+require_once __DIR__ . '/../partials_person_form.php';
 require_once __DIR__ . '/../partials_confirm_modal.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
 require_once __DIR__ . '/../lib/StudentTeacherManagement.php';

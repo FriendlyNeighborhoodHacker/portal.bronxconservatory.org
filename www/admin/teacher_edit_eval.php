@@ -1,7 +1,7 @@
 <?php
 // POST: save a teacher's basic information and instruments.
 require_once __DIR__ . '/../partials.php';
-require_once __DIR__ . '/person_form.php';
+require_once __DIR__ . '/../partials_person_form.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
 require_once __DIR__ . '/../lib/InstrumentCatalog.php';
 Application::init();

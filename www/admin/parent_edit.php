@@ -2,7 +2,7 @@
 // Edit Parent: photo, basic information, children (+Add Child modal with
 // Add New / Link Existing tabs), and soft delete.
 require_once __DIR__ . '/../partials.php';
-require_once __DIR__ . '/person_form.php';
+require_once __DIR__ . '/../partials_person_form.php';
 require_once __DIR__ . '/../partials_child_modal.php';
 require_once __DIR__ . '/../partials_confirm_modal.php';
 require_once __DIR__ . '/../lib/UserManagement.php';

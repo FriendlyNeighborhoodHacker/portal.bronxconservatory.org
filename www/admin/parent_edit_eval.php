@@ -1,7 +1,7 @@
 <?php
 // POST: save a parent's basic information.
 require_once __DIR__ . '/../partials.php';
-require_once __DIR__ . '/person_form.php';
+require_once __DIR__ . '/../partials_person_form.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
 Application::init();
 require_admin();
