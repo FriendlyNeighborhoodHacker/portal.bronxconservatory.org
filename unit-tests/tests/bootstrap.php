@@ -12,7 +12,9 @@ require_once __DIR__ . '/../../www/lib/InstrumentCatalog.php';
 require_once __DIR__ . '/../../www/lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../../www/lib/LocationManagement.php';
 require_once __DIR__ . '/../../www/lib/SemesterManagement.php';
+require_once __DIR__ . '/../../www/lib/ScheduleConflicts.php';
 require_once __DIR__ . '/../../www/lib/ReservationManagement.php';
+require_once __DIR__ . '/../../www/lib/HoldBlockManagement.php';
 require_once __DIR__ . '/../../www/lib/Billing.php';
 require_once __DIR__ . '/../../www/lib/LessonManagement.php';
 require_once __DIR__ . '/../../www/lib/NotesManagement.php';
@@ -64,6 +66,7 @@ function test_reset_all(): void {
     foreach ([
         'activity_log', 'emails_sent', 'stripe_webhook_events',
         'ledger_entries', 'lesson_notes', 'lesson_resources', 'lessons',
+        'semester_hold_blocks', 'semester_hold_block_reservations',
         'semester_lesson_reservations', 'semester_location_teachers',
         'semester_location_dates', 'semester_locations', 'semesters',
         'announcements',
