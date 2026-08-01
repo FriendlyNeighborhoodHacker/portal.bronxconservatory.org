@@ -1,7 +1,8 @@
 <?php
 // Teacher home: today's lessons in chronological order. Each row shows time,
-// student/class name, room/location (online lessons get an icon), attendance
-// buttons, and a note box that auto-saves as the teacher types.
+// student name, location (online lessons get an icon), attendance buttons,
+// and a note box that auto-saves as the teacher types. The arrows jump to
+// the teacher's previous/next day that actually has lessons.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/fragments.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
@@ -18,70 +19,63 @@ if (!in_array('teacher', $roles, true) && !in_array('admin', $roles, true)) {
 
 $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['date'] ?? '')) ? $_GET['date'] : date('Y-m-d');
 $lessons = LessonManagement::lessonsForTeacherOnDate((int)$me['id'], $date);
+$prevDay = LessonManagement::previousTeachingDateForTeacher((int)$me['id'], $date);
+$nextDay = LessonManagement::nextTeachingDateForTeacher((int)$me['id'], $date);
 
 header_html("Today's Lessons");
 ?>
 
-<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+<div class="page-head">
   <h2><?=$date === date('Y-m-d') ? "Today's Lessons" : 'Lessons for ' . h(date('D, M j', strtotime($date)))?></h2>
-  <form method="get">
-    <input type="date" name="date" value="<?=h($date)?>" onchange="this.form.submit()">
-  </form>
+  <span class="actions">
+    <?php if ($prevDay): ?>
+      <a class="button" href="/teacher/index.php?date=<?=h($prevDay)?>">&larr; <?=h(date('M j', strtotime($prevDay)))?></a>
+    <?php endif; ?>
+    <form method="get" class="inline">
+      <input type="date" name="date" value="<?=h($date)?>" onchange="this.form.submit()">
+    </form>
+    <?php if ($nextDay): ?>
+      <a class="button" href="/teacher/index.php?date=<?=h($nextDay)?>"><?=h(date('M j', strtotime($nextDay)))?> &rarr;</a>
+    <?php endif; ?>
+  </span>
 </div>
 
 <?php if (!$lessons): ?>
-  <p class="small">No lessons on this day. Enjoy the quiet — or check another date above.</p>
+  <p class="small">No lessons on this day.
+  <?php if ($nextDay): ?>Your next teaching day is
+    <a href="/teacher/index.php?date=<?=h($nextDay)?>"><?=h(date('l, M j', strtotime($nextDay)))?></a>.<?php endif; ?>
+  </p>
 <?php endif; ?>
 
 <?php foreach ($lessons as $lesson): ?>
   <?php
     $note = NotesManagement::lessonNoteFor((int)$lesson['id'], (int)$me['id']);
-    $cancelled = $lesson['status'] === 'cancelled';
+    $missed = $lesson['attended'] !== null && (int)$lesson['attended'] === 0;
   ?>
   <div class="card" style="margin-bottom:12px;">
-    <div class="lesson-row" style="border-bottom:0;<?=$cancelled ? '' : ''?>">
-      <span class="lesson-row-time<?=$cancelled ? ' lesson-cancelled' : ''?>">
+    <div class="lesson-row" style="border-bottom:0;">
+      <span class="lesson-row-time<?=$missed ? ' lesson-cancelled' : ''?>">
         <?=h(date('g:i A', strtotime($lesson['start_datetime'])))?>
       </span>
-      <span class="<?=$cancelled ? 'lesson-cancelled' : ''?>">
-        <strong><a href="/teacher/lesson.php?id=<?=(int)$lesson['id']?>"><?php
-          if ($lesson['lesson_type'] === 'group') {
-              echo h(lesson_name_label($lesson));
-          } else {
-              echo h(trim(($lesson['student_first_name'] ?? '') . ' ' . ($lesson['student_last_name'] ?? '')));
-          }
-        ?></a></strong>
-        <span class="small"><?=h(lesson_name_label($lesson))?></span>
+      <span class="<?=$missed ? 'lesson-cancelled' : ''?>">
+        <strong><a href="/teacher/lesson.php?id=<?=(int)$lesson['id']?>"><?=h(trim(($lesson['student_preferred_name'] ?: $lesson['student_first_name']) . ' ' . $lesson['student_last_name']))?></a></strong>
+        <span class="small">Lesson #<?=(int)$lesson['lesson_number']?></span>
       </span>
-      <span><?=lesson_place_html($lesson)?></span>
-      <?php if ($cancelled): ?><span class="small">cancelled</span><?php endif; ?>
+      <span><?=h($lesson['location_name'])?></span>
       <?php if (!empty($lesson['substitute_teacher_user_id'])): ?>
-        <span class="small">covered by <?=h(trim(($lesson['sub_first_name'] ?? '') . ' ' . ($lesson['sub_last_name'] ?? '')))?></span>
+        <span class="small">covered by <?=h(trim(($lesson['substitute_first_name'] ?? '') . ' ' . ($lesson['substitute_last_name'] ?? '')))?></span>
       <?php endif; ?>
     </div>
 
-    <?php if (!$cancelled): ?>
-      <?php if ($lesson['lesson_type'] === 'individual'): ?>
-        <div id="attendance-<?=(int)$lesson['id']?>-solo">
-          <?=teacher_attendance_html((int)$lesson['id'], null, $lesson['attended'])?>
-        </div>
-      <?php else: ?>
-        <?php foreach ($lesson['group_students'] ?? [] as $gs): ?>
-          <div class="lesson-row" style="border-bottom:0;padding:4px 0;">
-            <span><?=h($gs['first_name'] . ' ' . $gs['last_name'])?></span>
-            <span id="attendance-<?=(int)$lesson['id']?>-<?=(int)$gs['student_user_id']?>">
-              <?=teacher_attendance_html((int)$lesson['id'], (int)$gs['student_user_id'], $gs['attended'])?>
-            </span>
-          </div>
-        <?php endforeach; ?>
-      <?php endif; ?>
+    <div id="attendance-<?=(int)$lesson['id']?>-solo">
+      <?=teacher_attendance_html((int)$lesson['id'], null, $lesson['attended'])?>
+    </div>
 
-      <div class="lesson-note-box" style="margin-top:8px;">
-        <textarea data-lesson-id="<?=(int)$lesson['id']?>" class="lesson-note-input"
-          placeholder="Log a note for this lesson — what you covered, what to practice…"><?=h($note['body'] ?? '')?></textarea>
-        <div id="note-state-<?=(int)$lesson['id']?>"><?=teacher_note_state_html($note)?></div>
-      </div>
-    <?php endif; ?>
+    <div class="lesson-note-box" style="margin-top:8px;">
+      <textarea data-lesson-id="<?=(int)$lesson['id']?>" class="lesson-note-input"
+        placeholder="Log a note for this lesson — what you covered, what to practice…"><?=h($note['body'] ?? '')?></textarea>
+      <div id="note-state-<?=(int)$lesson['id']?>"><?=teacher_note_state_html($note)?></div>
+    </div>
   </div>
 <?php endforeach; ?>
 
@@ -116,9 +110,8 @@ header_html("Today's Lessons");
     var btn = e.target.closest('.attendance-btn');
     if (!btn || btn.disabled) return;
     var lessonId = btn.dataset.lessonId;
-    var studentId = btn.dataset.studentId || '';
-    var target = document.getElementById('attendance-' + lessonId + '-' + (studentId || 'solo'));
-    var body = new URLSearchParams({csrf: csrf, lesson_id: lessonId, student_user_id: studentId, attended: btn.dataset.attended});
+    var target = document.getElementById('attendance-' + lessonId + '-solo');
+    var body = new URLSearchParams({csrf: csrf, lesson_id: lessonId, attended: btn.dataset.attended});
     fetch('/teacher/lesson_attendance_save.php', {method: 'POST', body: body})
       .then(function (r) { return r.text().then(function (t) { return {ok: r.ok, text: t}; }); })
       .then(function (res) {

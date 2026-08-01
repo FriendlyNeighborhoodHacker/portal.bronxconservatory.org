@@ -6,12 +6,13 @@ require_once __DIR__ . '/UserContext.php';
 require_once __DIR__ . '/ActivityLog.php';
 require_once __DIR__ . '/Files.php';
 require_once __DIR__ . '/LessonManagement.php';
-require_once __DIR__ . '/StudentTeacherManagement.php';
 
 /**
- * Lesson resources: voice recordings, sheet music, practice materials.
- * The binary lives in private_files; downloads go through
- * resource_download.php, which asks canUserDownload().
+ * Lesson resources: an uploaded file (voice recording, sheet music — stored
+ * in private_files) or an external link, always attached to a lesson.
+ * File downloads go through resource_download.php, which asks
+ * canUserDownload(); visibility follows the lesson's reservation
+ * (student / parents / effective teacher / admins).
  */
 class ResourceManagement {
 
@@ -29,38 +30,11 @@ class ResourceManagement {
     }
 
     /**
-     * Store an uploaded file ($_FILES entry) as a resource attached to a
-     * lesson and/or directly to a student. Teachers may upload for their own
-     * lessons/students; admins for anyone.
+     * Store an uploaded file ($_FILES entry) as a resource on a lesson.
+     * The lesson's effective teacher and admins may add materials.
      */
-    public static function addResource(?UserContext $ctx, ?int $lessonId, ?int $studentUserId, string $title, array $file): int {
-        if (!$ctx) {
-            throw new RuntimeException('Login required');
-        }
-        if ($lessonId === null && $studentUserId === null) {
-            throw new InvalidArgumentException('A resource must attach to a lesson or a student.');
-        }
-        if ($lessonId !== null) {
-            $lesson = LessonManagement::getLesson($lessonId);
-            if (!$lesson) {
-                throw new InvalidArgumentException('Lesson not found.');
-            }
-            if (!$ctx->admin && !LessonManagement::isEffectiveTeacher($ctx->id, $lesson)) {
-                throw new RuntimeException('Only the lesson\'s teacher may add materials.');
-            }
-            // A lesson-attached resource for an individual lesson defaults to
-            // that student, so it shows in "My Materials".
-            if ($studentUserId === null && !empty($lesson['student_user_id'])) {
-                $studentUserId = (int)$lesson['student_user_id'];
-            }
-        } elseif (!$ctx->admin) {
-            // Student-only attachment: any teacher may share materials with a
-            // student (kept simple for the draft).
-            $isTeacher = (bool)self::pdo()->query('SELECT 1 FROM teacher_profiles WHERE user_id = ' . (int)$ctx->id)->fetchColumn();
-            if (!$isTeacher) {
-                throw new RuntimeException('Only teachers and admins may add materials.');
-            }
-        }
+    public static function addFileResource(?UserContext $ctx, int $lessonId, string $title, array $file): int {
+        $lesson = self::assertCanAddToLesson($ctx, $lessonId);
 
         $title = trim($title);
         if ($title === '') {
@@ -69,18 +43,60 @@ class ResourceManagement {
 
         $fileId = Files::storeUploadedPrivateFile($ctx->id, $file, self::MAX_BYTES, self::ALLOWED_MIME_TYPES);
         self::pdo()->prepare(
-            'INSERT INTO lesson_resources (lesson_id, student_user_id, title, private_file_id, uploaded_by_user_id)
-             VALUES (?,?,?,?,?)'
-        )->execute([$lessonId, $studentUserId, $title, $fileId, $ctx->id]);
+            "INSERT INTO lesson_resources (lesson_id, resource_type, title, private_file_id, created_by_user_id)
+             VALUES (?,'file',?,?,?)"
+        )->execute([$lessonId, $title, $fileId, $ctx->id]);
         $id = (int)self::pdo()->lastInsertId();
-        self::log($ctx, 'resource.added', ['resource_id' => $id, 'lesson_id' => $lessonId, 'student_user_id' => $studentUserId]);
+        self::log($ctx, 'resource.file_added', ['resource_id' => $id, 'lesson_id' => $lessonId]);
         return $id;
+    }
+
+    /** Attach an external link (YouTube practice video, sheet music page...). */
+    public static function addLinkResource(?UserContext $ctx, int $lessonId, string $title, string $url): int {
+        self::assertCanAddToLesson($ctx, $lessonId);
+
+        $title = trim($title);
+        $url = trim($url);
+        if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL) || !preg_match('#^https?://#i', $url)) {
+            throw new InvalidArgumentException('A valid http(s) link is required.');
+        }
+        if ($title === '') {
+            $title = $url;
+        }
+
+        self::pdo()->prepare(
+            "INSERT INTO lesson_resources (lesson_id, resource_type, title, url, created_by_user_id)
+             VALUES (?,'link',?,?,?)"
+        )->execute([$lessonId, $title, $url, $ctx->id]);
+        $id = (int)self::pdo()->lastInsertId();
+        self::log($ctx, 'resource.link_added', ['resource_id' => $id, 'lesson_id' => $lessonId, 'url' => $url]);
+        return $id;
+    }
+
+    /** Remove a resource (its creator or an admin). The private file goes too. */
+    public static function deleteResource(?UserContext $ctx, int $resourceId): void {
+        if (!$ctx) {
+            throw new RuntimeException('Login required');
+        }
+        $resource = self::find($resourceId);
+        if (!$resource) {
+            throw new InvalidArgumentException('Resource not found.');
+        }
+        if (!$ctx->admin && (int)($resource['created_by_user_id'] ?? 0) !== $ctx->id) {
+            throw new RuntimeException('Only the person who added a material may remove it.');
+        }
+        self::pdo()->prepare('DELETE FROM lesson_resources WHERE id=?')->execute([$resourceId]);
+        if (!empty($resource['private_file_id'])) {
+            Files::deletePrivateFile((int)$resource['private_file_id']);
+        }
+        self::log($ctx, 'resource.deleted', ['resource_id' => $resourceId]);
     }
 
     public static function find(int $resourceId): ?array {
         $st = self::pdo()->prepare(
             'SELECT lr.*, pf.original_filename, pf.content_type, pf.byte_length
-             FROM lesson_resources lr JOIN private_files pf ON pf.id = lr.private_file_id
+             FROM lesson_resources lr
+             LEFT JOIN private_files pf ON pf.id = lr.private_file_id
              WHERE lr.id = ? LIMIT 1'
         );
         $st->execute([$resourceId]);
@@ -88,61 +104,66 @@ class ResourceManagement {
         return $row ?: null;
     }
 
-    // A student's materials (attached directly or via their lessons), newest
-    // first.
-    public static function resourcesForStudent(int $studentUserId): array {
-        $st = self::pdo()->prepare(
-            'SELECT lr.*, pf.original_filename, pf.content_type, pf.byte_length,
-                    l.start_datetime AS lesson_datetime,
-                    up.first_name AS uploader_first_name, up.last_name AS uploader_last_name
-             FROM lesson_resources lr
-             JOIN private_files pf ON pf.id = lr.private_file_id
-             LEFT JOIN lessons l ON l.id = lr.lesson_id
-             LEFT JOIN users up ON up.id = lr.uploaded_by_user_id
-             WHERE lr.student_user_id = ?
-                OR (lr.lesson_id IS NOT NULL AND EXISTS (
-                      SELECT 1 FROM group_lesson_students gls
-                      WHERE gls.lesson_id = lr.lesson_id AND gls.student_user_id = ?))
-             ORDER BY lr.created_at DESC, lr.id DESC'
-        );
-        $st->execute([$studentUserId, $studentUserId]);
-        return $st->fetchAll();
-    }
-
     public static function resourcesForLesson(int $lessonId): array {
         $st = self::pdo()->prepare(
             'SELECT lr.*, pf.original_filename, pf.content_type, pf.byte_length
-             FROM lesson_resources lr JOIN private_files pf ON pf.id = lr.private_file_id
+             FROM lesson_resources lr
+             LEFT JOIN private_files pf ON pf.id = lr.private_file_id
              WHERE lr.lesson_id = ? ORDER BY lr.created_at DESC, lr.id DESC'
         );
         $st->execute([$lessonId]);
         return $st->fetchAll();
     }
 
-    // Download authorization: admins; the uploader; the student it belongs
-    // to; that student's parents; anyone who may view the attached lesson.
+    /**
+     * A student's materials for a semester ("My Materials"), in chronological
+     * order of the lesson each is attached to.
+     */
+    public static function resourcesForStudentInSemester(int $studentUserId, int $semesterId): array {
+        $st = self::pdo()->prepare(
+            'SELECT lr.*, pf.original_filename, pf.content_type, pf.byte_length,
+                    l.start_datetime AS lesson_datetime, l.lesson_number,
+                    up.first_name AS uploader_first_name, up.last_name AS uploader_last_name
+             FROM lesson_resources lr
+             LEFT JOIN private_files pf ON pf.id = lr.private_file_id
+             JOIN lessons l ON l.id = lr.lesson_id
+             JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             LEFT JOIN users up ON up.id = lr.created_by_user_id
+             WHERE r.student_user_id = ? AND r.semester_id = ?
+             ORDER BY l.start_datetime, lr.id'
+        );
+        $st->execute([$studentUserId, $semesterId]);
+        return $st->fetchAll();
+    }
+
+    // Download authorization: admins; the creator; anyone who may view the
+    // attached lesson (student / parents / effective teacher).
     public static function canUserDownload(int $userId, int $resourceId): bool {
         $resource = self::find($resourceId);
         if (!$resource) {
             return false;
         }
-        $user = UserManagement::findById($userId);
-        if ($user && !empty($user['is_admin'])) {
+        if ((int)($resource['created_by_user_id'] ?? 0) === $userId) {
             return true;
         }
-        if ((int)($resource['uploaded_by_user_id'] ?? 0) === $userId) {
-            return true;
+        return LessonManagement::canUserViewLesson($userId, (int)$resource['lesson_id']);
+    }
+
+    // ── internals ─────────────────────────────────────────────────────────
+
+    /** @return array the lesson row */
+    private static function assertCanAddToLesson(?UserContext $ctx, int $lessonId): array {
+        if (!$ctx) {
+            throw new RuntimeException('Login required');
         }
-        $studentId = (int)($resource['student_user_id'] ?? 0);
-        if ($studentId) {
-            if ($studentId === $userId || StudentTeacherManagement::isParentOf($userId, $studentId)) {
-                return true;
-            }
+        $lesson = LessonManagement::getLesson($lessonId);
+        if (!$lesson) {
+            throw new InvalidArgumentException('Lesson not found.');
         }
-        if (!empty($resource['lesson_id'])) {
-            return LessonManagement::canUserViewLesson($userId, (int)$resource['lesson_id']);
+        if (!$ctx->admin && !LessonManagement::isEffectiveTeacher($ctx->id, $lesson)) {
+            throw new RuntimeException('Only the lesson\'s teacher may add materials.');
         }
-        return false;
+        return $lesson;
     }
 
     private static function log(?UserContext $ctx, string $action, array $meta): void {

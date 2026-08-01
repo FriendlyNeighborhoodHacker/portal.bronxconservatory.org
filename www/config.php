@@ -129,7 +129,9 @@ function current_user(): ?array {
     if (!empty($_SESSION['uid'])) {
         static $user = null;
         if ($user === null) {
-            $user = UserManagement::findById((int)$_SESSION['uid']) ?: false;
+            $row = UserManagement::findById((int)$_SESSION['uid']);
+            // Soft-deleted users lose their session on the next request.
+            $user = ($row && empty($row['is_deleted'])) ? $row : false;
         }
         return $user ?: null;
     }
@@ -139,7 +141,7 @@ function current_user(): ?array {
         $userId = verify_remember_token($_COOKIE['remember_token']);
         if ($userId) {
             $user = UserManagement::findById($userId);
-            if ($user && !empty($user['email_verified_at'])) {
+            if ($user && empty($user['is_deleted']) && !empty($user['email_verified_at'])) {
                 // Auto-login from remember token
                 session_regenerate_id(true);
                 $_SESSION['uid'] = $user['id'];

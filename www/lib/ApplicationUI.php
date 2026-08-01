@@ -5,6 +5,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/Files.php';
 require_once __DIR__ . '/Application.php';
+require_once __DIR__ . '/SemesterManagement.php';
 
 class ApplicationUI {
 
@@ -37,177 +38,293 @@ class ApplicationUI {
     }
 
     /**
-     * The role-based navigation for the left sidebar. A user sees a section
-     * for each role they hold (admin / teacher / parent / student — roles are
-     * derived from profile rows, see Application::rolesForUser). Most users
-     * hold exactly one role and see a short, simple list.
+     * The top-bar navigation items for a user, one entry per link:
+     * ['path' => ..., 'label' => ..., 'active' => bool]. A user sees a group
+     * of items per role they hold (admin first); duplicate labels keep the
+     * higher-priority role's link.
      */
-    private static function roleNavHtml(array $user): string {
-        $userId = (int)$user['id'];
-        $roles = Application::rolesForUser($userId);
+    private static function topNavItems(array $user): array {
+        $roles = Application::rolesForUser((int)$user['id']);
         $script = $_SERVER['SCRIPT_NAME'] ?? '';
+        $hasSemesters = SemesterManagement::hasAnySemester();
 
-        $item = function (string $path, string $label, bool $active) {
-            return '<a href="' . h($path) . '" class="sidebar-item' . ($active ? ' active' : '') . '">' . h($label) . '</a>';
-        };
-        $sectionTitle = fn(string $label) => '<div class="sidebar-section-title">' . h($label) . '</div>';
-        $showTitles = count($roles) > 1;
-
-        $html = '';
-
+        $groups = [];
         if (in_array('admin', $roles, true)) {
-            if ($showTitles) $html .= $sectionTitle('Admin');
-            $html .= $item('/admin/index.php', 'Action Queue', $script === '/admin/index.php');
-            $html .= $item('/admin/families.php', 'Families', strpos($script, '/admin/famil') === 0 && $script !== '/admin/index.php');
-            $html .= $item('/admin/lessons.php', 'Lessons', strpos($script, '/admin/lesson') === 0);
-            $html .= $item('/admin/recurring_lessons.php', 'Recurring Lessons', strpos($script, '/admin/recurring') === 0);
-            $html .= $item('/admin/locations.php', 'Locations', strpos($script, '/admin/location') === 0);
-            $html .= $item('/admin/announcements.php', 'Announcements', strpos($script, '/admin/announcement') === 0);
+            $adminItems = [];
+            if ($hasSemesters) {
+                $adminItems[] = ['path' => '/admin/schedule.php', 'label' => 'Schedule',
+                    'prefixes' => ['/admin/schedule', '/admin/reservation_']];
+                $adminItems[] = ['path' => '/admin/calendar.php', 'label' => 'Calendar',
+                    'prefixes' => ['/admin/calendar', '/admin/lesson_']];
+            }
+            $adminItems[] = ['path' => '/admin/students.php', 'label' => 'Students',
+                'prefixes' => ['/admin/students', '/admin/student_', '/admin/parent_']];
+            $adminItems[] = ['path' => '/admin/teachers.php', 'label' => 'Teachers',
+                'prefixes' => ['/admin/teachers', '/admin/teacher_']];
+            $adminItems[] = ['path' => '/admin/announcements.php', 'label' => 'Admin',
+                'prefixes' => self::adminSectionPrefixes()];
+            $groups[] = $adminItems;
         }
-
         if (in_array('teacher', $roles, true)) {
-            if ($showTitles) $html .= $sectionTitle('Teaching');
-            $html .= $item('/teacher/index.php', "Today's Lessons", strpos($script, '/teacher/') === 0);
+            $groups[] = [
+                ['path' => '/teacher/calendar.php', 'label' => 'Calendar', 'prefixes' => ['/teacher/']],
+            ];
         }
-
         if (in_array('parent', $roles, true)) {
-            if ($showTitles) $html .= $sectionTitle('My Family');
-            $html .= $item('/parent/index.php', 'My Children', strpos($script, '/parent/') === 0);
+            $groups[] = [
+                ['path' => '/parent/calendar.php', 'label' => 'Calendar', 'prefixes' => ['/parent/calendar']],
+                ['path' => '/parent/billing.php', 'label' => 'Billing', 'prefixes' => ['/parent/billing', '/parent/checkout']],
+            ];
         }
-
         if (in_array('student', $roles, true)) {
-            if ($showTitles) $html .= $sectionTitle('My Lessons');
-            $html .= $item('/student/index.php', 'My Schedule', strpos($script, '/student/') === 0);
+            $groups[] = [
+                ['path' => '/student/calendar.php', 'label' => 'Calendar', 'prefixes' => ['/student/calendar']],
+                ['path' => '/student/materials.php', 'label' => 'Materials', 'prefixes' => ['/student/materials']],
+            ];
         }
 
-        if (!in_array('admin', $roles, true)) {
-            $html .= $item('/announcements.php', 'Announcements', $script === '/announcements.php');
+        $items = [];
+        $seenLabels = [];
+        foreach ($groups as $group) {
+            foreach ($group as $item) {
+                if (isset($seenLabels[$item['label']])) {
+                    continue;
+                }
+                $seenLabels[$item['label']] = true;
+                $active = false;
+                foreach ($item['prefixes'] as $prefix) {
+                    if (strpos($script, $prefix) === 0) {
+                        $active = true;
+                        break;
+                    }
+                }
+                $items[] = ['path' => $item['path'], 'label' => $item['label'], 'active' => $active];
+            }
         }
+        return $items;
+    }
 
-        return $html;
+    /** Script-name prefixes that count as "the Admin section" (subnav shown). */
+    private static function adminSectionPrefixes(): array {
+        return [
+            '/admin/announcements.php', '/admin/announcement_',
+            '/admin/locations.php', '/admin/location_',
+            '/admin/semesters.php', '/admin/semester/',
+            '/admin/users.php', '/admin/user_',
+            '/admin/settings.php',
+            '/admin/migrations',
+            '/admin/activity_log.php', '/admin/email_log.php',
+            '/admin/import/',
+            '/admin/setup/',
+        ];
+    }
+
+    /** The Admin section's submenu links. */
+    private static function adminSubnavItems(): array {
+        return [
+            ['path' => '/admin/announcements.php', 'label' => 'Announcements', 'prefixes' => ['/admin/announcement']],
+            ['path' => '/admin/locations.php', 'label' => 'Locations', 'prefixes' => ['/admin/location']],
+            ['path' => '/admin/semesters.php', 'label' => 'Semesters', 'prefixes' => ['/admin/semester', '/admin/setup/', '/admin/import/']],
+            ['path' => '/admin/users.php', 'label' => 'Users', 'prefixes' => ['/admin/user']],
+            ['path' => '/admin/settings.php', 'label' => 'Settings', 'prefixes' => ['/admin/settings.php']],
+            ['path' => '/admin/migrations.php', 'label' => 'Migrations', 'prefixes' => ['/admin/migrations']],
+            ['path' => '/admin/activity_log.php', 'label' => 'Activity Log', 'prefixes' => ['/admin/activity_log.php']],
+            ['path' => '/admin/email_log.php', 'label' => 'Email Log', 'prefixes' => ['/admin/email_log.php']],
+        ];
     }
 
     /**
-     * Page shell with left sidebar navigation:
-     * - the user's role navigation at the top of the sidebar (scrolls if too long)
-     * - Admin menu and profile photo anchored at the bottom
-     * - on narrow screens the sidebar collapses behind a top-left menu icon
+     * The current page's contextual submenu items (or [] when the section has
+     * none). Rendered as a full-width bar in normal document flow — it pushes
+     * the page content down rather than overlaying it — and repeated inside
+     * the mobile drawer.
      */
-    public static function headerHtml(string $title): void {
-        $u = current_user();
+    private static function subnavItems(array $user): array {
         $script = $_SERVER['SCRIPT_NAME'] ?? '';
-        $cur = basename($script);
+
+        // Admin section: persistent submenu across all its pages.
+        if (!empty($user['is_admin'])) {
+            foreach (self::adminSectionPrefixes() as $prefix) {
+                if (strpos($script, $prefix) === 0) {
+                    $items = [];
+                    foreach (self::adminSubnavItems() as $item) {
+                        $active = false;
+                        foreach ($item['prefixes'] as $p) {
+                            if (strpos($script, $p) === 0) { $active = true; break; }
+                        }
+                        $items[] = ['path' => $item['path'], 'label' => $item['label'], 'active' => $active];
+                    }
+                    return $items;
+                }
+            }
+        }
+
+        // Calendar pages: Month / Week views, preserving the date in view.
+        $calendarPairs = [
+            '/admin/calendar' => ['/admin/calendar.php', '/admin/calendar_week.php'],
+            '/teacher/calendar' => ['/teacher/calendar.php', '/teacher/calendar_week.php'],
+        ];
+        foreach ($calendarPairs as $prefix => [$monthPath, $weekPath]) {
+            if (strpos($script, $prefix) === 0) {
+                // Keep the date in view when switching between Month and Week.
+                $date = (string)($_GET['date'] ?? '');
+                $month = (string)($_GET['month'] ?? '');
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                    $date = '';
+                }
+                if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
+                    $month = $date !== '' ? substr($date, 0, 7) : '';
+                }
+                return [
+                    ['path' => $monthPath . ($month !== '' ? '?month=' . $month : ''),
+                     'label' => 'Month', 'active' => $script === $monthPath],
+                    ['path' => $weekPath . ($date !== '' ? '?date=' . $date : ''),
+                     'label' => 'Week', 'active' => $script === $weekPath],
+                ];
+            }
+        }
+
+        return [];
+    }
+
+    /** The admin semester selector (only when at least one semester exists). */
+    private static function semesterSelectorHtml(array $user, string $cssClass): string {
+        if (empty($user['is_admin'])) {
+            return '';
+        }
+        $semesters = SemesterManagement::listSemesters();
+        if (!$semesters) {
+            return '';
+        }
+        $selectedId = Application::adminSelectedSemesterId();
+        $returnTo = $_SERVER['REQUEST_URI'] ?? '/index.php';
+
+        $html = '<form class="' . h($cssClass) . '" method="get" action="/admin/semester_select.php">'
+              . '<input type="hidden" name="return" value="' . h($returnTo) . '">'
+              . '<select name="semester_id" aria-label="Semester" onchange="this.form.submit()">';
+        foreach ($semesters as $s) {
+            $sel = ((int)$s['id'] === $selectedId) ? ' selected' : '';
+            $html .= '<option value="' . (int)$s['id'] . '"' . $sel . '>' . h(SemesterManagement::label($s)) . '</option>';
+        }
+        $html .= '</select></form>';
+        return $html;
+    }
+
+    /** The avatar button + dropdown (My Profile / Change Password / Logout). */
+    private static function avatarMenuHtml(array $user): string {
+        $name = trim((string)($user['first_name'] ?? '') . ' ' . (string)($user['last_name'] ?? ''));
+        $initials = strtoupper((string)substr((string)($user['first_name'] ?? ''), 0, 1)
+            . (string)substr((string)($user['last_name'] ?? ''), 0, 1));
+        $photoUrl = Files::profilePhotoUrl($user['photo_public_file_id'] ?? null, 32);
+
+        if ($photoUrl !== '') {
+            $avatar = '<img class="nav-avatar" src="' . h($photoUrl) . '" alt="">';
+        } else {
+            $avatar = '<span class="nav-avatar nav-avatar-initials" aria-hidden="true">' . h($initials) . '</span>';
+        }
+
+        return '<div class="nav-avatar-wrap">'
+             . '<button type="button" id="avatarToggle" class="nav-avatar-btn" aria-expanded="false"'
+             . ' aria-controls="avatarMenu" title="' . h($name) . '" aria-label="Account menu for ' . h($name) . '">'
+             . $avatar
+             . '</button>'
+             . '<div id="avatarMenu" class="avatar-menu hidden" role="menu" aria-hidden="true">'
+             .   '<a href="/profile/" role="menuitem">My Profile</a>'
+             .   '<a href="/profile/change_password.php" role="menuitem">Change Password</a>'
+             .   '<a href="/logout.php" role="menuitem">Logout</a>'
+             . '</div>'
+             . '</div>';
+    }
+
+    /**
+     * Page shell: navy top bar (brand left, role navigation + semester
+     * selector + avatar right), an optional full-width contextual submenu bar
+     * that pushes content down, <main>, and the site footer. On narrow
+     * screens the navigation collapses behind a hamburger into a full-width
+     * panel (also in normal flow — no overlay).
+     *
+     * $options: ['wide' => true] lets a page (the Semester Schedule grid) use
+     * the full viewport width instead of the centered column.
+     */
+    public static function headerHtml(string $title, array $options = []): void {
+        $u = current_user();
         $siteTitle = Settings::siteTitle();
 
-        // On admin pages the admin submenu renders open (desktop keeps it as a
-        // persistent rail so users can navigate between admin sections).
-        $inAdminSection = !empty($u['is_admin']) && strpos($script, '/admin/') === 0;
+        $bodyClasses = [];
+        if (!empty($options['wide'])) {
+            $bodyClasses[] = 'page-wide';
+        }
 
         echo '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
-        echo '<title>'.h($title).' - '.h($siteTitle).'</title>';
+        echo '<title>' . h($title) . ' - ' . h($siteTitle) . '</title>';
         echo self::cssLink('/styles.css');
-        echo '</head><body'.($inAdminSection ? ' class="admin-submenu-open"' : '').'>';
+        echo '</head><body' . ($bodyClasses ? ' class="' . h(implode(' ', $bodyClasses)) . '"' : '') . '>';
 
         if ($u) {
-            // Mobile top bar: menu icon + site title
-            echo '<div class="mobile-topbar">'
-               . '<button id="sidebarToggle" class="sidebar-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">'
-               . '<span></span><span></span><span></span>'
-               . '</button>'
-               . '<a class="mobile-topbar-title" href="/index.php">'.h($siteTitle).'</a>'
-               . '</div>';
-            echo '<div id="sidebarBackdrop" class="sidebar-backdrop"></div>';
+            $navItems = self::topNavItems($u);
+            $subnavItems = self::subnavItems($u);
+            $semesterSelector = self::semesterSelectorHtml($u, 'semester-select');
 
-            echo '<aside class="sidebar" id="sidebar">';
-            echo '<div class="sidebar-title"><a href="/index.php">'.h($siteTitle).'</a></div>';
+            $link = function (array $item) {
+                return '<a href="' . h($item['path']) . '"' . ($item['active'] ? ' class="active"' : '') . '>'
+                    . h($item['label']) . '</a>';
+            };
 
-            echo '<nav class="sidebar-nav">';
-            echo self::roleNavHtml($u);
+            echo '<header class="topbar">';
+            echo '<a class="topbar-brand" href="/index.php">'
+               . '<span class="brand-mark" aria-hidden="true">&#119070;</span>'
+               . '<span class="brand-full">Bronx Conservatory of Music</span>'
+               . '<span class="brand-short" aria-hidden="true">BCM</span>'
+               . '</a>';
+
+            echo '<nav class="topbar-nav" aria-label="Main">';
+            foreach ($navItems as $item) {
+                echo $link($item);
+            }
+            echo $semesterSelector;
             echo '</nav>';
 
-            // Bottom-anchored: Admin menu (peer of the profile photo) + profile
-            echo '<div class="sidebar-bottom">';
+            echo self::avatarMenuHtml($u);
 
-            if (!empty($u['is_admin'])) {
-                $adminItems = [
-                    ['path' => '/admin/users.php', 'label' => 'Users'],
-                    ['path' => '/admin/settings.php', 'label' => 'Settings'],
-                    ['path' => '/admin/activity_log.php', 'label' => 'Activity Log'],
-                    ['path' => '/admin/email_log.php', 'label' => 'Email Log'],
-                ];
-                $adminLinks = '';
-                foreach ($adminItems as $item) {
-                    $active = $inAdminSection && ($cur === basename($item['path']));
-                    $adminLinks .= '<a href="'.h($item['path']).'" role="menuitem"'.($active ? ' class="active"' : '').'>'.h($item['label']).'</a>';
+            echo '<button type="button" id="navToggle" class="nav-toggle" aria-label="Open menu"'
+               . ' aria-expanded="false" aria-controls="mobileNav">'
+               . '<span></span><span></span><span></span>'
+               . '</button>';
+            echo '</header>';
+
+            // Mobile drawer: full-width panel in normal flow under the header.
+            echo '<div id="mobileNav" class="mobile-nav">';
+            foreach ($navItems as $item) {
+                echo $link($item);
+            }
+            if ($subnavItems) {
+                echo '<div class="mobile-nav-sub">';
+                foreach ($subnavItems as $item) {
+                    echo $link($item);
                 }
-                echo '<div class="sidebar-menu-wrap">'
-                   . '<button type="button" id="adminToggle" class="sidebar-item sidebar-menu-toggle" aria-expanded="'.($inAdminSection ? 'true' : 'false').'" aria-controls="adminMenu">'
-                   . '<span class="sidebar-item-icon" aria-hidden="true">&#9881;</span> Admin'
-                   . '</button>'
-                   . '<div id="adminMenu" class="popup-menu admin-submenu'.($inAdminSection ? '' : ' hidden').'" role="menu" aria-hidden="'.($inAdminSection ? 'false' : 'true').'">'
-                   .   '<div class="admin-submenu-title">Admin</div>'
-                   .   $adminLinks
-                   . '</div>'
-                   . '</div>';
+                echo '</div>';
+            }
+            echo self::semesterSelectorHtml($u, 'semester-select mobile');
+            echo '</div>';
+
+            // Contextual submenu: a full-width bar that pushes content down.
+            if ($subnavItems) {
+                echo '<div class="subnav" aria-label="Section">';
+                foreach ($subnavItems as $item) {
+                    echo $link($item);
+                }
+                echo '</div>';
             }
 
-            $name = trim((string)($u['first_name'] ?? '').' '.(string)($u['last_name'] ?? ''));
-            $initials = strtoupper((string)substr((string)($u['first_name'] ?? ''), 0, 1).(string)substr((string)($u['last_name'] ?? ''), 0, 1));
-            $photoUrl = Files::profilePhotoUrl($u['photo_public_file_id'] ?? null, 32);
-
-            if ($photoUrl !== '') {
-                $avatar = '<img class="sidebar-avatar" src="'.h($photoUrl).'" alt="">';
-            } else {
-                $avatar = '<span class="sidebar-avatar sidebar-avatar-initials" aria-hidden="true">'.h($initials).'</span>';
-            }
-
-            echo '<div class="sidebar-menu-wrap">'
-               . '<button type="button" id="profileToggle" class="sidebar-item sidebar-menu-toggle sidebar-profile" aria-expanded="false" aria-controls="profileMenu" title="'.h($name).'" aria-label="Account menu for '.h($name).'">'
-               . $avatar
-               . '</button>'
-               . '<div id="profileMenu" class="popup-menu hidden" role="menu" aria-hidden="true">'
-               .   '<a href="/profile/" role="menuitem">My Profile</a>'
-               .   '<a href="/profile/change_password.php" role="menuitem">Change Password</a>'
-               .   '<a href="/logout.php" role="menuitem">Logout</a>'
-               . '</div>'
-               . '</div>';
-
-            echo '</div>'; // .sidebar-bottom
-            echo '</aside>';
-
-            // Sidebar behavior: mobile drawer, persistent admin rail (desktop) /
-            // accordion (mobile), and the profile popup menu.
-            echo '<script>document.addEventListener("DOMContentLoaded",function(){'
-               . 'var sidebar=document.getElementById("sidebar");'
-               . 'var toggle=document.getElementById("sidebarToggle");'
-               . 'var backdrop=document.getElementById("sidebarBackdrop");'
-               . 'function isDesktop(){return window.matchMedia("(min-width: 769px)").matches;}'
-               . 'function closeSidebar(){sidebar.classList.remove("open");backdrop.classList.remove("show");if(toggle)toggle.setAttribute("aria-expanded","false");}'
-               . 'function openSidebar(){sidebar.classList.add("open");backdrop.classList.add("show");if(toggle)toggle.setAttribute("aria-expanded","true");}'
-               . 'if(toggle){toggle.addEventListener("click",function(){sidebar.classList.contains("open")?closeSidebar():openSidebar();});}'
-               . 'if(backdrop){backdrop.addEventListener("click",closeSidebar);}'
-               // Admin submenu: toggled by its button; stays open on desktop (a
-               // navigation rail), so outside clicks only close it on mobile.
-               . 'var adminBtn=document.getElementById("adminToggle");'
-               . 'var adminMenu=document.getElementById("adminMenu");'
-               . 'function setAdmin(open){if(!adminMenu)return;adminMenu.classList.toggle("hidden",!open);adminMenu.setAttribute("aria-hidden",open?"false":"true");if(adminBtn)adminBtn.setAttribute("aria-expanded",open?"true":"false");document.body.classList.toggle("admin-submenu-open",open);}'
-               . 'if(adminBtn&&adminMenu){adminBtn.addEventListener("click",function(e){e.preventDefault();setAdmin(adminMenu.classList.contains("hidden"));});}'
-               // Profile popup: standard popup behavior everywhere.
-               . 'var profileBtn=document.getElementById("profileToggle");'
-               . 'var profileMenu=document.getElementById("profileMenu");'
-               . 'function setProfile(open){if(!profileMenu)return;profileMenu.classList.toggle("hidden",!open);profileMenu.setAttribute("aria-hidden",open?"false":"true");if(profileBtn)profileBtn.setAttribute("aria-expanded",open?"true":"false");}'
-               . 'if(profileBtn&&profileMenu){profileBtn.addEventListener("click",function(e){e.preventDefault();setProfile(profileMenu.classList.contains("hidden"));});}'
-               . 'document.addEventListener("click",function(e){'
-               .   'if(profileBtn&&profileMenu&&!profileBtn.contains(e.target)&&!profileMenu.contains(e.target))setProfile(false);'
-               . '});'
-               . 'document.addEventListener("keydown",function(e){if(e.key==="Escape"){setProfile(false);closeSidebar();}});'
-               . '});</script>';
-
-            echo '<div class="content"><main>';
+            echo '<main>';
         } else {
             // Logged-out shell (rarely used; auth pages render their own layout)
-            echo '<div class="mobile-topbar always"><a class="mobile-topbar-title" href="/login.php">'.h($siteTitle).'</a></div>';
-            echo '<div class="content no-sidebar"><main>';
+            echo '<header class="topbar"><a class="topbar-brand" href="/login.php">'
+               . '<span class="brand-mark" aria-hidden="true">&#119070;</span>'
+               . '<span class="brand-full">' . h($siteTitle) . '</span>'
+               . '<span class="brand-short" aria-hidden="true">BCM</span>'
+               . '</a></header>';
+            echo '<main>';
         }
     }
 
@@ -220,31 +337,30 @@ class ApplicationUI {
         return '<span class="brand-mark" aria-hidden="true">&#119070;</span><span class="brand-name">Bronx Conservatory of Music</span>';
     }
 
-    // Footer shown on every page: navy band with the conservatory's phone
-    // number, so a real person is always one call away.
+    // Footer shown on every page: navy band with the copyright line and the
+    // conservatory's phone number, so a real person is always one call away.
     private static function siteFooterHtml(): string {
         return '<footer class="site-footer">'
-            . '<span class="site-footer-name">Bronx Conservatory of Music</span>'
+            . '<span class="site-footer-name">Copyright Bronx Conservatory of Music ' . date('Y') . '</span>'
             . '<span class="site-footer-phone">Questions? Call us at <a href="tel:+17188417415">' . h(Settings::contactPhone()) . '</a></span>'
             . '</footer>';
     }
 
     public static function footerHtml(): void {
-        echo '</main>' . self::siteFooterHtml() . '</div>' . self::jsScript('/main.js') . '</body></html>';
+        echo '</main>' . self::siteFooterHtml() . self::jsScript('/main.js') . '</body></html>';
     }
 
     /**
-     * Minimal chrome for pages outside the signed-in shell (public
-     * registration, the /f/ token-link flow): no sidebar, no navigation —
+     * Minimal chrome for pages outside the signed-in shell: no navigation —
      * a centered column with the BCM wordmark, and the phone number footer.
      */
     public static function minimalHeaderHtml(string $title): void {
         $siteTitle = Settings::siteTitle();
         echo '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
-        echo '<title>'.h($title).' - '.h($siteTitle).'</title>';
+        echo '<title>' . h($title) . ' - ' . h($siteTitle) . '</title>';
         echo self::cssLink('/styles.css');
         echo '</head><body class="minimal">';
-        echo '<div class="minimal-header">'.self::brandWordmarkHtml().'</div>';
+        echo '<div class="minimal-header">' . self::brandWordmarkHtml() . '</div>';
         echo '<div class="minimal-content"><main>';
     }
 

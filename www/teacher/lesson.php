@@ -1,6 +1,7 @@
 <?php
-// Lesson detail for teachers: upload materials (recordings, sheet music) and
-// review the note. Attendance and notes live on the dashboard rows.
+// Lesson detail for teachers: upload materials (recordings, sheet music) or
+// share links, and review the note. Attendance and notes live on the
+// dashboard rows.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
 require_once __DIR__ . '/../lib/NotesManagement.php';
@@ -22,19 +23,21 @@ if (empty($me['is_admin']) && !LessonManagement::isEffectiveTeacher((int)$me['id
 
 $resources = ResourceManagement::resourcesForLesson($lessonId);
 $note = NotesManagement::lessonNoteFor($lessonId, (int)$me['id']);
+$studentName = trim(($lesson['student_preferred_name'] ?: $lesson['student_first_name']) . ' ' . $lesson['student_last_name']);
 
 $flash = $_SESSION['teacher_flash'] ?? null;
 $flashError = $_SESSION['teacher_flash_error'] ?? null;
 unset($_SESSION['teacher_flash'], $_SESSION['teacher_flash_error']);
 
-header_html(lesson_name_label($lesson));
+header_html('Lesson — ' . $studentName);
 ?>
 
-<h2><?=h(lesson_name_label($lesson))?></h2>
+<h2>Lesson #<?=(int)$lesson['lesson_number']?> — <?=h($studentName)?></h2>
 <p class="small">
-  <?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?> · <?=lesson_place_html($lesson)?>
-  <?php if ($lesson['lesson_type'] === 'individual'): ?>
-    · <?=h(trim(($lesson['student_first_name'] ?? '') . ' ' . ($lesson['student_last_name'] ?? '')))?>
+  <?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?>
+  · <?=h($lesson['location_name'])?>
+  <?php if (!empty($lesson['substitute_teacher_user_id'])): ?>
+    · covered by <?=h(trim(($lesson['substitute_first_name'] ?? '') . ' ' . ($lesson['substitute_last_name'] ?? '')))?>
   <?php endif; ?>
 </p>
 <?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
@@ -54,8 +57,13 @@ header_html(lesson_name_label($lesson));
   <h3>Materials</h3>
   <?php foreach ($resources as $resource): ?>
     <div class="lesson-row">
-      <span><a href="/resource_download.php?id=<?=(int)$resource['id']?>"><?=h($resource['title'])?></a></span>
-      <span class="small"><?=h($resource['original_filename'])?></span>
+      <?php if ($resource['resource_type'] === 'link'): ?>
+        <span><a href="<?=h($resource['url'])?>" target="_blank" rel="noopener">🔗 <?=h($resource['title'])?></a></span>
+        <span class="small"><?=h($resource['url'])?></span>
+      <?php else: ?>
+        <span><a href="/resource_download.php?id=<?=(int)$resource['id']?>"><?=h($resource['title'])?></a></span>
+        <span class="small"><?=h((string)($resource['original_filename'] ?? ''))?></span>
+      <?php endif; ?>
     </div>
   <?php endforeach; ?>
   <?php if (!$resources): ?><p class="small">Nothing shared for this lesson yet.</p><?php endif; ?>
@@ -72,6 +80,20 @@ header_html(lesson_name_label($lesson));
       </label>
     </div>
     <button type="submit" class="button">Upload Material</button>
+  </form>
+
+  <form method="post" action="/teacher/resource_link_add_eval.php" class="stack" style="margin-top:14px;">
+    <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+    <input type="hidden" name="lesson_id" value="<?=$lessonId?>">
+    <div class="grid-2">
+      <label>Link title
+        <input type="text" name="title" placeholder="Practice video">
+      </label>
+      <label>Link (http/https)
+        <input type="url" name="url" placeholder="https://..." required>
+      </label>
+    </div>
+    <button type="submit" class="button">Share Link</button>
   </form>
 </div>
 

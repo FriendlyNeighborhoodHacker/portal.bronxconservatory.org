@@ -67,7 +67,6 @@ $resetDone = !empty($_GET['reset']);
       </div>
     </form>
     <p class="small" style="margin-bottom: 0px; margin-top:0.75rem;"><a href="/forgot_password.php">Forgot your password?</a></p>
-    <p class="small" style="margin-top:0.75rem;">New to BCM? <a href="/register.php">Register your family</a></p>
     <p class="small" style="margin-bottom: 0px;">Questions? Call us at <a href="tel:+17188417415"><?=h(Settings::contactPhone())?></a></p>
   </div>
 </body></html>

@@ -1,10 +1,13 @@
 <?php
-// Student home (docs/app_spec.md): My Schedule (breaks noted), Teacher Notes
+// Student home (docs/app_spec.md): My Schedule (upcoming lessons interleaved
+// with the semester's holiday weeks on their lesson weekday), Teacher Notes
 // newest first, My Materials. Three cards, phone-sized.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
 require_once __DIR__ . '/../lib/NotesManagement.php';
 require_once __DIR__ . '/../lib/ResourceManagement.php';
+require_once __DIR__ . '/../lib/SemesterManagement.php';
+require_once __DIR__ . '/../lib/ReservationManagement.php';
 Application::init();
 require_login();
 
@@ -15,9 +18,35 @@ if (!in_array('student', $roles, true) && empty($me['is_admin'])) {
     die('Students only');
 }
 
-$lessons = LessonManagement::upcomingLessonsForStudent((int)$me['id'], date('Y-m-d'));
+$semester = SemesterManagement::resolveDefaultSemester();
+$semesterId = $semester ? (int)$semester['id'] : null;
+
+// Upcoming lessons + the semester's inactive dates (holidays) on the same
+// weekday as the student's reservations, merged chronologically.
+$rows = [];
+foreach (LessonManagement::upcomingLessonsForStudent((int)$me['id'], date('Y-m-d')) as $lesson) {
+    $rows[] = ['type' => 'lesson', 'date' => date('Y-m-d', strtotime($lesson['start_datetime'])), 'lesson' => $lesson];
+}
+if ($semesterId !== null) {
+    foreach (ReservationManagement::reservationsForStudent((int)$me['id'], $semesterId) as $reservation) {
+        $holidays = SemesterManagement::inactiveDatesForLocationWeekday(
+            $semesterId, (int)$reservation['location_id'], (int)$reservation['day_of_week']
+        );
+        foreach ($holidays as $holiday) {
+            if ($holiday['date'] >= date('Y-m-d')) {
+                $rows[] = ['type' => 'holiday', 'date' => $holiday['date'],
+                    'title' => (string)($holiday['title'] ?: 'No lessons'),
+                    'location' => (string)$reservation['location_name']];
+            }
+        }
+    }
+}
+usort($rows, fn($a, $b) => strcmp($a['date'], $b['date']));
+
 $notes = NotesManagement::recentLessonNotesForStudent((int)$me['id']);
-$resources = ResourceManagement::resourcesForStudent((int)$me['id']);
+$resources = $semesterId !== null
+    ? ResourceManagement::resourcesForStudentInSemester((int)$me['id'], $semesterId)
+    : [];
 
 header_html('My Schedule');
 ?>
@@ -26,15 +55,22 @@ header_html('My Schedule');
 
 <h3>My Schedule</h3>
 <div class="card">
-  <?php if (!$lessons): ?><p class="small">No upcoming lessons scheduled.</p><?php endif; ?>
-  <?php foreach ($lessons as $lesson): ?>
-  <div class="lesson-row<?=$lesson['status'] === 'cancelled' ? ' lesson-cancelled' : ''?>">
-    <span class="lesson-row-time"><?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?></span>
-    <span><?=h(lesson_name_label($lesson))?>
-      with <?=h(trim(($lesson['sub_first_name'] ?? $lesson['teacher_first_name']) . ' ' . ($lesson['sub_last_name'] ?? $lesson['teacher_last_name'])))?></span>
-    <span><?=lesson_place_html($lesson)?></span>
-    <?php if ($lesson['status'] === 'cancelled'): ?><span class="small">no lesson (break)</span><?php endif; ?>
-  </div>
+  <?php if (!$rows): ?><p class="small">No upcoming lessons scheduled.</p><?php endif; ?>
+  <?php foreach ($rows as $row): ?>
+    <?php if ($row['type'] === 'holiday'): ?>
+    <div class="lesson-row lesson-cancelled">
+      <span class="lesson-row-time"><?=h(date('D, M j', strtotime($row['date'])))?></span>
+      <span>No lesson — <?=h($row['title'])?></span>
+      <span class="small"><?=h($row['location'])?></span>
+    </div>
+    <?php else: $lesson = $row['lesson']; ?>
+    <div class="lesson-row">
+      <span class="lesson-row-time"><?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?></span>
+      <span>Lesson with <?=h(trim(($lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name']) . ' '
+        . ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])))?></span>
+      <span><?=h($lesson['location_name'])?></span>
+    </div>
+    <?php endif; ?>
   <?php endforeach; ?>
 </div>
 
@@ -53,12 +89,19 @@ header_html('My Schedule');
 <h3>My Materials</h3>
 <div class="card">
   <?php if (!$resources): ?><p class="small">Nothing shared yet.</p><?php endif; ?>
-  <?php foreach ($resources as $resource): ?>
+  <?php foreach (array_slice($resources, 0, 8) as $resource): ?>
   <div class="lesson-row">
-    <span><a href="/resource_download.php?id=<?=(int)$resource['id']?>"><?=h($resource['title'])?></a></span>
-    <span class="small"><?=h($resource['original_filename'])?></span>
+    <?php if ($resource['resource_type'] === 'link'): ?>
+      <span><a href="<?=h($resource['url'])?>" target="_blank" rel="noopener">🔗 <?=h($resource['title'])?></a></span>
+    <?php else: ?>
+      <span><a href="/resource_download.php?id=<?=(int)$resource['id']?>"><?=h($resource['title'])?></a></span>
+    <?php endif; ?>
+    <span class="small"><?=h(date('M j', strtotime((string)$resource['lesson_datetime'])))?></span>
   </div>
   <?php endforeach; ?>
+  <?php if (count($resources) > 8): ?>
+    <p class="small" style="margin-bottom:0;"><a href="/student/materials.php">All materials</a></p>
+  <?php endif; ?>
 </div>
 
 <?php footer_html(); ?>

@@ -45,10 +45,16 @@ class Application {
         }
 
         $roles = [];
-        $st = pdo()->prepare('SELECT is_admin FROM users WHERE id = ?');
+        $st = pdo()->prepare('SELECT is_admin, is_deleted FROM users WHERE id = ?');
         $st->execute([$userId]);
         $user = $st->fetch();
-        if ($user && !empty($user['is_admin'])) {
+
+        // Soft-deleted users hold no roles (and so reach no dashboards).
+        if (!$user || !empty($user['is_deleted'])) {
+            return self::$rolesCache[$userId] = [];
+        }
+
+        if (!empty($user['is_admin'])) {
             $roles[] = 'admin';
         }
 
@@ -71,5 +77,22 @@ class Application {
         }
 
         return self::$rolesCache[$userId] = $roles;
+    }
+
+    /**
+     * The semester the admin pages operate on: the admin's session selection
+     * (set via /admin/semester_select.php) when it still exists, otherwise
+     * the default from SemesterManagement::resolveDefaultSemester(). Null
+     * when no semesters exist yet.
+     */
+    public static function adminSelectedSemesterId(): ?int {
+        require_once __DIR__ . '/SemesterManagement.php';
+
+        $selected = (int)($_SESSION['admin_semester_id'] ?? 0);
+        if ($selected > 0 && SemesterManagement::find($selected)) {
+            return $selected;
+        }
+        $default = SemesterManagement::resolveDefaultSemester();
+        return $default ? (int)$default['id'] : null;
     }
 }

@@ -56,11 +56,11 @@ class UserManagement {
         }
     }
 
-    // Find user by email for authentication
+    // Find user by email for authentication. Soft-deleted users cannot sign in.
     public static function findAuthByEmail(string $email): ?array {
         $email = self::normEmail($email);
         if (!$email) return null;
-        $st = self::pdo()->prepare('SELECT * FROM users WHERE email=? LIMIT 1');
+        $st = self::pdo()->prepare('SELECT * FROM users WHERE email=? AND is_deleted=0 LIMIT 1');
         $st->execute([$email]);
         $row = $st->fetch();
         return $row ?: null;
@@ -332,16 +332,23 @@ class UserManagement {
         return (bool)$st->fetchColumn();
     }
 
-    // List all users (admin only)
-    public static function listUsers(string $search = ''): array {
-        $sql = 'SELECT id, first_name, last_name, email, is_admin, email_verified_at, created_at,
+    // List all users (admin only). Soft-deleted users are hidden unless asked for.
+    public static function listUsers(string $search = '', bool $includeDeleted = false): array {
+        $sql = 'SELECT id, first_name, last_name, email, is_admin, is_deleted, email_verified_at, created_at,
                        (password_hash <> \'\') AS has_password FROM users';
+        $where = [];
         $params = [];
 
+        if (!$includeDeleted) {
+            $where[] = 'is_deleted = 0';
+        }
         if ($search !== '') {
-            $sql .= ' WHERE first_name LIKE ? OR last_name LIKE ? OR email LIKE ?';
+            $where[] = '(first_name LIKE ? OR last_name LIKE ? OR email LIKE ?)';
             $searchTerm = '%' . $search . '%';
             $params = [$searchTerm, $searchTerm, $searchTerm];
+        }
+        if ($where) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
         }
 
         $sql .= ' ORDER BY last_name, first_name';
@@ -351,39 +358,55 @@ class UserManagement {
         return $st->fetchAll();
     }
 
-    // Update user profile (name/email). Email may be empty only for users who
-    // cannot sign in (no password set); a non-empty email must be valid and unused.
+    // Update user profile. Names must be non-empty; email may be empty only
+    // for users who cannot sign in (no password set); a non-empty email must
+    // be valid. All other contact fields are free-form and may be cleared.
     public static function updateProfile(UserContext $ctx, int $id, array $fields): bool {
         self::assertCanUpdate($ctx, $id);
 
-        $allowed = ['first_name', 'last_name', 'email'];
+        $required = ['first_name', 'last_name'];
+        $optional = [
+            'suffix', 'preferred_name', 'secondary_email', 'cell_phone', 'home_phone',
+            'preferred_contact_method',
+            'address_street_1', 'address_street_2', 'address_city', 'address_state', 'address_zip',
+            'emergency_contact_name', 'emergency_contact_phone', 'medical_notes', 'shirt_size',
+        ];
         $set = [];
         $params = [];
 
-        foreach ($allowed as $key) {
+        foreach ($required as $key) {
             if (!array_key_exists($key, $fields)) continue;
-
-            if ($key === 'email') {
-                $val = self::normEmail($fields['email']);
-                if ($val !== null && !filter_var($val, FILTER_VALIDATE_EMAIL)) {
-                    throw new InvalidArgumentException('Valid email is required.');
-                }
-                if ($val === null) {
-                    $existing = self::findById($id);
-                    if ($existing && $existing['password_hash'] !== '') {
-                        throw new InvalidArgumentException('Email is required for users who can sign in.');
-                    }
-                }
-                $set[] = 'email = ?';
-                $params[] = $val;
-            } else {
-                $val = self::str($fields[$key]);
-                if ($val === '') {
-                    throw new InvalidArgumentException("$key cannot be empty");
-                }
-                $set[] = "$key = ?";
-                $params[] = $val;
+            $val = self::str((string)$fields[$key]);
+            if ($val === '') {
+                throw new InvalidArgumentException("$key cannot be empty");
             }
+            $set[] = "$key = ?";
+            $params[] = $val;
+        }
+
+        if (array_key_exists('email', $fields)) {
+            $val = self::normEmail($fields['email']);
+            if ($val !== null && !filter_var($val, FILTER_VALIDATE_EMAIL)) {
+                throw new InvalidArgumentException('Valid email is required.');
+            }
+            if ($val === null) {
+                $existing = self::findById($id);
+                if ($existing && $existing['password_hash'] !== '') {
+                    throw new InvalidArgumentException('Email is required for users who can sign in.');
+                }
+            }
+            $set[] = 'email = ?';
+            $params[] = $val;
+        }
+
+        foreach ($optional as $key) {
+            if (!array_key_exists($key, $fields)) continue;
+            $val = self::str((string)$fields[$key]);
+            if ($key === 'preferred_contact_method' && $val !== '' && !in_array($val, ['email', 'phone', 'text'], true)) {
+                throw new InvalidArgumentException('Unknown preferred contact method.');
+            }
+            $set[] = "$key = ?";
+            $params[] = $val === '' ? null : $val;
         }
 
         if (empty($set)) return false;
@@ -394,27 +417,38 @@ class UserManagement {
         $ok = $st->execute($params);
         
         if ($ok) {
-            $updatedFields = array_intersect_key($fields, array_flip($allowed));
-            self::log('user.update', $id, $updatedFields);
+            self::log('user.update', $id, ['fields' => array_keys($fields)]);
         }
         
         return $ok;
     }
 
-    // Delete user
+    // Soft-delete a user: the row and its history stay, but they can no
+    // longer sign in and disappear from lists and role resolution.
     public static function deleteUser(UserContext $ctx, int $id): bool {
         self::assertAdmin($ctx);
-        if ($id === $ctx->id) { 
-            throw new RuntimeException('You cannot delete your own account.'); 
+        if ($id === $ctx->id) {
+            throw new RuntimeException('You cannot delete your own account.');
         }
-        
-        $st = self::pdo()->prepare('DELETE FROM users WHERE id = ?');
+
+        $st = self::pdo()->prepare('UPDATE users SET is_deleted = 1 WHERE id = ?');
         $ok = $st->execute([$id]);
-        
+
         if ($ok) {
-            self::log('user.delete', $id);
+            self::log('user.soft_delete', $id);
         }
-        
+
+        return $ok;
+    }
+
+    // Restore a soft-deleted user.
+    public static function restoreUser(UserContext $ctx, int $id): bool {
+        self::assertAdmin($ctx);
+        $st = self::pdo()->prepare('UPDATE users SET is_deleted = 0 WHERE id = ?');
+        $ok = $st->execute([$id]);
+        if ($ok) {
+            self::log('user.restore', $id);
+        }
         return $ok;
     }
 

@@ -25,6 +25,9 @@ Data Model
 - child_id
 - role? (father, mother, guardian)
 
+4. Family
+family_id
+
 4. Teacher_Profile
 - instrument(s)
 
@@ -34,49 +37,290 @@ Piano, Guitar, Voice, Violin, Viola, Cello, and Double Bass
 6. Locations
 - Access Bronx Charter School, Bronx Community College)
 
-7. Room availability?
-8. Teacher availability?
 
-9. Lesson
-- Recurring?
-- Lesson_Type (individual, group)
-- Name
-- Location
-- Date and time
-- Teacher
-- Student
-- Status
-- parent_id
-- attended?
-- teacher_override (how we mark a substitute teacher)
+--- SEMESTERS, LESSONS, SCHECULES
 
-10. Recurring_Lessons
+We need a concept of a "semester".  It should have a season and a year.  The seasons can be "fall", or "spring", or "summer", or "test".  The years can be any date.
+- The idea of a "recurring_lesson" should be a "semester_lesson_reservation".  This reserves a particular teacher and location for a student, for a semster.
+- A semester should have a "start_date", an "end_date", active locations, and a list of dates per location (imported through a csv) that classes will be held.  Each date should have a start-time and an end-time, a status ("active" or "inactive", and notes "Holiday Week" to put if the status is inactive)
+- A semester should be set up through a wizard by an admin.
+.. Step 1: enter the meta-information for the semester (start_date, end_date, season, year)
+.. Step 2: Select the active locations for the semester (from the locations in the system)
+.. Step 3: Upload a list of location-dates by csv ("Location Name", "Date", "start_time", "end_time", "status" (active or inactive), "notes" (like "Holiday Week")).
+.. Step 4: Upload a list of location-teacher information for the semester ("Teacher Name", "Location Name")
 
-11. Group_lesson_student_memberships (lesson_id, student_id, attended?)
-12. Group_lesson_teacher_memberships
 
-13. Student_notes
-14. Teacher_notes
-15. Parent_notes
-16. Lesson_notes: notes the teacher writes after the lesson.
-17. Lesson_resources: like voice recordings and sheet musics
-18. Announcements
+7. Semester
+- season
+- year
+- start_date
+- End_date
+- created_at
+- created_by
+
+8. semester_lesson_reservation
+- semeseter_id
+- teacher_id
+- location_id,
+- student_id,
+- status (pending_reach_out, pending_confirmation, confirmed)
+- day_of_week
+- start_time
+- duration
+- created_at
+- created_by
+
+9. semester_location_dates
+- semester_id
+- location_id
+- date
+- start_time
+- end_time
+- status (active / inactive)
+- title (like )"Day 1" or "Holiday")
+
+10. lesson
+- semester_lesson_reservation_id
+- start_datetime
+- location_id_override
+- substitute_teacher_id?
+- lesson_number (like first, second, third, etc. in the semester)
+- created_at
+- created_by
+
+11. lesson_notes
+- lesson_id
+- notes
+- created_at
+- created_by
+
+12. lesson_resources
+- lesson_id
+- resource_type (file or link)
+- title
+- file_id (if file)
+- url (if link)
+- created_at
+- created_by
+
+---- other administration
+
+13. Announcements (general announcements)
+- title
+- body
+- valid_until
+- created_at
+- created_by
+
 
 Pages:
 
+
+1. Administrators
+
+When an admin first logs in, there aren't any "semesters", so we need to walk through the process of bootstrapping the experience.
+
+Step 1: Create locations.  Admin should see all active locations and confirm that they are correct.  There should be a way of adding locations or removing locations.
+
+Step 2: Upload teachers.  Admin should be able to browse the list of teachers and upload a CSV with teachers.  Columns should be:
+- identifiers: email, cell_phone_number
+- name: first_name, last_name, suffix?, preferred_name?
+- address: address_street_1, address_street_2, address_city, address_state, address_zip
+- contact: secondary_email, home_phone, cell_phone
+- emergency contact information: contact_name, contact_phone
+- other: shirt_size
+
+Step 3: Create a semester
+
+Step 3a: start_date, end_date, season, year
+Step 3b: Select the active locations for the semester (from the locations in the system)
+Step 3c: Upload a list of location-dates by csv ("Location Name", "Date", "start_time", "end_time", "status" (active or inactive), "notes" (like "Holiday Week")).
+Step 3d: Upload a list of location-teacher information for the semester ("Teacher Name", "Location Name")
+
+If there are no semesters, the admin should go through this wizard.  If there is at least one semester, the system should figure out what is the "current" semester (based on the current date and start and end date).  If there is a current semester, we should default to the current semester.  Otherwise, we should default to the next semester in the future.  Otherwise we should default to the most recent semester in the past.
+
+Here is the overall menu / nav architecture of the site.
+
+Top menu bar: Navy background, white text.
+- Top left: Name (linked to homepage) "Bronx Conservatory of Music" (shortens to just "BCM" on mobile... we'll eventually replace with a logo for mobile)
+- Top right: menu
+Submenu (which pushes down the content if visible)
+Page Content
+Footer (For now just "Copyright Bronx Conservatory of Music 2026" but will include phone numbers, help links, etc.)
+
+Here are the different menu items based on the role.
+
+1. Admins (if there is at least one semester)
+- [Schedule] [Calendar] [Students] [Teachers] [Admin] [Semester selector] [Profile photo]
+- Schedule takes the admin to the "Semester schedule" page.
+- Students goes to a filterable list of students by keyword (start of token search)
+- Teachers goes to a filterable list of teachers by keyword (start of token search)
+
+"Semester Schedule"
+- A grid. (for now this will only make sense on desktop)
+- The columns should be for location-teacher pairs.  Column labels are:
+   Location 1                                 Location 2
+   Teacher 1-1  Teacher 1-2   Teacher 1-3  .. Teacher 2-1  Teacher 2-2 ....
+- Each row is a timeslot.  The row labels are: SA 9:00 am, SA 9:30 am, ... 4:30pm.
+- Each cell in the grid is a semester_lesson_reservation, or an empty cell.
+- Clicking on an empty cell opens a modal to add a "semester_lesson_registration" - for that location and teacher column, at that time... they just need to fill in the student
+- Clicking on an existing semester_lesson_reservation opens a modal that allows the administrator to edt the reservation.
+... They may: change the status of the reservation
+... They may: delete the reservation
+- The status we show in the UI for a semester_lesson_reservation is either:
+... Pending reach out
+... Pending confirmation (if the status is pending)
+... Confirmed (if the status is confirmed)
+... Balance Due (if the reservation is confirmed and the user has a balance due)
+Deleting the semester_lesson_reservation should mark the reservation as "deleted" and also delete all lessons in the future.  Any lessons that have happened in the past should remain unchanged.
+- When the status changes to "confirmed" from "pending" we should generate the lessons from the semester_lesson_reservation.  If it goes backwards, we should delete the lessons from the semester_lesson_reservation.
+- Eventually, we want to color-code these:
+... Pending reach out: White background, italicized gray text
+... Pending confirmation: White background, normal black text
+... Confirmed with no outstanding balance: blue pastel background.
+... confirmed with full semester outstanding balance: yellow pastel background.
+... confirmed with half semester outstnading balance: purple pastel background
+... confirmed with custom outstanding balance: dark blue background.
+
+"Calendar" (Admin view)
+- Different views: 
+... monthly view which allows an admin to select a date.  On the calendar the user should see "session_locations" (just the "location name" and "title")  The user should be able to navigate between different months (within the semester selected)
+... Weekly view: just like the semester schedule view but for a real week showing lessons insead of the abstract schedule.
+... Clicking on a cell allows editing the "lesson" via a modal dialog:
+A leson can be rescheduled within the day (so changing the time to a time not occupied by another lesson)
+A lesson can be marked as "missed".
+A lesson can be given a "substitute teacher".
+An adminsitrator can add a "lesson note"
+
+"Students" (Admin view)
+- All the students in the system
+- Filter by keyword (prefix token of student and parent names, phone numbers, address line)
+- Filter by teacher (under a [+] filter)
+- Filter by instrument (under the [+])
+- Columnns: Name, Parent(s), Actions
+- Name should be first name, last name
+- Parents should be Name on the first line, phone number and email on the next line, with one set per parent
+- Actions should be "Edit" button, taking to the student_edit screen.
+- Add Student button in the top right
+
+"Teachers" (Admin View)
+- All the teachers in the system
+- Filter by keyword (prefix token of student and parent names, phone numbers, address line)
+- Filter by instrument (under the [+])
+- Columnns: Name, Contact, Actions
+- Name should be first name, last name
+- Contact: Email and phone
+- Actions should be "Edit" button, taking to the teacher_edit screen.
+- Add Teacher button in the top right
+
+"Edit Student" screen
+- Profile photo (show current photo or placeholder on left, upload button on top right)
+- Basic Information
+... name: first_name, last_name, suffix?, preferred_name?
+... identifiers: email, cell_phone_number
+... address: address_street_1, address_street_2, address_city, address_state, address_zip
+... contact: secondary_email, home_phone, cell_phone
+... emergency contact information: contact_name, contact_phone
+- Parents: List parents, top rght of section: "Add Parent" button
+- Instruments
+- Charges and payments
+... Shows current balance
+... shows line-item breakdown of this semester's charges and payments.
+... If these do not add up to the balance, shows historical charges and paymetns to explain.
+... administrator should be able to "apply scholarship" to the account or "create a custom ledger entry"
+- [Delete this student] with confirmation modal.  Flags the user as deleted (doesn't actually delete)
+
+"Edit Teacher" screen
+- Profile photo (show current photo or placeholder on left, upload button on top right)
+- Basic Information
+... name: first_name, last_name, suffix?, preferred_name?
+... identifiers: email, cell_phone_number
+... address: address_street_1, address_street_2, address_city, address_state, address_zip
+... contact: secondary_email, home_phone, cell_phone
+... emergency contact information: contact_name, contact_phone
+- Students: List students in current semester (with links to students)
+- [Delete this teacher] with confirmation modal.  Flags the user as deleted (doesn't actually delete)
+
+"Edit Parent" screen
+- Profile photo (show current photo or placeholder on left, upload button on top right)
+- Basic Information
+... name: first_name, last_name, suffix?, preferred_name?
+... identifiers: email, cell_phone_number
+... address: address_street_1, address_street_2, address_city, address_state, address_zip
+... contact: secondary_email, home_phone, cell_phone
+... emergency contact information: contact_name, contact_phone
+- Children: List children with links to their profiles and "Add Child", which opens dialog with two top-level buttons: "Add New Child" and "Link existing child".
+... Add New Child: enter first name, last name, suffix, preferred name, grade (class of)
+... Link existing child: Typeahead search for child with "Link Child" button.
+(Use pattern from cub_scouts)
+- [Delete this parent] with confirmation modal.  Flags the user as deleted (doesn't actually delete)
+
+There should be a place in the admin menu that goes to a "Maintenance" section that is only available for a "developer".  So, there should be an "is_developer" field in the user's table, and if they are a developer and an admin, they should see the maintenance screens (like email_log, activity_log, server_logs when we build that, etc.)
+
+
 1. Homepage - Parents
-- My children: shows childs' name, instrument, teacher - clicking on this sees their child's schedule, recent teacher notes, materials.
-- Balance & Pahments: At a glance installment plan ???? Paid, Due [Pay Now] button
-- Messages: Announcements about holiday schedules, recital information, general updates
+- Announcements: Recent active announcements in chronological order
+- My children: shows childs' profile photo, name, instrument, teacher - clicking on this sees their child's schedule, recent teacher notes, materials.  (See the cub_scouts app for this homepage widget...)
+- Balance & Pahments: 
+... "You are paid in full.  Thank you!"
+... OR "You have a balance of $X.  Click here to pay the balance."
 - My Profile
+
+The parents menu should be:
+[Calendar] [Billing] [Profile photo (to edit profile)]
 
 2. Homepage - Students
 - My Schedule: Upcoming classes (note breaks)
+... shows all upcoming lessons and inactive semester_location_dates for the current semester that are on the same weekday is the person's semester_lesson_reservation, so that they know when holidays are.
 - Teacher Notes (most recent first)
-- My Materials
+- My Materials (shows resources linked to lessons this semester, in order of the chronological date of the lesson)
+
+The students menu should be:
+[Calendar] [Materials] [Profile photo (to edit profile)]
 
 3. Homepage - Teachers
-- Today's lessons: Simple list of today's lessons in chronological order.  Each row shows time, student name, class name, Room / location.  Online lessons should be tagged with an icon.  Can log a note by clicking on a log link here.  auto-saves
+- Today's lessons: Simple list of today's lessons in chronological order.  Each row shows time, student name, class name, Room / location.  Online lessons should be tagged with an icon.  Can log a note by clicking on a log link here.  Typing a note should auto-save. It should be easy to mark that the student attended the lesson (or missed the lesson)
+- Should be able to navigate to the next day the person has lessons
+- [Calendar]
+
+The teachers' menu should be:
+[Calendar] [Profile photo (to edit profile)]
+
+The teacher calendar should be like the admin calendar for the monthly view.
+The weekly view should be just a list of lessons that week in chronological order.
+The teacher should be able to click on a lesson from this view
+
+## Payments
+
+We need to do light accounting so we can explain balances.
+"ledger_entries"
+- for_student_id
+- date
+- accounting_type (debit or credit)
+- entry_type (registration, lessons, recital_fee, payment, scholarship_application, other)
+- amount
+- semester_id
+- description
+- created_at
+- created_by`
+
+Transactions:
+
+1. Confirming the registration of a semester: 
+- Registration, amount should be the "registration cost" set in settings.
+- Lessons, amount should be the "semester lesson cost" set in settings.
+- recital fee, amount should be in the "recital fee" set in settings.
+
+2. Payment
+- amount should be whatever they paid
+
+3. Scholarship application
+- scholarship application, amount should be specified by an administrator
+
+4. other
+- should be specified by an administrator.
+
+We will use Stripe to facilitate payments.
 
 
 ## Family Portal — Design Specification

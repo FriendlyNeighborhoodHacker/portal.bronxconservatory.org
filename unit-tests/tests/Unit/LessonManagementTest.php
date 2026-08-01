@@ -5,163 +5,139 @@ use PHPUnit\Framework\TestCase;
 
 final class LessonManagementTest extends TestCase
 {
-    private UserContext $adminCtx;
-    private int $teacherId;
-    private int $studentId;
-    private int $parentId;
+    private UserContext $ctx;
 
     protected function setUp(): void
     {
         test_reset_all();
-
-        pdo()->exec("INSERT INTO users (first_name, last_name, email, password_hash, is_admin, email_verified_at) VALUES ('Admin', 'A', 'admin@example.com', 'h', 1, NOW())");
-        $this->adminCtx = new UserContext((int)pdo()->lastInsertId(), true);
-        UserContext::set($this->adminCtx);
-
-        pdo()->exec("INSERT INTO users (first_name, last_name, password_hash) VALUES ('Tina', 'Teacher', 'h')");
-        $this->teacherId = (int)pdo()->lastInsertId();
-        pdo()->exec('INSERT INTO teacher_profiles (user_id) VALUES (' . $this->teacherId . ')');
-
-        pdo()->exec("INSERT INTO users (first_name, last_name, password_hash) VALUES ('Sofia', 'Student', '')");
-        $this->studentId = (int)pdo()->lastInsertId();
-        pdo()->exec('INSERT INTO student_profiles (user_id) VALUES (' . $this->studentId . ')');
-
-        pdo()->exec("INSERT INTO users (first_name, last_name, password_hash) VALUES ('Maria', 'Parent', 'h')");
-        $this->parentId = (int)pdo()->lastInsertId();
-        pdo()->exec('INSERT INTO parenthood (parent_user_id, child_user_id) VALUES (' . $this->parentId . ',' . $this->studentId . ')');
+        $this->ctx = fx_admin_ctx();
     }
 
-    private function createRecurringWeekly(?string $endDate): int
+    /** A confirmed reservation with lessons; returns useful ids. */
+    private function makeConfirmed(string $firstDate = '2030-09-07', int $weeks = 3, string $time = '10:00'): array
     {
-        return LessonManagement::createRecurring($this->adminCtx, [
-            'lesson_type' => 'individual',
-            'instrument_id' => 1,
-            'teacher_user_id' => $this->teacherId,
-            'student_user_id' => $this->studentId,
-            'day_of_week' => 6, // Saturday
-            'start_time' => '09:00:00',
-            'duration_minutes' => 30,
-            'start_date' => '2026-08-01', // a Saturday
-            'end_date' => $endDate,
+        $teacher = fx_teacher();
+        $student = fx_student();
+        $setup = fx_semester_with_dates($this->ctx, $teacher, $firstDate, $weeks);
+        [$semesterId, $locationId, , $dayOfWeek] = $setup;
+        $reservationId = ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId,
+            'teacher_user_id' => $teacher,
+            'location_id' => $locationId,
+            'student_user_id' => $student,
+            'day_of_week' => $dayOfWeek,
+            'start_time' => $time,
+            'status' => 'confirmed',
         ]);
+        $st = pdo()->prepare('SELECT id FROM lessons WHERE semester_lesson_reservation_id=? ORDER BY start_datetime');
+        $st->execute([$reservationId]);
+        $lessonIds = array_map('intval', array_column($st->fetchAll(), 'id'));
+        return [$teacher, $student, $semesterId, $locationId, $reservationId, $lessonIds];
     }
 
-    public function testGenerateOccurrencesCountAndIdempotency(): void
+    public function testTeacherDayQueriesAndEffectiveTeacher(): void
     {
-        $recurringId = $this->createRecurringWeekly(null);
+        [$teacher, , , , , $lessonIds] = $this->makeConfirmed();
+        $lessons = LessonManagement::lessonsForTeacherOnDate($teacher, '2030-09-07');
+        $this->assertCount(1, $lessons);
+        $this->assertSame($lessonIds[0], (int)$lessons[0]['id']);
 
-        // Aug 1 2026 is a Saturday; through Aug 31 → Aug 1, 8, 15, 22, 29.
-        $created = LessonManagement::generateOccurrencesThrough($this->adminCtx, $recurringId, '2026-08-31');
-        $this->assertSame(5, $created);
+        // A substitute takes over lesson 1: the day belongs to the sub now.
+        $sub = fx_teacher('Sue', 'Substitute');
+        LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], $sub);
+        $this->assertCount(0, LessonManagement::lessonsForTeacherOnDate($teacher, '2030-09-07'));
+        $subLessons = LessonManagement::lessonsForTeacherOnDate($sub, '2030-09-07');
+        $this->assertCount(1, $subLessons);
+        $this->assertTrue(LessonManagement::isEffectiveTeacher($sub, $subLessons[0]));
+        $this->assertFalse(LessonManagement::isEffectiveTeacher($teacher, $subLessons[0]));
 
-        // Re-running creates nothing new; extending adds only the tail.
-        $this->assertSame(0, LessonManagement::generateOccurrencesThrough($this->adminCtx, $recurringId, '2026-08-31'));
-        $this->assertSame(2, LessonManagement::generateOccurrencesThrough($this->adminCtx, $recurringId, '2026-09-13'));
-
-        $lessons = LessonManagement::upcomingLessonsForStudent($this->studentId, '2026-08-01');
-        $this->assertCount(7, $lessons);
-        $this->assertSame('2026-08-01 09:00:00', $lessons[0]['start_datetime']);
+        $this->assertSame('2030-09-14', LessonManagement::nextTeachingDateForTeacher($teacher, '2030-09-07'));
+        $this->assertSame('2030-09-14', LessonManagement::previousTeachingDateForTeacher($teacher, '2030-09-21'));
+        $this->assertNull(LessonManagement::nextTeachingDateForTeacher($teacher, '2030-09-21'));
     }
 
-    public function testGenerateRespectsTemplateEndDate(): void
+    public function testSubstituteMustBeATeacher(): void
     {
-        $recurringId = $this->createRecurringWeekly('2026-08-15');
-        $created = LessonManagement::generateOccurrencesThrough($this->adminCtx, $recurringId, '2026-12-31');
-        $this->assertSame(3, $created); // Aug 1, 8, 15
-    }
-
-    public function testInactiveTemplateGeneratesNothing(): void
-    {
-        $recurringId = $this->createRecurringWeekly(null);
-        LessonManagement::setRecurringActive($this->adminCtx, $recurringId, false);
-        $this->assertSame(0, LessonManagement::generateOccurrencesThrough($this->adminCtx, $recurringId, '2026-08-31'));
-    }
-
-    public function testSubstituteTeacherOverride(): void
-    {
-        $lessonId = LessonManagement::createLesson($this->adminCtx, [
-            'lesson_type' => 'individual',
-            'teacher_user_id' => $this->teacherId,
-            'student_user_id' => $this->studentId,
-            'start_datetime' => '2026-08-01 09:00:00',
-        ]);
-
-        pdo()->exec("INSERT INTO users (first_name, last_name, password_hash) VALUES ('Sam', 'Sub', 'h')");
-        $subId = (int)pdo()->lastInsertId();
-        pdo()->exec('INSERT INTO teacher_profiles (user_id) VALUES (' . $subId . ')');
-
-        LessonManagement::setSubstituteTeacher($this->adminCtx, $lessonId, $subId);
-        $lesson = LessonManagement::getLesson($lessonId);
-        $this->assertSame($subId, (int)$lesson['substitute_teacher_user_id']);
-
-        // The substitute is an effective teacher; the sub shows up on their day.
-        $this->assertTrue(LessonManagement::isEffectiveTeacher($subId, $lesson));
-        $this->assertCount(1, LessonManagement::lessonsForTeacherOnDate($subId, '2026-08-01'));
-
-        // The substitute can mark attendance.
-        LessonManagement::markAttendance(new UserContext($subId, false), $lessonId, null, true);
-        $this->assertSame(1, (int)LessonManagement::getLesson($lessonId)['attended']);
-    }
-
-    public function testGroupAttendancePerStudent(): void
-    {
-        pdo()->exec("INSERT INTO users (first_name, last_name, password_hash) VALUES ('Diego', 'Student2', '')");
-        $student2 = (int)pdo()->lastInsertId();
-        pdo()->exec('INSERT INTO student_profiles (user_id) VALUES (' . $student2 . ')');
-
-        $lessonId = LessonManagement::createLesson($this->adminCtx, [
-            'lesson_type' => 'group',
-            'name' => 'Saturday Ensemble',
-            'teacher_user_id' => $this->teacherId,
-            'start_datetime' => '2026-08-01 10:00:00',
-            'student_user_ids' => [$this->studentId, $student2],
-        ]);
-
-        $teacherCtx = new UserContext($this->teacherId, false);
-        LessonManagement::markAttendance($teacherCtx, $lessonId, $this->studentId, true);
-        LessonManagement::markAttendance($teacherCtx, $lessonId, $student2, false);
-
-        $lesson = LessonManagement::getLesson($lessonId);
-        $byStudent = [];
-        foreach ($lesson['group_students'] as $gs) {
-            $byStudent[(int)$gs['student_user_id']] = $gs['attended'];
-        }
-        $this->assertSame(1, (int)$byStudent[$this->studentId]);
-        $this->assertSame(0, (int)$byStudent[$student2]);
-
-        // A student not on the roster cannot be marked.
+        [, , , , , $lessonIds] = $this->makeConfirmed();
         $this->expectException(InvalidArgumentException::class);
-        LessonManagement::markAttendance($teacherCtx, $lessonId, 99999, true);
+        LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], fx_student('Not', 'ATeacher'));
     }
 
-    public function testAttendanceRequiresTheLessonsTeacher(): void
+    public function testRescheduleWithinDayConflicts(): void
     {
-        $lessonId = LessonManagement::createLesson($this->adminCtx, [
-            'lesson_type' => 'individual',
-            'teacher_user_id' => $this->teacherId,
-            'student_user_id' => $this->studentId,
-            'start_datetime' => '2026-08-01 09:00:00',
+        [$teacher, , $semesterId, $locationId, , $lessonIds] = $this->makeConfirmed();
+        // A second student at 11:00 with the same teacher.
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId,
+            'teacher_user_id' => $teacher,
+            'location_id' => $locationId,
+            'student_user_id' => fx_student('Beth', 'Second'),
+            'day_of_week' => 6,
+            'start_time' => '11:00',
+            'status' => 'confirmed',
         ]);
+
+        // Moving lesson 1 to 11:00 collides with the other student's lesson.
+        try {
+            LessonManagement::rescheduleWithinDay($this->ctx, $lessonIds[0], '11:00');
+            $this->fail('Expected a conflict.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('overlaps', $e->getMessage());
+        }
+
+        // 11:30 is free.
+        LessonManagement::rescheduleWithinDay($this->ctx, $lessonIds[0], '11:30');
+        $lesson = LessonManagement::getLesson($lessonIds[0]);
+        $this->assertSame('2030-09-07 11:30:00', $lesson['start_datetime']);
+    }
+
+    public function testAttendanceAuthorization(): void
+    {
+        [$teacher, , , , , $lessonIds] = $this->makeConfirmed();
+        $lessonId = $lessonIds[0];
+
+        // The lesson's teacher marks it missed.
+        LessonManagement::markAttendance(new UserContext($teacher, false), $lessonId, false);
+        $this->assertSame(0, (int)LessonManagement::getLesson($lessonId)['attended']);
+
+        // An admin clears the mark.
+        LessonManagement::markAttendance($this->ctx, $lessonId, null);
+        $this->assertNull(LessonManagement::getLesson($lessonId)['attended']);
+
+        // An unrelated teacher may not.
+        $other = fx_teacher('Olga', 'Other');
         $this->expectException(RuntimeException::class);
-        LessonManagement::markAttendance(new UserContext($this->parentId, false), $lessonId, null, true);
+        LessonManagement::markAttendance(new UserContext($other, false), $lessonId, true);
     }
 
     public function testCanUserViewLesson(): void
     {
-        $lessonId = LessonManagement::createLesson($this->adminCtx, [
-            'lesson_type' => 'individual',
-            'teacher_user_id' => $this->teacherId,
-            'student_user_id' => $this->studentId,
-            'start_datetime' => '2026-08-01 09:00:00',
-        ]);
+        [$teacher, $student, , , , $lessonIds] = $this->makeConfirmed();
+        $lessonId = $lessonIds[0];
+        $parent = fx_parent_of($student);
+        $stranger = fx_user('Randy', 'Random');
 
-        $this->assertTrue(LessonManagement::canUserViewLesson($this->teacherId, $lessonId));
-        $this->assertTrue(LessonManagement::canUserViewLesson($this->studentId, $lessonId));
-        $this->assertTrue(LessonManagement::canUserViewLesson($this->parentId, $lessonId));
-        $this->assertTrue(LessonManagement::canUserViewLesson($this->adminCtx->id, $lessonId));
+        $this->assertTrue(LessonManagement::canUserViewLesson($teacher, $lessonId));
+        $this->assertTrue(LessonManagement::canUserViewLesson($student, $lessonId));
+        $this->assertTrue(LessonManagement::canUserViewLesson($parent, $lessonId));
+        $this->assertFalse(LessonManagement::canUserViewLesson($stranger, $lessonId));
 
-        pdo()->exec("INSERT INTO users (first_name, last_name, password_hash) VALUES ('Stranger', 'S', 'h')");
-        $strangerId = (int)pdo()->lastInsertId();
-        $this->assertFalse(LessonManagement::canUserViewLesson($strangerId, $lessonId));
+        // The substitute gains access; a deleted user loses it.
+        $sub = fx_teacher('Sue', 'Substitute');
+        LessonManagement::setSubstituteTeacher($this->ctx, $lessonId, $sub);
+        $this->assertTrue(LessonManagement::canUserViewLesson($sub, $lessonId));
+        pdo()->exec("UPDATE users SET is_deleted=1 WHERE id=$parent");
+        $this->assertFalse(LessonManagement::canUserViewLesson($parent, $lessonId));
+    }
+
+    public function testStudentQueries(): void
+    {
+        [, $student] = $this->makeConfirmed();
+        $upcoming = LessonManagement::upcomingLessonsForStudent($student, '2030-09-08');
+        $this->assertCount(2, $upcoming);
+        $this->assertSame('2030-09-14 10:00:00', $upcoming[0]['start_datetime']);
+
+        $between = LessonManagement::lessonsBetweenForStudents([$student], '2030-09-01', '2030-09-30');
+        $this->assertCount(3, $between);
     }
 }

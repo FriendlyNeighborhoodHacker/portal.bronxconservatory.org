@@ -23,3 +23,9 @@ define('SMTP_FROM_NAME', 'Bronx Conservatory of Music'); // From name seen in em
 // HMAC key for remember me tokens (REQUIRED for persistent login).
 // Set to a long random string, e.g., bin2hex(random_bytes(32)).
 define('REMEMBER_TOKEN_KEY', '');
+
+// Stripe (https://dashboard.stripe.com/apikeys; use test-mode keys in dev).
+// Empty values disable online checkout.
+define('STRIPE_SECRET_KEY', '');
+define('STRIPE_PUBLISHABLE_KEY', '');
+define('STRIPE_WEBHOOK_SECRET', '');

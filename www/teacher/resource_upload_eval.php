@@ -18,7 +18,7 @@ try {
     if (empty($_FILES['resource'])) {
         throw new InvalidArgumentException('Choose a file to upload.');
     }
-    ResourceManagement::addResource($ctx, $lessonId, null, (string)($_POST['title'] ?? ''), $_FILES['resource']);
+    ResourceManagement::addFileResource($ctx, $lessonId, (string)($_POST['title'] ?? ''), $_FILES['resource']);
     $_SESSION['teacher_flash'] = 'Material uploaded.';
 } catch (\Throwable $e) {
     $_SESSION['teacher_flash_error'] = $e->getMessage();

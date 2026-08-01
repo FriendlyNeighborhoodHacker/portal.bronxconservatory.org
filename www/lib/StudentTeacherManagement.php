@@ -123,10 +123,20 @@ class StudentTeacherManagement {
         return (bool)$st->fetchColumn();
     }
 
+    public static function unlinkParentChild(?UserContext $ctx, int $parentUserId, int $childUserId): void {
+        if (!$ctx || !$ctx->admin) {
+            throw new RuntimeException('Admins only');
+        }
+        self::pdo()->prepare('DELETE FROM parenthood WHERE parent_user_id = ? AND child_user_id = ?')
+            ->execute([$parentUserId, $childUserId]);
+        self::log($ctx, 'parenthood.unlinked', ['parent_user_id' => $parentUserId, 'child_user_id' => $childUserId]);
+    }
+
     public static function listTeachers(): array {
         $teachers = self::pdo()->query(
             'SELECT u.id, u.first_name, u.last_name, tp.gender
              FROM teacher_profiles tp JOIN users u ON u.id = tp.user_id
+             WHERE u.is_deleted = 0
              ORDER BY u.first_name, u.last_name'
         )->fetchAll();
         foreach ($teachers as &$t) {
@@ -137,10 +147,162 @@ class StudentTeacherManagement {
 
     public static function listStudents(): array {
         return self::pdo()->query(
-            'SELECT u.id, u.first_name, u.last_name, u.family_id
+            'SELECT u.id, u.first_name, u.last_name
              FROM student_profiles sp JOIN users u ON u.id = sp.user_id
+             WHERE u.is_deleted = 0
              ORDER BY u.first_name, u.last_name'
         )->fetchAll();
+    }
+
+    /**
+     * The admin Students list: filter by keyword (prefix tokens over the
+     * student's and their parents' names, phone numbers, and address line),
+     * by teacher (has a reservation with them in $semesterId), and by
+     * instrument. Each row carries the student's parents and instruments.
+     */
+    public static function listStudentsFiltered(string $keyword = '', ?int $teacherUserId = null, ?int $instrumentId = null, ?int $semesterId = null): array {
+        $sql = 'SELECT DISTINCT u.id, u.first_name, u.last_name, u.preferred_name, u.photo_public_file_id
+                FROM student_profiles sp
+                JOIN users u ON u.id = sp.user_id
+                WHERE u.is_deleted = 0';
+        $params = [];
+
+        foreach (self::keywordTokens($keyword) as $i => $token) {
+            $like = $token . '%';
+            $sql .= " AND (
+                u.first_name LIKE :t{$i} OR u.last_name LIKE :t{$i} OR u.preferred_name LIKE :t{$i}
+                OR u.cell_phone LIKE :t{$i} OR u.home_phone LIKE :t{$i} OR u.address_street_1 LIKE :t{$i}
+                OR EXISTS (
+                    SELECT 1 FROM parenthood phk
+                    JOIN users pu ON pu.id = phk.parent_user_id
+                    WHERE phk.child_user_id = u.id AND pu.is_deleted = 0
+                      AND (pu.first_name LIKE :t{$i} OR pu.last_name LIKE :t{$i} OR pu.preferred_name LIKE :t{$i}
+                           OR pu.cell_phone LIKE :t{$i} OR pu.home_phone LIKE :t{$i} OR pu.address_street_1 LIKE :t{$i})
+                ))";
+            $params[":t{$i}"] = $like;
+        }
+
+        if ($teacherUserId !== null && $teacherUserId > 0) {
+            $sql .= " AND EXISTS (
+                SELECT 1 FROM semester_lesson_reservations r
+                WHERE r.student_user_id = u.id AND r.teacher_user_id = :teacher_id AND r.status <> 'deleted'"
+                . ($semesterId !== null ? ' AND r.semester_id = :semester_id' : '') . ')';
+            $params[':teacher_id'] = $teacherUserId;
+            if ($semesterId !== null) {
+                $params[':semester_id'] = $semesterId;
+            }
+        }
+
+        if ($instrumentId !== null && $instrumentId > 0) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM student_instruments si
+                                  WHERE si.student_user_id = u.id AND si.instrument_id = :instrument_id)';
+            $params[':instrument_id'] = $instrumentId;
+        }
+
+        $st = self::pdo()->prepare($sql . ' ORDER BY u.first_name, u.last_name');
+        $st->execute($params);
+        $students = $st->fetchAll();
+        foreach ($students as &$s) {
+            $s['instruments'] = InstrumentCatalog::namesForStudent((int)$s['id']);
+            $s['parents'] = self::parentsOfStudent((int)$s['id']);
+        }
+        return $students;
+    }
+
+    /** The admin Teachers list: keyword prefix tokens + instrument filter. */
+    public static function listTeachersFiltered(string $keyword = '', ?int $instrumentId = null): array {
+        $sql = 'SELECT u.id, u.first_name, u.last_name, u.preferred_name, u.email, u.cell_phone,
+                       u.photo_public_file_id, tp.gender
+                FROM teacher_profiles tp
+                JOIN users u ON u.id = tp.user_id
+                WHERE u.is_deleted = 0';
+        $params = [];
+
+        foreach (self::keywordTokens($keyword) as $i => $token) {
+            $sql .= " AND (u.first_name LIKE :t{$i} OR u.last_name LIKE :t{$i} OR u.preferred_name LIKE :t{$i}
+                      OR u.cell_phone LIKE :t{$i} OR u.email LIKE :t{$i} OR u.address_street_1 LIKE :t{$i})";
+            $params[":t{$i}"] = $token . '%';
+        }
+
+        if ($instrumentId !== null && $instrumentId > 0) {
+            $sql .= ' AND EXISTS (SELECT 1 FROM teacher_instruments ti
+                                  WHERE ti.teacher_user_id = u.id AND ti.instrument_id = :instrument_id)';
+            $params[':instrument_id'] = $instrumentId;
+        }
+
+        $st = self::pdo()->prepare($sql . ' ORDER BY u.first_name, u.last_name');
+        $st->execute($params);
+        $teachers = $st->fetchAll();
+        foreach ($teachers as &$t) {
+            $t['instruments'] = InstrumentCatalog::namesForTeacher((int)$t['id']);
+        }
+        return $teachers;
+    }
+
+    /** The students a teacher has (non-deleted) reservations with this semester. */
+    public static function studentsForTeacherInSemester(int $teacherUserId, int $semesterId): array {
+        $st = self::pdo()->prepare(
+            "SELECT DISTINCT u.id, u.first_name, u.last_name, u.preferred_name, r.status AS reservation_status
+             FROM semester_lesson_reservations r
+             JOIN users u ON u.id = r.student_user_id
+             WHERE r.teacher_user_id = ? AND r.semester_id = ? AND r.status <> 'deleted' AND u.is_deleted = 0
+             ORDER BY u.first_name, u.last_name"
+        );
+        $st->execute([$teacherUserId, $semesterId]);
+        return $st->fetchAll();
+    }
+
+    /** Typeahead: students whose first or last name starts with $prefix. */
+    public static function searchStudentsByNamePrefix(string $prefix, int $limit = 10): array {
+        return self::searchByNamePrefix('student_profiles', $prefix, $limit);
+    }
+
+    /** Typeahead: teachers whose first or last name starts with $prefix. */
+    public static function searchTeachersByNamePrefix(string $prefix, int $limit = 10): array {
+        return self::searchByNamePrefix('teacher_profiles', $prefix, $limit);
+    }
+
+    /** Typeahead: parents whose first or last name starts with $prefix. */
+    public static function searchParentsByNamePrefix(string $prefix, int $limit = 10): array {
+        $prefix = trim($prefix);
+        if ($prefix === '') {
+            return [];
+        }
+        $limit = max(1, min(50, $limit));
+        $st = self::pdo()->prepare(
+            "SELECT DISTINCT u.id, u.first_name, u.last_name, u.email
+             FROM parenthood ph
+             JOIN users u ON u.id = ph.parent_user_id
+             WHERE u.is_deleted = 0 AND (u.first_name LIKE ? OR u.last_name LIKE ?)
+             ORDER BY u.first_name, u.last_name
+             LIMIT $limit"
+        );
+        $st->execute([$prefix . '%', $prefix . '%']);
+        return $st->fetchAll();
+    }
+
+    private static function searchByNamePrefix(string $profileTable, string $prefix, int $limit): array {
+        $prefix = trim($prefix);
+        if ($prefix === '') {
+            return [];
+        }
+        $limit = max(1, min(50, $limit));
+        $st = self::pdo()->prepare(
+            "SELECT u.id, u.first_name, u.last_name, u.email
+             FROM $profileTable p
+             JOIN users u ON u.id = p.user_id
+             WHERE u.is_deleted = 0 AND (u.first_name LIKE ? OR u.last_name LIKE ?)
+             ORDER BY u.first_name, u.last_name
+             LIMIT $limit"
+        );
+        $st->execute([$prefix . '%', $prefix . '%']);
+        return $st->fetchAll();
+    }
+
+    /** Split a keyword search into lowercase tokens (max 5, ignore empties). */
+    private static function keywordTokens(string $keyword): array {
+        $tokens = preg_split('/\s+/', trim($keyword)) ?: [];
+        return array_slice(array_values(array_filter($tokens, fn($t) => $t !== '')), 0, 5);
     }
 
     private static function orNull($v): ?string {

@@ -5,93 +5,72 @@ use PHPUnit\Framework\TestCase;
 
 final class NotesManagementTest extends TestCase
 {
-    private UserContext $adminCtx;
-    private UserContext $teacherCtx;
-    private int $studentId;
-    private int $lessonId;
+    private UserContext $ctx;
 
     protected function setUp(): void
     {
         test_reset_all();
+        $this->ctx = fx_admin_ctx();
+    }
 
-        pdo()->exec("INSERT INTO users (first_name, last_name, email, password_hash, is_admin, email_verified_at) VALUES ('Admin', 'A', 'admin@example.com', 'h', 1, NOW())");
-        $this->adminCtx = new UserContext((int)pdo()->lastInsertId(), true);
-        UserContext::set($this->adminCtx);
-
-        pdo()->exec("INSERT INTO users (first_name, last_name, password_hash) VALUES ('Tina', 'Teacher', 'h')");
-        $teacherId = (int)pdo()->lastInsertId();
-        pdo()->exec('INSERT INTO teacher_profiles (user_id) VALUES (' . $teacherId . ')');
-        $this->teacherCtx = new UserContext($teacherId, false);
-
-        pdo()->exec("INSERT INTO users (first_name, last_name, password_hash) VALUES ('Sofia', 'Student', '')");
-        $this->studentId = (int)pdo()->lastInsertId();
-        pdo()->exec('INSERT INTO student_profiles (user_id) VALUES (' . $this->studentId . ')');
-
-        $this->lessonId = LessonManagement::createLesson($this->adminCtx, [
-            'lesson_type' => 'individual',
-            'teacher_user_id' => $teacherId,
-            'student_user_id' => $this->studentId,
-            'start_datetime' => '2026-08-01 09:00:00',
+    private function makeLessons(int $weeks = 2): array
+    {
+        $teacher = fx_teacher();
+        $student = fx_student();
+        $setup = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', $weeks);
+        [$semesterId, $locationId, , $dayOfWeek] = $setup;
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId,
+            'teacher_user_id' => $teacher,
+            'location_id' => $locationId,
+            'student_user_id' => $student,
+            'day_of_week' => $dayOfWeek,
+            'start_time' => '10:00',
+            'status' => 'confirmed',
         ]);
+        $st = pdo()->query('SELECT id FROM lessons ORDER BY start_datetime');
+        return [$teacher, $student, array_map('intval', array_column($st->fetchAll(), 'id'))];
     }
 
-    public function testLessonNoteAutoSaveUpserts(): void
+    public function testAutoSaveUpsertsPerAuthor(): void
     {
-        $note1 = NotesManagement::saveLessonNote($this->teacherCtx, $this->lessonId, 'Worked on scales.');
-        $this->assertSame('Worked on scales.', $note1['body']);
+        [$teacher, , $lessonIds] = $this->makeLessons();
+        $teacherCtx = new UserContext($teacher, false);
 
-        $note2 = NotesManagement::saveLessonNote($this->teacherCtx, $this->lessonId, 'Worked on scales and arpeggios.');
-        $this->assertSame('Worked on scales and arpeggios.', $note2['body']);
-        $this->assertSame((int)$note1['id'], (int)$note2['id']); // same row, updated
+        $saved = NotesManagement::saveLessonNote($teacherCtx, $lessonIds[0], 'Worked on scales.');
+        $this->assertSame('Worked on scales.', $saved['body']);
+        $saved = NotesManagement::saveLessonNote($teacherCtx, $lessonIds[0], 'Worked on scales and arpeggios.');
+        $this->assertSame('Worked on scales and arpeggios.', $saved['body']);
 
-        $this->assertSame(1, (int)pdo()->query('SELECT COUNT(*) FROM lesson_notes')->fetchColumn());
-    }
-
-    public function testOnlyTheLessonsTeacherMayWriteItsNote(): void
-    {
-        pdo()->exec("INSERT INTO users (first_name, last_name, password_hash) VALUES ('Other', 'Teacher', 'h')");
-        $otherId = (int)pdo()->lastInsertId();
-        pdo()->exec('INSERT INTO teacher_profiles (user_id) VALUES (' . $otherId . ')');
-        $this->expectException(RuntimeException::class);
-        NotesManagement::saveLessonNote(new UserContext($otherId, false), $this->lessonId, 'Not my lesson');
-    }
-
-    public function testRecentLessonNotesForStudentNewestFirst(): void
-    {
-        NotesManagement::saveLessonNote($this->teacherCtx, $this->lessonId, 'First lesson note.');
-
-        $lesson2 = LessonManagement::createLesson($this->adminCtx, [
-            'lesson_type' => 'individual',
-            'teacher_user_id' => $this->teacherCtx->id,
-            'student_user_id' => $this->studentId,
-            'start_datetime' => '2026-08-08 09:00:00',
-        ]);
-        NotesManagement::saveLessonNote($this->teacherCtx, $lesson2, 'Second lesson note.');
-
-        $notes = NotesManagement::recentLessonNotesForStudent($this->studentId);
+        // An admin's note is a second row, not an overwrite.
+        NotesManagement::saveLessonNote($this->ctx, $lessonIds[0], 'Please collect the signed form.');
+        $notes = NotesManagement::lessonNotesForLesson($lessonIds[0]);
         $this->assertCount(2, $notes);
-        $this->assertSame('Second lesson note.', $notes[0]['body']);
-        $this->assertSame('First lesson note.', $notes[1]['body']);
     }
 
-    public function testAdminNotesCategoryAndAccess(): void
+    public function testOnlyTheLessonsTeacherOrAdminMayWrite(): void
     {
-        pdo()->exec("INSERT INTO families (family_name) VALUES ('Martinez')");
-        $familyId = (int)pdo()->lastInsertId();
-
-        NotesManagement::addNote($this->adminCtx, 'family', $familyId, null, 'Spoke with mom Maria.');
-        $notes = NotesManagement::notesForFamily($familyId);
-        $this->assertCount(1, $notes);
-        $this->assertSame('Spoke with mom Maria.', $notes[0]['body']);
-
-        try {
-            NotesManagement::addNote($this->adminCtx, 'bogus', $familyId, null, 'x');
-            $this->fail('Expected InvalidArgumentException for bad category');
-        } catch (InvalidArgumentException $e) {
-            $this->assertStringContainsString('category', $e->getMessage());
-        }
-
+        [, , $lessonIds] = $this->makeLessons();
+        $other = fx_teacher('Olga', 'Other');
         $this->expectException(RuntimeException::class);
-        NotesManagement::addNote($this->teacherCtx, 'family', $familyId, null, 'Teachers cannot add admin notes');
+        NotesManagement::saveLessonNote(new UserContext($other, false), $lessonIds[0], 'Nope.');
+    }
+
+    public function testRecentNotesForStudentNewestLessonFirst(): void
+    {
+        [$teacher, $student, $lessonIds] = $this->makeLessons();
+        $teacherCtx = new UserContext($teacher, false);
+        NotesManagement::saveLessonNote($teacherCtx, $lessonIds[0], 'Week one.');
+        NotesManagement::saveLessonNote($teacherCtx, $lessonIds[1], 'Week two.');
+        NotesManagement::saveLessonNote($teacherCtx, $lessonIds[1], ''); // emptied notes are hidden... this empties week two
+
+        $notes = NotesManagement::recentLessonNotesForStudent($student);
+        $this->assertCount(1, $notes);
+        $this->assertSame('Week one.', $notes[0]['body']);
+
+        NotesManagement::saveLessonNote($teacherCtx, $lessonIds[1], 'Week two, really.');
+        $notes = NotesManagement::recentLessonNotesForStudent($student);
+        $this->assertCount(2, $notes);
+        $this->assertSame('Week two, really.', $notes[0]['body']);
     }
 }

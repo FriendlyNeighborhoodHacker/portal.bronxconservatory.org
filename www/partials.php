@@ -8,8 +8,8 @@ function h($s) {
     return htmlspecialchars($s ?? '', ENT_QUOTES, 'UTF-8');
 }
 
-function header_html(string $title): void {
-    ApplicationUI::headerHtml($title);
+function header_html(string $title, array $options = []): void {
+    ApplicationUI::headerHtml($title, $options);
 }
 
 function footer_html(): void {
@@ -55,25 +55,9 @@ function lesson_place_html(array $lesson): string {
     return $parts ? h(implode(' · ', $parts)) : '<span class="small">—</span>';
 }
 
-// A lesson's display name: the group class name, or "Violin Lesson" /
-// "Lesson" for individual lessons. $lesson needs lesson_type, name,
-// instrument_name keys.
+// A lesson's display name: "Violin Lesson", or "Lesson" when no instrument
+// is known. $lesson needs an instrument_name key.
 function lesson_name_label(array $lesson): string {
-    if ($lesson['lesson_type'] === 'group' && trim((string)($lesson['name'] ?? '')) !== '') {
-        return (string)$lesson['name'];
-    }
     $instrument = trim((string)($lesson['instrument_name'] ?? ''));
     return $instrument !== '' ? $instrument . ' Lesson' : 'Lesson';
-}
-
-// The family status pill used across admin pages.
-function family_status_html(string $status): string {
-    $labels = [
-        'needs_follow_up' => 'Needs Follow-Up',
-        'ready_to_enroll' => 'Ready to Enroll',
-        'schedule_assigned' => 'Schedule Assigned',
-        'enrolled' => 'Enrolled',
-    ];
-    $label = $labels[$status] ?? $status;
-    return '<span class="status-pill status-' . h($status) . '">' . h($label) . '</span>';
 }

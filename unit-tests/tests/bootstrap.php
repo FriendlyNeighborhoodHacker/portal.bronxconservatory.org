@@ -8,15 +8,22 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../www/config.php';
 require_once __DIR__ . '/../../www/lib/UserManagement.php';
 require_once __DIR__ . '/../../www/lib/Application.php';
-require_once __DIR__ . '/../../www/lib/FamilyManagement.php';
-require_once __DIR__ . '/../../www/lib/FamilyAccessTokens.php';
 require_once __DIR__ . '/../../www/lib/InstrumentCatalog.php';
 require_once __DIR__ . '/../../www/lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../../www/lib/LocationManagement.php';
+require_once __DIR__ . '/../../www/lib/SemesterManagement.php';
+require_once __DIR__ . '/../../www/lib/ReservationManagement.php';
+require_once __DIR__ . '/../../www/lib/Billing.php';
 require_once __DIR__ . '/../../www/lib/LessonManagement.php';
 require_once __DIR__ . '/../../www/lib/NotesManagement.php';
 require_once __DIR__ . '/../../www/lib/ResourceManagement.php';
 require_once __DIR__ . '/../../www/lib/AnnouncementManagement.php';
+require_once __DIR__ . '/../../www/lib/CsvImport.php';
+require_once __DIR__ . '/../../www/lib/TeacherCsvImport.php';
+require_once __DIR__ . '/../../www/lib/LocationDatesCsvImport.php';
+require_once __DIR__ . '/../../www/lib/LocationTeachersCsvImport.php';
+require_once __DIR__ . '/../../www/lib/StripeCheckout.php';
+require_once __DIR__ . '/../../www/lib/MigrationRunner.php';
 require_once __DIR__ . '/../../www/lib/ActivityLog.php';
 
 const TEST_DB_NAME = 'bronx_music_conservatory_test';
@@ -44,6 +51,8 @@ $testPdo->exec((string)file_get_contents(__DIR__ . '/../../www/schema.sql'));
 
 set_pdo_for_testing($testPdo);
 
+require_once __DIR__ . '/fixtures.php';
+
 // Helper for tests: wipe all domain tables back to a clean slate.
 // (Seed reference rows — instruments, locations, settings — are kept.)
 function test_reset_all(): void {
@@ -51,13 +60,13 @@ function test_reset_all(): void {
     $pdo = pdo();
     $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
     foreach ([
-        'activity_log', 'emails_sent', 'notification_log',
-        'family_access_tokens', 'registration_submissions',
-        'lesson_notes', 'lesson_resources', 'notes', 'announcements',
-        'group_lesson_students', 'group_lesson_teachers', 'lessons',
-        'recurring_lesson_students', 'recurring_lesson_teachers', 'recurring_lessons',
+        'activity_log', 'emails_sent', 'stripe_webhook_events',
+        'ledger_entries', 'lesson_notes', 'lesson_resources', 'lessons',
+        'semester_lesson_reservations', 'semester_location_teachers',
+        'semester_location_dates', 'semester_locations', 'semesters',
+        'announcements',
         'student_instruments', 'teacher_instruments',
-        'student_profiles', 'teacher_profiles', 'parenthood', 'families',
+        'student_profiles', 'teacher_profiles', 'parenthood',
         'private_files', 'public_files', 'users',
     ] as $table) {
         $pdo->exec('TRUNCATE TABLE ' . $table);

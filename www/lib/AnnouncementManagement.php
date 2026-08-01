@@ -6,35 +6,39 @@ require_once __DIR__ . '/UserContext.php';
 require_once __DIR__ . '/ActivityLog.php';
 
 // Announcements: holiday schedules, recital information, general updates.
+// An announcement is shown on dashboards while valid_until has not passed.
 class AnnouncementManagement {
-
-    public const AUDIENCES = ['all', 'parents', 'students', 'teachers'];
 
     private static function pdo(): PDO {
         return pdo();
     }
 
-    public static function create(?UserContext $ctx, string $title, string $body, string $audience = 'all'): int {
+    public static function create(?UserContext $ctx, string $title, string $body, string $validUntil): int {
         self::assertAdmin($ctx);
-        self::assertAudience($audience);
         $title = trim($title);
         $body = trim($body);
         if ($title === '' || $body === '') {
             throw new InvalidArgumentException('Title and text are both required.');
         }
+        $validUntil = self::normalizeDate($validUntil);
         self::pdo()->prepare(
-            'INSERT INTO announcements (title, body, audience, created_by_user_id) VALUES (?,?,?,?)'
-        )->execute([$title, $body, $audience, $ctx->id]);
+            'INSERT INTO announcements (title, body, valid_until, created_by_user_id) VALUES (?,?,?,?)'
+        )->execute([$title, $body, $validUntil, $ctx->id]);
         $id = (int)self::pdo()->lastInsertId();
         self::log($ctx, 'announcement.created', ['announcement_id' => $id]);
         return $id;
     }
 
-    public static function update(?UserContext $ctx, int $id, string $title, string $body, string $audience): void {
+    public static function update(?UserContext $ctx, int $id, string $title, string $body, string $validUntil): void {
         self::assertAdmin($ctx);
-        self::assertAudience($audience);
-        self::pdo()->prepare('UPDATE announcements SET title=?, body=?, audience=? WHERE id=?')
-            ->execute([trim($title), trim($body), $audience, $id]);
+        $title = trim($title);
+        $body = trim($body);
+        if ($title === '' || $body === '') {
+            throw new InvalidArgumentException('Title and text are both required.');
+        }
+        $validUntil = self::normalizeDate($validUntil);
+        self::pdo()->prepare('UPDATE announcements SET title=?, body=?, valid_until=? WHERE id=?')
+            ->execute([$title, $body, $validUntil, $id]);
         self::log($ctx, 'announcement.updated', ['announcement_id' => $id]);
     }
 
@@ -52,34 +56,24 @@ class AnnouncementManagement {
     }
 
     public static function listAll(): array {
-        return self::pdo()->query('SELECT * FROM announcements ORDER BY published_at DESC, id DESC')->fetchAll();
+        return self::pdo()->query('SELECT * FROM announcements ORDER BY created_at DESC, id DESC')->fetchAll();
     }
 
-    // Announcements one of the user's roles should see. $roles from
-    // Application::rolesForUser (admins see everything).
-    public static function listForRoles(array $roles, int $limit = 20): array {
-        if (in_array('admin', $roles, true)) {
-            return self::listAll();
-        }
-        $audiences = ['all'];
-        foreach (['parent' => 'parents', 'student' => 'students', 'teacher' => 'teachers'] as $role => $audience) {
-            if (in_array($role, $roles, true)) {
-                $audiences[] = $audience;
-            }
-        }
-        $placeholders = implode(',', array_fill(0, count($audiences), '?'));
-        $st = self::pdo()->prepare(
-            "SELECT * FROM announcements WHERE audience IN ($placeholders)
-             ORDER BY published_at DESC, id DESC LIMIT " . (int)$limit
-        );
-        $st->execute($audiences);
-        return $st->fetchAll();
+    /** Recent active announcements (valid_until today or later), newest first. */
+    public static function listActive(int $limit = 20): array {
+        $limit = max(1, min(100, $limit));
+        return self::pdo()->query(
+            "SELECT * FROM announcements WHERE valid_until >= CURDATE()
+             ORDER BY created_at DESC, id DESC LIMIT $limit"
+        )->fetchAll();
     }
 
-    private static function assertAudience(string $audience): void {
-        if (!in_array($audience, self::AUDIENCES, true)) {
-            throw new InvalidArgumentException('Unknown audience: ' . $audience);
+    private static function normalizeDate(string $date): string {
+        $ts = strtotime(trim($date));
+        if (trim($date) === '' || $ts === false) {
+            throw new InvalidArgumentException('"Valid until" must be a date.');
         }
+        return date('Y-m-d', $ts);
     }
 
     private static function assertAdmin(?UserContext $ctx): void {
