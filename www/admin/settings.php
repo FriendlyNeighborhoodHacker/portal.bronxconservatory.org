@@ -34,14 +34,24 @@ $SETTINGS_DEF = [
     'hint'  => 'Used for links in emails, e.g. https://portal.bronxconservatory.org',
     'type'  => 'text',
   ],
-  'family_token_expiry_days' => [
-    'label' => 'Family email link expiry (days)',
-    'hint'  => 'How long the review-your-schedule links in emails stay valid.',
-    'type'  => 'text',
-  ],
   'contact_phone' => [
     'label' => 'Contact Phone',
     'hint'  => 'Shown in the footer of every page. Families should always see a way to reach a real person.',
+    'type'  => 'text',
+  ],
+  'registration_cost' => [
+    'label' => 'Registration cost ($)',
+    'hint'  => 'Charged once per student when their semester reservation is confirmed.',
+    'type'  => 'text',
+  ],
+  'semester_lesson_cost' => [
+    'label' => 'Semester lesson cost ($)',
+    'hint'  => 'The semester\'s lessons, charged when the reservation is confirmed.',
+    'type'  => 'text',
+  ],
+  'recital_fee' => [
+    'label' => 'Recital fee ($)',
+    'hint'  => 'Charged with the semester; opt-outs get a custom ledger credit.',
     'type'  => 'text',
   ],
 ];

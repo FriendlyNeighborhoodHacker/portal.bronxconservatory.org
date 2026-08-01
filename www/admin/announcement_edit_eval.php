@@ -22,7 +22,7 @@ try {
         AnnouncementManagement::update($ctx, $id,
             (string)($_POST['title'] ?? ''),
             (string)($_POST['body'] ?? ''),
-            (string)($_POST['audience'] ?? 'all'));
+            (string)($_POST['valid_until'] ?? ''));
         $_SESSION['announcement_flash'] = 'Announcement saved.';
     }
     header('Location: /admin/announcements.php');

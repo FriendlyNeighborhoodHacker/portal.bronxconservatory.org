@@ -29,12 +29,8 @@ header_html('Edit Announcement');
       <label>Title
         <input type="text" name="title" required value="<?=h($announcement['title'])?>">
       </label>
-      <label>Audience
-        <select name="audience">
-          <?php foreach (AnnouncementManagement::AUDIENCES as $audience): ?>
-          <option value="<?=$audience?>"<?=$announcement['audience'] === $audience ? ' selected' : ''?>><?=ucfirst($audience)?></option>
-          <?php endforeach; ?>
-        </select>
+      <label>Show until
+        <input type="date" name="valid_until" required value="<?=h($announcement['valid_until'])?>">
       </label>
     </div>
     <label>Text
