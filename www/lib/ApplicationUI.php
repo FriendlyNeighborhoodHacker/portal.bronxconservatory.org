@@ -291,10 +291,9 @@ class ApplicationUI {
             };
 
             echo '<header class="topbar">';
-            echo '<a class="topbar-brand" href="/index.php">'
-               . '<span class="brand-mark" aria-hidden="true">&#119070;</span>'
+            echo '<a class="topbar-brand" href="/index.php" aria-label="Bronx Conservatory of Music — home">'
+               . '<img class="brand-logo" src="' . h(self::staticResourceUrl('/images/logo.png')) . '" alt="">'
                . '<span class="brand-full">Bronx Conservatory of Music</span>'
-               . '<span class="brand-short" aria-hidden="true">BCM</span>'
                . '</a>';
 
             echo '<nav class="topbar-nav" aria-label="Main">';
@@ -342,22 +341,18 @@ class ApplicationUI {
             echo '<main>';
         } else {
             // Logged-out shell (rarely used; auth pages render their own layout)
-            echo '<header class="topbar"><a class="topbar-brand" href="/login.php">'
-               . '<span class="brand-mark" aria-hidden="true">&#119070;</span>'
+            echo '<header class="topbar"><a class="topbar-brand" href="/login.php" aria-label="' . h($siteTitle) . '">'
+               . '<img class="brand-logo" src="' . h(self::staticResourceUrl('/images/logo.png')) . '" alt="">'
                . '<span class="brand-full">' . h($siteTitle) . '</span>'
-               . '<span class="brand-short" aria-hidden="true">BCM</span>'
                . '</a></header>';
             echo '<main>';
         }
     }
 
-    /**
-     * The BCM wordmark (treble clef + name). The real white logo only exists
-     * as a CMYK EPS; until a converted PNG is uploaded via admin settings,
-     * this styled text mark stands in everywhere the logo belongs.
-     */
+    /** The BCM wordmark: the white treble-clef logo beside the name. */
     public static function brandWordmarkHtml(): string {
-        return '<span class="brand-mark" aria-hidden="true">&#119070;</span><span class="brand-name">Bronx Conservatory of Music</span>';
+        return '<img class="brand-logo" src="' . h(self::staticResourceUrl('/images/logo.png')) . '" alt="">'
+            . '<span class="brand-name">Bronx Conservatory of Music</span>';
     }
 
     // Footer shown on every page: navy band with the copyright line and the
