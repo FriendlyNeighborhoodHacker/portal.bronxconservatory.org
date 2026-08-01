@@ -25,6 +25,8 @@ class LessonManagement {
         SELECT l.*,
                r.semester_id, r.teacher_user_id, r.location_id, r.student_user_id,
                r.day_of_week, r.status AS reservation_status,
+               r.start_time AS reservation_start_time,
+               r.duration_minutes AS reservation_duration_minutes,
                COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) AS effective_teacher_user_id,
                COALESCE(l.location_id_override, r.location_id) AS effective_location_id,
                su.first_name AS student_first_name, su.last_name AS student_last_name,

@@ -137,6 +137,7 @@ class ReservationUIManager {
               </label>
               <p class="small">Confirming generates the semester's lessons and posts its charges;
               reverting to pending deletes the future lessons.</p>
+              <p class="small"><a id="resEditStudentLink" href="#" target="_blank" rel="noopener"></a></p>
               <div class="actions actions-split">
                 <button type="button" class="button danger" id="resEditDelete">Delete reservation</button>
                 <span class="actions-right">
@@ -145,7 +146,6 @@ class ReservationUIManager {
                 </span>
               </div>
             </form>
-            <p class="small"><a id="resEditStudentLink" href="#"></a></p>
           </div>
         </div>
 
