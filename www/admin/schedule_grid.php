@@ -53,6 +53,30 @@ function schedule_short_teacher_name(string $full): string {
 }
 
 /**
+ * One commitment inside a grid cell: a reservation, a lesson, or a hold
+ * block. A cell normally holds exactly one, but a teacher who somehow ended
+ * up double-booked shows all of them stacked, which grows the row rather than
+ * hiding anything.
+ *
+ * $attrs are the data-* the delegated click handlers read to open the right
+ * modal. $stateClass is the res-* colour, applied to the item only when the
+ * cell holds more than one (a lone item is coloured by its <td>, so the whole
+ * cell tints exactly as it always has).
+ */
+function schedule_cell_item_html(string $title, string $subtitle, array $attrs, string $stateClass = ''): string {
+    $attrs['data-short'] = schedule_short_person_name($title);
+    $html = '<div class="cell-item' . ($stateClass !== '' ? ' ' . h($stateClass) : '') . '"';
+    foreach ($attrs as $name => $value) {
+        $html .= ' ' . $name . '="' . h((string)$value) . '"';
+    }
+    $html .= '><span class="cell-student">' . h($title) . '</span>';
+    if ($subtitle !== '') {
+        $html .= '<span class="cell-status">' . h($subtitle) . '</span>';
+    }
+    return $html . '</div>';
+}
+
+/**
  * Render the grid. $columns from SemesterManagement::locationTeachers().
  * $rows from schedule_row_slots(). $cellFn(array $column, array $row):
  * ?array — null for an empty-but-clickable cell, or

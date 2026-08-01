@@ -58,12 +58,9 @@ class ReservationManagement {
         if (!SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $teacherUserId)) {
             throw new InvalidArgumentException('That teacher is not assigned to that location this semester.');
         }
-        $conflict = ScheduleConflicts::weeklySlotConflict(
-            $semesterId, $locationId, $teacherUserId, $dayOfWeek, $startTime, $durationMinutes
+        self::assertSlotIsFree(
+            $semesterId, $locationId, $teacherUserId, $dayOfWeek, $startTime, $durationMinutes, [], null
         );
-        if ($conflict !== null) {
-            throw new InvalidArgumentException($conflict);
-        }
 
         self::pdo()->prepare(
             'INSERT INTO semester_lesson_reservations
@@ -119,18 +116,27 @@ class ReservationManagement {
         if (!SemesterManagement::isTeacherAtLocation((int)$r['semester_id'], $locationId, $teacherUserId)) {
             throw new InvalidArgumentException('That teacher is not assigned to that location this semester.');
         }
-        $conflict = ScheduleConflicts::weeklySlotConflict(
-            (int)$r['semester_id'], $locationId, $teacherUserId, $dayOfWeek,
-            $startTime, $durationMinutes, $reservationId
-        );
-        if ($conflict !== null) {
-            throw new InvalidArgumentException($conflict);
-        }
-
         // The reservation's time BEFORE the update: how we recognise which
         // lessons are still following the standing schedule.
         $previousStartTime = (string)$r['start_time'];
         $dayChanged = (int)$r['day_of_week'] !== $dayOfWeek;
+
+        // Validate the WHOLE move before touching anything: only the lessons
+        // that will actually move need their new moments to be free. A week
+        // that was customized stays where it is, so its date is not checked.
+        $movingDates = null;
+        if ($r['status'] === 'confirmed' && !$dayChanged) {
+            $movingDates = array_map(
+                fn(array $l) => (string)$l['d'],
+                self::futureLessonsFollowingSchedule($reservationId, $previousStartTime)
+            );
+        }
+        self::assertSlotIsFree(
+            (int)$r['semester_id'], $locationId, $teacherUserId, $dayOfWeek,
+            $startTime, $durationMinutes,
+            ['reservation_id' => $reservationId],
+            $movingDates
+        );
 
         self::pdo()->prepare(
             'UPDATE semester_lesson_reservations
@@ -169,6 +175,17 @@ class ReservationManagement {
         }
         if ($newStatus === $oldStatus) {
             return;
+        }
+
+        // Confirming materializes lessons, so the dates must be free — another
+        // reservation's week may have been hand-moved into this slot while
+        // this one sat pending.
+        if ($newStatus === 'confirmed') {
+            self::assertSlotIsFree(
+                (int)$r['semester_id'], (int)$r['location_id'], (int)$r['teacher_user_id'],
+                (int)$r['day_of_week'], (string)$r['start_time'], (int)$r['duration_minutes'],
+                ['reservation_id' => $reservationId], null
+            );
         }
 
         self::pdo()->prepare('UPDATE semester_lesson_reservations SET status=? WHERE id=?')
@@ -394,14 +411,30 @@ class ReservationManagement {
     }
 
     /**
+     * The reservation's future lessons that are still sitting at its standing
+     * time — i.e. the ones a schedule-wide move should carry along. A lesson
+     * at any other time was moved by hand
+     * (LessonManagement::rescheduleWithinDay) and is left alone.
+     */
+    private static function futureLessonsFollowingSchedule(int $reservationId, string $standingStartTime): array {
+        $st = self::pdo()->prepare(
+            'SELECT l.id, DATE(l.start_datetime) AS d,
+                    COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) AS effective_teacher_user_id
+             FROM lessons l
+             JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             WHERE l.semester_lesson_reservation_id=? AND l.start_datetime > NOW()
+               AND TIME(l.start_datetime) = ?
+             ORDER BY l.start_datetime'
+        );
+        $st->execute([$reservationId, $standingStartTime]);
+        return $st->fetchAll();
+    }
+
+    /**
      * Retime the reservation's FUTURE lessons without deleting them, so their
-     * notes, resources, attendance and overrides survive. Two lessons are
-     * deliberately left where they are:
-     *   - one whose time no longer matches the reservation's PREVIOUS time.
-     *     Someone moved that week by hand (LessonManagement::rescheduleWithinDay);
-     *     a schedule-wide shift shouldn't undo their decision.
-     *   - one that would land on top of something else. The rest of the
-     *     reservation still moves; only the colliding week stays put.
+     * notes, resources, attendance and overrides survive. Hand-customized
+     * weeks are left where they are. Conflicts cannot occur here — the caller
+     * validated every destination before any write.
      */
     private static function moveFutureLessonsInPlace(
         ?UserContext $ctx,
@@ -410,44 +443,57 @@ class ReservationManagement {
         string $newStartTime,
         int $newDurationMinutes
     ): void {
-        $st = self::pdo()->prepare(
-            'SELECT l.id, l.start_datetime, DATE(l.start_datetime) AS d, TIME(l.start_datetime) AS t,
-                    COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) AS effective_teacher_user_id
-             FROM lessons l
-             JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
-             WHERE l.semester_lesson_reservation_id=? AND l.start_datetime > NOW()
-             ORDER BY l.start_datetime'
-        );
-        $st->execute([$reservationId]);
-        $lessons = $st->fetchAll();
-
+        $lessons = self::futureLessonsFollowingSchedule($reservationId, $previousStartTime);
         $update = self::pdo()->prepare('UPDATE lessons SET start_datetime=?, duration_minutes=? WHERE id=?');
-        $moved = 0;
-        $keptCustomized = 0;
-        $keptConflicting = 0;
-
         foreach ($lessons as $lesson) {
-            if ((string)$lesson['t'] !== $previousStartTime) {
-                $keptCustomized++;
-                continue;
-            }
-            $newStart = (string)$lesson['d'] . ' ' . $newStartTime;
-            $conflict = ScheduleConflicts::occurrenceConflict(
-                (int)$lesson['effective_teacher_user_id'], $newStart, $newDurationMinutes, (int)$lesson['id']
-            );
-            if ($conflict !== null) {
-                $keptConflicting++;
-                continue;
-            }
-            $update->execute([$newStart, $newDurationMinutes, (int)$lesson['id']]);
-            $moved++;
+            $update->execute([
+                (string)$lesson['d'] . ' ' . $newStartTime,
+                $newDurationMinutes,
+                (int)$lesson['id'],
+            ]);
+        }
+        if ($lessons) {
+            self::log($ctx, 'reservation.lessons_moved', [
+                'reservation_id' => $reservationId, 'moved' => count($lessons),
+            ]);
+        }
+    }
+
+    /**
+     * Refuse the slot unless it is free for this teacher, both as a standing
+     * weekly slot and on every future date it would occupy. A teacher may
+     * never hold two commitments at the same moment, so this spans every
+     * location, not just the one being booked.
+     *
+     * $onlyDates limits the per-date sweep to the occurrences that will
+     * actually move (null = every active date for the weekday).
+     */
+    private static function assertSlotIsFree(
+        int $semesterId,
+        int $locationId,
+        int $teacherUserId,
+        int $dayOfWeek,
+        string $startTime,
+        int $durationMinutes,
+        array $exclude,
+        ?array $onlyDates
+    ): void {
+        $conflict = ScheduleConflicts::weeklySlotConflict(
+            $semesterId, $teacherUserId, $dayOfWeek, $startTime, $durationMinutes, $exclude
+        );
+        if ($conflict !== null) {
+            throw new InvalidArgumentException($conflict);
         }
 
-        if ($moved || $keptCustomized || $keptConflicting) {
-            self::log($ctx, 'reservation.lessons_moved', [
-                'reservation_id' => $reservationId, 'moved' => $moved,
-                'kept_customized' => $keptCustomized, 'kept_conflicting' => $keptConflicting,
-            ]);
+        $dates = $onlyDates ?? array_column(
+            SemesterManagement::activeDatesForLocationWeekday($semesterId, $locationId, $dayOfWeek),
+            'date'
+        );
+        $conflict = ScheduleConflicts::futureOccurrenceConflict(
+            $teacherUserId, $dates, $startTime, $durationMinutes, $exclude
+        );
+        if ($conflict !== null) {
+            throw new InvalidArgumentException($conflict);
         }
     }
 

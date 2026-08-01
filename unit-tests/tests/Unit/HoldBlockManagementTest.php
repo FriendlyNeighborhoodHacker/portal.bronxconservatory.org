@@ -210,7 +210,12 @@ final class HoldBlockManagementTest extends TestCase
         );
     }
 
-    public function testBlockThatWouldCollideStaysPutWhileTheRestMove(): void
+    /**
+     * A move that would collide on ANY future week is refused outright — the
+     * system must never end up with two commitments in one slot, so it does
+     * not half-apply the move.
+     */
+    public function testMoveIsRefusedWhenAnySingleWeekWouldCollide(): void
     {
         $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);
         $holdId = $this->makeHold($setup, '12:00');
@@ -220,12 +225,64 @@ final class HoldBlockManagementTest extends TestCase
         pdo()->prepare('UPDATE lessons SET start_datetime=? WHERE semester_lesson_reservation_id=? AND DATE(start_datetime)=?')
             ->execute(['2030-09-14 13:00:00', $lessonReservationId, '2030-09-14']);
 
-        HoldBlockManagement::updateHoldBlockReservation($this->ctx, $holdId, ['start_time' => '13:00']);
+        try {
+            HoldBlockManagement::updateHoldBlockReservation($this->ctx, $holdId, ['start_time' => '13:00']);
+            $this->fail('Expected the colliding week to block the whole move.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('Sep 14', $e->getMessage());
+        }
 
+        // Nothing moved, and the reservation kept its old time.
         $this->assertSame(
-            ['2030-09-07 13:00:00', '2030-09-14 12:00:00', '2030-09-21 13:00:00'],
+            ['2030-09-07 12:00:00', '2030-09-14 12:00:00', '2030-09-21 12:00:00'],
             array_column($this->blockRows($holdId), 'start_datetime')
         );
+        $this->assertSame('12:00:00', HoldBlockManagement::findHoldBlockReservation($holdId)['start_time']);
+    }
+
+    /** A teacher cannot be in two places at once, so the check spans locations. */
+    public function testSlotTakenAtAnotherLocationIsRejected(): void
+    {
+        $teacher = fx_teacher();
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
+        $otherLocationId = fx_second_location_id();
+        SemesterManagement::setActiveLocations($this->ctx, $semesterId, [$locationId, $otherLocationId]);
+        SemesterManagement::addLocationTeacher($this->ctx, $semesterId, $otherLocationId, $teacher);
+
+        HoldBlockManagement::createHoldBlockReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'location_id' => $locationId, 'day_of_week' => 6,
+            'start_time' => '12:00', 'duration_minutes' => 60, 'title' => 'Lunch',
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        HoldBlockManagement::createHoldBlockReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'location_id' => $otherLocationId, 'day_of_week' => 6,
+            'start_time' => '12:30', 'duration_minutes' => 30, 'title' => 'Errand',
+        ]);
+    }
+
+    public function testDurationMustBeAWholeNumberOfHalfHours(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 2);
+        // The options the modal offers are all valid half-hour multiples.
+        $this->assertSame([30, 60, 90, 120], HoldBlockManagement::DURATION_OPTIONS);
+        foreach (HoldBlockManagement::DURATION_OPTIONS as $minutes) {
+            $this->assertSame(0, $minutes % 30);
+        }
+        // 90 minutes is fine.
+        $this->assertIsInt($this->makeHold($setup, '09:00', 90));
+        // 45 is not.
+        try {
+            $this->makeHold($setup, '13:00', 45);
+            $this->fail('Expected 45 minutes to be rejected.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('half hours', $e->getMessage());
+        }
+        // Neither is 0 or an over-long block.
+        $this->expectException(InvalidArgumentException::class);
+        $this->makeHold($setup, '13:00', 300);
     }
 
     public function testRetitlingPropagatesToFutureBlocksButNotOverriddenWeeks(): void

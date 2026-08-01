@@ -35,10 +35,12 @@ class HoldBlockUIManager {
               <p class="small">This changes only this week. Clear it to go back to the standing
               title, or edit every week on the <a href="/admin/schedule.php">Semester Schedule</a>.</p>
 
-              <div class="actions">
-                <button type="button" class="button primary" id="holdBlockSave">Save</button>
+              <div class="actions actions-split">
                 <button type="button" class="button danger" id="holdBlockDelete">Remove this week</button>
-                <button type="button" class="button" data-modal-close>Close</button>
+                <span class="actions-right">
+                  <button type="button" class="button" data-modal-close>Cancel</button>
+                  <button type="button" class="button primary" id="holdBlockSave">Save</button>
+                </span>
               </div>
             </div>
           </div>

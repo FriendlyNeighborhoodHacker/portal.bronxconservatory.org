@@ -248,10 +248,12 @@ function setupScheduleGrid() {
       if (!th.dataset.full) th.dataset.full = th.textContent;
       th.textContent = on ? (th.dataset.short || th.dataset.full) : th.dataset.full;
     });
+    // Each commitment carries its own short name (a cell can hold more than
+    // one when a teacher is double-booked); fall back to the cell's.
     table.querySelectorAll('td.grid-cell .cell-student').forEach(function (el) {
-      var td = el.closest('td');
+      var owner = el.closest('.cell-item') || el.closest('td');
       if (!el.dataset.full) el.dataset.full = el.textContent;
-      var shortName = td && td.dataset.studentShort;
+      var shortName = owner && (owner.dataset.short || owner.dataset.studentShort);
       el.textContent = on && shortName ? shortName : el.dataset.full;
     });
   }

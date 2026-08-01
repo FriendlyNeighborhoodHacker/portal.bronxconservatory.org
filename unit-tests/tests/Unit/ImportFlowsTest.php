@@ -394,11 +394,38 @@ final class ImportFlowsTest extends TestCase
             ['teacher_name' => 'Marisol Vega', 'location_name' => $locationName,
              'day' => 'Saturday', 'start_time' => '12:00 pm', 'end_time' => '1:30 pm', 'title' => 'Lunch'],
         ], ['semester_id' => $semesterId]);
-        // Validation can't see it (it only knows about other hold blocks), so
-        // the commit surfaces the conflict rather than silently double-booking.
+
+        // The clash is reported in the validation table, before anything is
+        // written — not thrown mid-commit.
+        $this->assertSame('error', $validated[0]['status']);
+        $this->assertStringContainsString('Sam Student', implode(' ', $validated[0]['messages']));
+        $this->assertSame(0, HoldBlocksCsvImport::commit($this->ctx, $validated, ['semester_id' => $semesterId])['created']);
+        $this->assertSame([], HoldBlockManagement::holdBlockReservationsForSemester($semesterId));
+    }
+
+    public function testHoldBlocksImportRejectsATeacherDoubleBookedWithinTheFile(): void
+    {
+        [$semesterId, $locationId, , $locationName] = $this->holdBlockSetup();
+        $otherLocationId = fx_second_location_id();
+        SemesterManagement::setActiveLocations($this->ctx, $semesterId, [$locationId, $otherLocationId]);
+        $teacherId = (int)pdo()->query("SELECT id FROM users WHERE first_name='Marisol'")->fetchColumn();
+        SemesterManagement::addLocationTeacher($this->ctx, $semesterId, $otherLocationId, $teacherId);
+        $otherName = (string)pdo()->query("SELECT name FROM locations WHERE id=$otherLocationId")->fetchColumn();
+
+        $validated = HoldBlocksCsvImport::validateRows([
+            ['teacher_name' => 'Marisol Vega', 'location_name' => $locationName,
+             'day' => 'Saturday', 'start_time' => '12:00 pm', 'end_time' => '1:30 pm', 'title' => 'Lunch'],
+            ['teacher_name' => 'Marisol Vega', 'location_name' => $otherName,
+             'day' => 'Saturday', 'start_time' => '12:00 pm', 'end_time' => '1:30 pm', 'title' => 'Lunch'],
+        ], ['semester_id' => $semesterId]);
+
         $this->assertSame('valid', $validated[0]['status']);
-        $this->expectException(InvalidArgumentException::class);
-        HoldBlocksCsvImport::commit($this->ctx, $validated, ['semester_id' => $semesterId]);
+        $this->assertSame('error', $validated[1]['status']);
+        $this->assertStringContainsString('two places at once', implode(' ', $validated[1]['messages']));
+
+        // Only the first row commits.
+        $this->assertSame(1, HoldBlocksCsvImport::commit($this->ctx, $validated, ['semester_id' => $semesterId])['created']);
+        $this->assertCount(1, HoldBlockManagement::holdBlockReservationsForSemester($semesterId));
     }
 
     public function testDayOfWeekParsing(): void
@@ -422,7 +449,7 @@ final class ImportFlowsTest extends TestCase
             ['Teacher Name', 'Location Name', 'Day', 'Start Time', 'End Time', 'Title'],
             $parsed['headers']
         );
-        $this->assertCount(7, $parsed['rows']);
+        $this->assertCount(6, $parsed['rows']);
         foreach ($parsed['rows'] as $row) {
             $this->assertSame('Lunch', $row[5]);
             $this->assertSame(6, HoldBlocksCsvImport::parseDayOfWeek($row[2]));

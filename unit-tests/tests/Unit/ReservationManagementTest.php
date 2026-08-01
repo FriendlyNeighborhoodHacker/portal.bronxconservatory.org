@@ -207,12 +207,17 @@ final class ReservationManagementTest extends TestCase
         );
     }
 
-    public function testMoveLeavesCollidingLessonsWhereTheyAre(): void
+    /**
+     * A move that would collide on ANY future week is refused outright, and
+     * nothing is written — the schedule must never hold two commitments for
+     * one teacher at one moment.
+     */
+    public function testMoveIsRefusedWhenAnySingleWeekWouldCollide(): void
     {
         $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);
         [$reservationId] = $this->makeReservation($setup, 'confirmed');
 
-        // Another student's confirmed lesson sits at 11:00 on week 2 only.
+        // Another student's confirmed lesson is hand-moved to 11:00 on week 2.
         [$semesterId, $locationId, $teacherId, $dayOfWeek] = $setup;
         $otherId = ReservationManagement::createReservation($this->ctx, [
             'semester_id' => $semesterId, 'teacher_user_id' => $teacherId,
@@ -223,12 +228,70 @@ final class ReservationManagementTest extends TestCase
         pdo()->prepare('UPDATE lessons SET start_datetime=? WHERE semester_lesson_reservation_id=? AND DATE(start_datetime)=?')
             ->execute(['2030-09-14 11:00:00', $otherId, '2030-09-14']);
 
-        ReservationManagement::updateReservation($this->ctx, $reservationId, ['start_time' => '11:00']);
+        try {
+            ReservationManagement::updateReservation($this->ctx, $reservationId, ['start_time' => '11:00']);
+            $this->fail('Expected the colliding week to block the whole move.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('Other Student', $e->getMessage());
+            $this->assertStringContainsString('Sep 14', $e->getMessage());
+        }
 
+        // Nothing moved, and the reservation kept its old time.
         $this->assertSame(
-            ['2030-09-07 11:00:00', '2030-09-14 10:00:00', '2030-09-21 11:00:00'],
+            ['2030-09-07 10:00:00', '2030-09-14 10:00:00', '2030-09-21 10:00:00'],
             array_column($this->lessonRows($reservationId), 'start_datetime')
         );
+        $this->assertSame('10:00:00', ReservationManagement::findReservation($reservationId)['start_time']);
+    }
+
+    /** A teacher cannot be in two places at once, so the check spans locations. */
+    public function testSlotTakenAtAnotherLocationIsRejected(): void
+    {
+        $teacher = fx_teacher();
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
+        $otherLocationId = fx_second_location_id();
+        SemesterManagement::setActiveLocations($this->ctx, $semesterId, [$locationId, $otherLocationId]);
+        SemesterManagement::addLocationTeacher($this->ctx, $semesterId, $otherLocationId, $teacher);
+
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'location_id' => $locationId, 'student_user_id' => fx_student(),
+            'day_of_week' => 6, 'start_time' => '10:00', 'duration_minutes' => 60,
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'location_id' => $otherLocationId, 'student_user_id' => fx_student('Two', 'Student'),
+            'day_of_week' => 6, 'start_time' => '10:30', 'duration_minutes' => 30,
+        ]);
+    }
+
+    /**
+     * A slot can look free weekly but be taken on one date by a hand-moved
+     * lesson; creating there must be refused, not silently double-booked.
+     */
+    public function testCreateIsRefusedWhenAFutureWeekIsTakenByAMovedLesson(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);
+        [$semesterId, $locationId, $teacherId, $dayOfWeek] = $setup;
+        [$existingId] = $this->makeReservation($setup, 'confirmed');
+
+        // Week 2 of the existing reservation is moved by hand to 11:00.
+        LessonManagement::rescheduleWithinDay(
+            $this->ctx,
+            (int)$this->lessonRows($existingId)[1]['id'],
+            '11:00'
+        );
+
+        // 11:00 is free as a weekly slot, but not on Sep 14.
+        $this->expectException(InvalidArgumentException::class);
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacherId,
+            'location_id' => $locationId, 'student_user_id' => fx_student('Other', 'Student'),
+            'day_of_week' => $dayOfWeek, 'start_time' => '11:00', 'duration_minutes' => 30,
+            'status' => 'confirmed',
+        ]);
     }
 
     public function testMoveDoesNotDisturbPastLessons(): void

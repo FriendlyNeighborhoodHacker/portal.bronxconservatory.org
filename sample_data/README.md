@@ -18,8 +18,15 @@ Reset first with `./reset_db.sh`, then upload in this order:
 5. **location_teachers.csv** — semester wizard step 4 (the schedule grid's
    columns)
 6. **hold_blocks.csv** — Admin > Semesters > Import Hold Blocks. Gives every
-   teacher a Saturday lunch, 12:00–1:30 pm, at each location they teach at,
-   so those cells are held instead of bookable.
+   teacher a Saturday lunch, 12:00–1:30 pm, so those cells are held instead
+   of bookable. James Okafor teaches at both locations but gets only one
+   lunch: a teacher can't be in two places at once, and the importer rejects
+   the second row if you add it.
+
+   Import this BEFORE reserving lesson slots. A teacher may only ever hold
+   one commitment at a time, so if a student is already booked at 12:30 the
+   validation step rejects that teacher's lunch and tells you which student,
+   time and location is in the way.
 
 Then open the Semester Schedule and click empty cells to reserve slots for
 the imported students.

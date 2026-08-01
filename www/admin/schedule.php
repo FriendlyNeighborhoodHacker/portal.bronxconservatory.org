@@ -68,29 +68,32 @@ foreach ($occupants as $occupant) {
 $rows = schedule_row_slots($days, $bounds);
 
 // Occupants that don't sit exactly on a 30-minute slot (e.g. 10:15) are
-// keyed to their snapped row so they still render.
+// keyed to their snapped row so they still render. Each key holds a LIST:
+// conflicting bookings are prevented, but if one ever slips through, the
+// cell shows every commitment rather than silently hiding one.
 $cellIndex = [];
 foreach ($occupants as $occupant) {
     [$h, $m] = array_map('intval', explode(':', (string)$occupant['start_time']));
     $slotMinutes = intdiv($h * 60 + $m, 30) * 30;
     $key = $occupant['location_id'] . ':' . $occupant['teacher_user_id'] . ':' . $occupant['day_of_week'] . ':' . $slotMinutes;
-    $cellIndex[$key] = $occupant;
+    $cellIndex[$key][] = $occupant;
 }
 
 $cellFn = function (array $column, array $row) use ($cellIndex, $balances) {
     $columnKey = $column['location_id'] . ':' . $column['teacher_user_id'];
     $key = $columnKey . ':' . $row['day'] . ':' . $row['minutes'];
-    $occupant = $cellIndex[$key] ?? null;
+    $cellOccupants = $cellIndex[$key] ?? [];
 
     $teacherLabel = ($column['teacher_preferred_name'] ?: $column['teacher_first_name'])
         . ' ' . $column['teacher_last_name'];
 
-    if ($occupant === null) {
+    if (!$cellOccupants) {
         // Covered by an earlier rowspan? Look back through prior slots.
         for ($back = 30; $back <= 210; $back += 30) {
-            $prior = $cellIndex[$columnKey . ':' . $row['day'] . ':' . ($row['minutes'] - $back)] ?? null;
-            if ($prior && (int)ceil((int)$prior['duration_minutes'] / 30) * 30 > $back) {
-                return ['skip' => true];
+            foreach ($cellIndex[$columnKey . ':' . $row['day'] . ':' . ($row['minutes'] - $back)] ?? [] as $prior) {
+                if ((int)ceil((int)$prior['duration_minutes'] / 30) * 30 > $back) {
+                    return ['skip' => true];
+                }
             }
         }
         $context = schedule_day_prefix($row['day']) . ' ' . date('g:i a', mktime(intdiv($row['minutes'], 60), $row['minutes'] % 60))
@@ -109,53 +112,70 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $balances) {
         ];
     }
 
-    if ($occupant['kind'] === 'hold') {
+    // A cell normally holds one commitment; a double-booked teacher shows all
+    // of them, and the row grows to fit.
+    $multi = count($cellOccupants) > 1;
+    $items = '';
+    $rowspan = 1;
+    $contexts = [];
+
+    foreach ($cellOccupants as $occupant) {
+        $duration = (int)$occupant['duration_minutes'];
+        $rowspan = max($rowspan, (int)ceil($duration / 30));
         $context = schedule_day_prefix((int)$occupant['day_of_week']) . ' '
             . date('g:i a', strtotime((string)$occupant['start_time']))
-            . ' · ' . ((int)$occupant['duration_minutes']) . ' min'
+            . ' · ' . $duration . ' min'
             . ' · ' . $teacherLabel
             . ' · ' . $column['location_name'];
-        return [
-            'html' => '<span class="cell-student">' . h((string)$occupant['title']) . '</span>'
-                    . '<span class="cell-status">Held</span>',
-            'class' => 'res-hold',
-            'rowspan' => max(1, (int)ceil((int)$occupant['duration_minutes'] / 30)),
-            'attrs' => [
+        $contexts[] = $context;
+
+        if ($occupant['kind'] === 'hold') {
+            $items .= schedule_cell_item_html((string)$occupant['title'], 'Held', [
                 'data-hold-reservation-id' => $occupant['id'],
                 'data-hold-title' => $occupant['title'],
-                'data-duration' => (int)$occupant['duration_minutes'],
+                'data-duration' => $duration,
                 'data-context' => $context,
-            ],
-        ];
-    }
+            ], $multi ? 'res-hold' : '');
+            continue;
+        }
 
-    $reservation = $occupant;
-    $studentId = (int)$reservation['student_user_id'];
-    $balance = $balances[$studentId] ?? null;
-    $presentation = reservation_cell_presentation($reservation, $balance);
-    $studentName = trim($reservation['student_first_name'] . ' ' . $reservation['student_last_name']);
-    $context = schedule_day_prefix((int)$reservation['day_of_week']) . ' '
-        . date('g:i a', strtotime((string)$reservation['start_time']))
-        . ' · ' . ((int)$reservation['duration_minutes']) . ' min'
-        . ' · ' . $teacherLabel
-        . ' · ' . $column['location_name'];
-    $balanceText = $balance && $balance['total_balance_cents'] > 0
-        ? 'Outstanding balance: ' . Billing::formatCents((int)$balance['total_balance_cents'])
-        : 'No outstanding balance.';
+        $studentId = (int)$occupant['student_user_id'];
+        $balance = $balances[$studentId] ?? null;
+        $presentation = reservation_cell_presentation($occupant, $balance);
+        $studentName = trim($occupant['student_first_name'] . ' ' . $occupant['student_last_name']);
+        $balanceText = $balance && $balance['total_balance_cents'] > 0
+            ? 'Outstanding balance: ' . Billing::formatCents((int)$balance['total_balance_cents'])
+            : 'No outstanding balance.';
 
-    return [
-        'html' => '<span class="cell-student">' . h($studentName) . '</span>'
-                . '<span class="cell-status">' . h($presentation['label']) . '</span>',
-        'class' => $presentation['class'],
-        'rowspan' => max(1, (int)ceil((int)$reservation['duration_minutes'] / 30)),
-        'attrs' => [
-            'data-reservation-id' => $reservation['id'],
-            'data-status' => $reservation['status'],
+        $items .= schedule_cell_item_html($studentName, $presentation['label'], [
+            'data-reservation-id' => $occupant['id'],
+            'data-status' => $occupant['status'],
             'data-student-id' => $studentId,
             'data-student-name' => $studentName,
             'data-context' => $context,
             'data-balance-text' => $balanceText,
-        ],
+        ], $multi ? $presentation['class'] : '');
+    }
+
+    if ($multi) {
+        return [
+            'html' => $items,
+            'class' => 'res-multi',
+            'rowspan' => $rowspan,
+            'attrs' => ['data-context' => count($cellOccupants) . ' bookings · ' . implode(' / ', $contexts)],
+        ];
+    }
+
+    $only = $cellOccupants[0];
+    $stateClass = $only['kind'] === 'hold'
+        ? 'res-hold'
+        : reservation_cell_presentation($only, $balances[(int)$only['student_user_id']] ?? null)['class'];
+
+    return [
+        'html' => $items,
+        'class' => $stateClass,
+        'rowspan' => $rowspan,
+        'attrs' => ['data-context' => $contexts[0]],
     ];
 };
 

@@ -496,6 +496,19 @@ button:disabled {
   align-items: center;
 }
 
+/* Modal footer: the destructive action sits alone on the left, well away
+   from Cancel/Save which pair up on the right (Save last). */
+.actions-split {
+  justify-content: space-between;
+}
+
+.actions-split .actions-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
 /* Circular "+" button (e.g. Add a person, top-right of a page head) */
 .plus-btn {
   width: 38px;
@@ -1220,6 +1233,40 @@ body.auth .brand-logo {
 .grid-cell.res-balance-custom .cell-status {
   color: #cfe0f5;
 }
+
+/* One commitment inside a cell. A lone item is transparent so its <td>
+   supplies the colour exactly as before; when a cell holds several, each
+   item carries its own res-* background and they stack, growing the row. */
+.cell-item {
+  display: block;
+  cursor: pointer;
+}
+
+.grid-cell.res-multi {
+  background: repeating-linear-gradient(
+    -45deg, #fdecec 0 6px, #fff5f5 6px 12px
+  );
+  padding: 2px;
+}
+
+.grid-cell.res-multi .cell-item {
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin-bottom: 2px;
+}
+
+.grid-cell.res-multi .cell-item:last-child {
+  margin-bottom: 0;
+}
+
+/* Colours for stacked items mirror the single-cell states. */
+.cell-item.res-reach-out { background: #fff; font-style: italic; }
+.cell-item.res-pending { background: #fff; }
+.cell-item.res-paid { background: var(--res-paid-bg); }
+.cell-item.res-balance-full { background: var(--res-balance-full-bg); }
+.cell-item.res-balance-half { background: var(--res-balance-half-bg); }
+.cell-item.res-balance-custom { background: var(--res-balance-custom-bg); color: #fff; }
+.cell-item.res-hold { background: var(--res-hold-bg); color: var(--color-text-muted); }
 
 /* Hold blocks: the teacher's own time, no student, deliberately drab so it
    reads as "not bookable" rather than as another reservation state. */

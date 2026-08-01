@@ -15,6 +15,15 @@ require_once __DIR__ . '/ScheduleConflicts.php';
 // generated the moment the reservation is created.
 class HoldBlockManagement {
 
+    /**
+     * Hold blocks sit on the schedule grid's half-hour rows, so their length
+     * is always a whole number of rows. These are the durations the modal
+     * offers; anything else divisible by 30 is still accepted (the CSV import
+     * derives it from a start/end time).
+     */
+    public const DURATION_OPTIONS = [30, 60, 90, 120];
+    public const MAX_DURATION_MINUTES = 240;
+
     /** The reservation + its teacher/location names, for the grid and modals. */
     private const RESERVATION_SELECT = "
         SELECT hr.*,
@@ -108,11 +117,20 @@ class HoldBlockManagement {
         $title = self::normalizeTitle((string)($fields['title'] ?? $r['title']));
 
         $semesterId = (int)$r['semester_id'];
-        self::assertSlotIsValid($semesterId, $locationId, $teacherUserId, $dayOfWeek, $startTime, $durationMinutes, $reservationId);
-
         $previousStartTime = (string)$r['start_time'];
         $previousTitle = (string)$r['title'];
         $dayChanged = (int)$r['day_of_week'] !== $dayOfWeek;
+
+        // Validate the WHOLE move before touching anything: only the blocks
+        // that will actually move need their new moments to be free.
+        $movingDates = $dayChanged ? null : array_map(
+            fn(array $b) => (string)$b['d'],
+            self::futureBlocksFollowingSchedule($reservationId, $previousStartTime)
+        );
+        self::assertSlotIsValid(
+            $semesterId, $locationId, $teacherUserId, $dayOfWeek,
+            $startTime, $durationMinutes, $reservationId, $movingDates
+        );
 
         self::pdo()->prepare(
             'UPDATE semester_hold_block_reservations
@@ -317,7 +335,8 @@ class HoldBlockManagement {
         $newStart = date('Y-m-d', strtotime((string)$block['start_datetime'])) . ' ' . $newStartTime;
 
         $conflict = ScheduleConflicts::occurrenceConflict(
-            (int)$block['teacher_user_id'], $newStart, (int)$block['duration_minutes'], null, $blockId
+            (int)$block['teacher_user_id'], $newStart, (int)$block['duration_minutes'],
+            ['hold_block_id' => $blockId]
         );
         if ($conflict !== null) {
             throw new InvalidArgumentException($conflict);
@@ -377,7 +396,13 @@ class HoldBlockManagement {
         return $row;
     }
 
-    /** Shared validation for create and update. */
+    /**
+     * Shared validation for create and update. The slot must be free for this
+     * teacher both as a standing weekly slot and on every future date it
+     * would occupy — across every location, since a teacher cannot be in two
+     * places at once. $onlyDates limits the per-date sweep to the blocks that
+     * will actually move (null = every active date for the weekday).
+     */
     private static function assertSlotIsValid(
         int $semesterId,
         int $locationId,
@@ -385,20 +410,41 @@ class HoldBlockManagement {
         int $dayOfWeek,
         string $startTime,
         int $durationMinutes,
-        ?int $excludeReservationId
+        ?int $excludeReservationId,
+        ?array $onlyDates = null
     ): void {
         if ($dayOfWeek < 0 || $dayOfWeek > 6) {
             throw new InvalidArgumentException('Day of week must be 0 (Sunday) through 6 (Saturday).');
         }
-        if ($durationMinutes <= 0 || $durationMinutes > 240) {
-            throw new InvalidArgumentException('Duration looks invalid.');
+        if ($durationMinutes <= 0 || $durationMinutes > self::MAX_DURATION_MINUTES) {
+            throw new InvalidArgumentException(
+                'Duration must be between 30 minutes and ' . (self::MAX_DURATION_MINUTES / 60) . ' hours.'
+            );
+        }
+        if ($durationMinutes % 30 !== 0) {
+            throw new InvalidArgumentException('Duration must be a whole number of half hours (30, 60, 90, 120).');
         }
         if (!SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $teacherUserId)) {
             throw new InvalidArgumentException('That teacher is not assigned to that location this semester.');
         }
+
+        $exclude = $excludeReservationId !== null
+            ? ['hold_block_reservation_id' => $excludeReservationId]
+            : [];
+
         $conflict = ScheduleConflicts::weeklySlotConflict(
-            $semesterId, $locationId, $teacherUserId, $dayOfWeek, $startTime, $durationMinutes,
-            null, $excludeReservationId
+            $semesterId, $teacherUserId, $dayOfWeek, $startTime, $durationMinutes, $exclude
+        );
+        if ($conflict !== null) {
+            throw new InvalidArgumentException($conflict);
+        }
+
+        $dates = $onlyDates ?? array_column(
+            SemesterManagement::activeDatesForLocationWeekday($semesterId, $locationId, $dayOfWeek),
+            'date'
+        );
+        $conflict = ScheduleConflicts::futureOccurrenceConflict(
+            $teacherUserId, $dates, $startTime, $durationMinutes, $exclude
         );
         if ($conflict !== null) {
             throw new InvalidArgumentException($conflict);
@@ -418,46 +464,39 @@ class HoldBlockManagement {
         string $newStartTime,
         int $newDurationMinutes
     ): void {
-        $st = self::pdo()->prepare(
-            'SELECT b.id, DATE(b.start_datetime) AS d, TIME(b.start_datetime) AS t, hr.teacher_user_id
-             FROM semester_hold_blocks b
-             JOIN semester_hold_block_reservations hr ON hr.id = b.semester_hold_block_reservation_id
-             WHERE b.semester_hold_block_reservation_id=? AND b.start_datetime > NOW()
-             ORDER BY b.start_datetime'
-        );
-        $st->execute([$reservationId]);
-        $blocks = $st->fetchAll();
-
+        $blocks = self::futureBlocksFollowingSchedule($reservationId, $previousStartTime);
         $update = self::pdo()->prepare(
             'UPDATE semester_hold_blocks SET start_datetime=?, duration_minutes=? WHERE id=?'
         );
-        $moved = 0;
-        $keptCustomized = 0;
-        $keptConflicting = 0;
-
         foreach ($blocks as $block) {
-            if ((string)$block['t'] !== $previousStartTime) {
-                $keptCustomized++;
-                continue;
-            }
-            $newStart = (string)$block['d'] . ' ' . $newStartTime;
-            $conflict = ScheduleConflicts::occurrenceConflict(
-                (int)$block['teacher_user_id'], $newStart, $newDurationMinutes, null, (int)$block['id']
-            );
-            if ($conflict !== null) {
-                $keptConflicting++;
-                continue;
-            }
-            $update->execute([$newStart, $newDurationMinutes, (int)$block['id']]);
-            $moved++;
-        }
-
-        if ($moved || $keptCustomized || $keptConflicting) {
-            self::log($ctx, 'hold_block_reservation.blocks_moved', [
-                'hold_block_reservation_id' => $reservationId, 'moved' => $moved,
-                'kept_customized' => $keptCustomized, 'kept_conflicting' => $keptConflicting,
+            $update->execute([
+                (string)$block['d'] . ' ' . $newStartTime,
+                $newDurationMinutes,
+                (int)$block['id'],
             ]);
         }
+        if ($blocks) {
+            self::log($ctx, 'hold_block_reservation.blocks_moved', [
+                'hold_block_reservation_id' => $reservationId, 'moved' => count($blocks),
+            ]);
+        }
+    }
+
+    /**
+     * The reservation's future blocks still sitting at its standing time —
+     * the ones a schedule-wide move carries along. A block at any other time
+     * was moved by hand and is left alone.
+     */
+    private static function futureBlocksFollowingSchedule(int $reservationId, string $standingStartTime): array {
+        $st = self::pdo()->prepare(
+            'SELECT b.id, DATE(b.start_datetime) AS d
+             FROM semester_hold_blocks b
+             WHERE b.semester_hold_block_reservation_id=? AND b.start_datetime > NOW()
+               AND TIME(b.start_datetime) = ?
+             ORDER BY b.start_datetime'
+        );
+        $st->execute([$reservationId, $standingStartTime]);
+        return $st->fetchAll();
     }
 
     /**

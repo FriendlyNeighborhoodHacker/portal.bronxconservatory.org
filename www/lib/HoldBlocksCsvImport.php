@@ -6,6 +6,7 @@ require_once __DIR__ . '/UserContext.php';
 require_once __DIR__ . '/ActivityLog.php';
 require_once __DIR__ . '/SemesterManagement.php';
 require_once __DIR__ . '/HoldBlockManagement.php';
+require_once __DIR__ . '/ScheduleConflicts.php';
 require_once __DIR__ . '/LocationDatesCsvImport.php';
 
 // The hold-blocks CSV: a teacher's standing non-lesson time (lunch, an
@@ -59,6 +60,9 @@ class HoldBlocksCsvImport {
 
         $out = [];
         $seen = [];
+        // Slots this file has already claimed. The database can't see them
+        // yet, but two rows in one file must not double-book a teacher either.
+        $claimed = [];
         foreach ($mappedRows as $i => $row) {
             $messages = [];
             $status = 'valid';
@@ -139,15 +143,44 @@ class HoldBlocksCsvImport {
                     $changes = 'Already held (no change)';
                 } else {
                     $seen[$key] = $i + 1;
-                    $changes = 'Hold ' . $title . ' for ' . $teacher['first_name'] . ' ' . $teacher['last_name']
-                        . ' on ' . self::dayLabel($dayOfWeek) . 's, '
-                        . date('g:i a', strtotime($startTime)) . '–' . date('g:i a', strtotime($endTime));
-                    $row['_location_id'] = (int)$location['id'];
-                    $row['_teacher_user_id'] = (int)$teacher['id'];
-                    $row['_day_of_week'] = $dayOfWeek;
-                    $row['_start_time'] = $startTime;
-                    $row['_duration_minutes'] = $duration;
-                    $row['_title'] = $title;
+                    // The same rule the schedule grid enforces: this teacher
+                    // must be free, in every location and on every future
+                    // date this row would occupy. Surfaced here so the
+                    // validation table explains it before anything is written.
+                    $conflict = self::fileSlotConflict($claimed, (int)$teacher['id'], $dayOfWeek, $startTime, $duration)
+                        ?? ScheduleConflicts::weeklySlotConflict(
+                            $semesterId, (int)$teacher['id'], $dayOfWeek, $startTime, $duration
+                        )
+                        ?? ScheduleConflicts::futureOccurrenceConflict(
+                            (int)$teacher['id'],
+                            array_column(
+                                SemesterManagement::activeDatesForLocationWeekday($semesterId, (int)$location['id'], $dayOfWeek),
+                                'date'
+                            ),
+                            $startTime,
+                            $duration
+                        );
+                    if ($conflict !== null) {
+                        $status = 'error';
+                        $messages[] = $conflict;
+                    } else {
+                        $claimed[] = [
+                            'teacher_user_id' => (int)$teacher['id'],
+                            'day_of_week' => $dayOfWeek,
+                            'start_time' => $startTime,
+                            'duration_minutes' => $duration,
+                            'title' => $title,
+                        ];
+                        $changes = 'Hold ' . $title . ' for ' . $teacher['first_name'] . ' ' . $teacher['last_name']
+                            . ' on ' . self::dayLabel($dayOfWeek) . 's, '
+                            . date('g:i a', strtotime($startTime)) . '–' . date('g:i a', strtotime($endTime));
+                        $row['_location_id'] = (int)$location['id'];
+                        $row['_teacher_user_id'] = (int)$teacher['id'];
+                        $row['_day_of_week'] = $dayOfWeek;
+                        $row['_start_time'] = $startTime;
+                        $row['_duration_minutes'] = $duration;
+                        $row['_title'] = $title;
+                    }
                 }
             }
 
@@ -190,6 +223,35 @@ class HoldBlocksCsvImport {
     }
 
     // ── internals ─────────────────────────────────────────────────────────
+
+    /**
+     * Does this row overlap a slot an earlier row in the same file already
+     * claimed for the same teacher? The database cannot answer this — those
+     * rows are not written yet.
+     */
+    private static function fileSlotConflict(
+        array $claimed,
+        int $teacherUserId,
+        int $dayOfWeek,
+        string $startTime,
+        int $durationMinutes
+    ): ?string {
+        $start = strtotime('1970-01-01 ' . $startTime);
+        $end = $start + $durationMinutes * 60;
+        foreach ($claimed as $other) {
+            if ($other['teacher_user_id'] !== $teacherUserId || $other['day_of_week'] !== $dayOfWeek) {
+                continue;
+            }
+            $otherStart = strtotime('1970-01-01 ' . $other['start_time']);
+            $otherEnd = $otherStart + $other['duration_minutes'] * 60;
+            if ($start < $otherEnd && $otherStart < $end) {
+                return 'An earlier row in this file already holds "' . $other['title'] . '" for this teacher at '
+                    . date('g:i a', $otherStart) . '–' . date('g:i a', $otherEnd)
+                    . ' — a teacher cannot be in two places at once.';
+            }
+        }
+        return null;
+    }
 
     /** "Saturday", "Sat", "6" -> 6; null when unrecognised. */
     public static function parseDayOfWeek(string $raw): ?int {

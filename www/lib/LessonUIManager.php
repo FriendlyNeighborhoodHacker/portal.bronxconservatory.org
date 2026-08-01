@@ -50,9 +50,11 @@ class LessonUIManager {
               </label>
               <span class="note-save-state" id="lessonNoteState"></span>
 
-              <div class="actions">
-                <button type="button" class="button primary" id="lessonSave">Save</button>
-                <button type="button" class="button" data-modal-close>Close</button>
+              <div class="actions actions-split">
+                <span class="actions-right">
+                  <button type="button" class="button" data-modal-close>Cancel</button>
+                  <button type="button" class="button primary" id="lessonSave">Save</button>
+                </span>
               </div>
             </div>
           </div>

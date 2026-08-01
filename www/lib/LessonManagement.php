@@ -166,7 +166,8 @@ class LessonManagement {
         // Conflict check against the effective teacher's other lessons AND
         // hold blocks at that moment.
         $conflict = ScheduleConflicts::occurrenceConflict(
-            (int)$lesson['effective_teacher_user_id'], $newStart, (int)$lesson['duration_minutes'], $lessonId
+            (int)$lesson['effective_teacher_user_id'], $newStart, (int)$lesson['duration_minutes'],
+            ['lesson_id' => $lessonId]
         );
         if ($conflict !== null) {
             throw new InvalidArgumentException($conflict);

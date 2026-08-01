@@ -79,6 +79,8 @@ foreach ($holdBlocks as $hold) {
     $occupants[] = $hold;
 }
 
+// Each key holds a LIST: double-booking is prevented, but if one ever slips
+// through, the cell shows every commitment rather than hiding one.
 $cellIndex = [];
 foreach ($occupants as $occupant) {
     $ts = strtotime((string)$occupant['start_datetime']);
@@ -88,73 +90,90 @@ foreach ($occupants as $occupant) {
     $bounds[$day][0] = min($bounds[$day][0] ?? $slot, $slot);
     $bounds[$day][1] = max($bounds[$day][1] ?? $slot, $slot);
     $key = $occupant['location_id'] . ':' . $occupant['_teacher_user_id'] . ':' . $day . ':' . $slot;
-    $cellIndex[$key] = $occupant;
+    $cellIndex[$key][] = $occupant;
 }
 $rows = schedule_row_slots($days, $bounds);
 
 $cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson) {
     $columnKey = $column['location_id'] . ':' . $column['teacher_user_id'];
-    $occupant = $cellIndex[$columnKey . ':' . $row['day'] . ':' . $row['minutes']] ?? null;
-    if ($occupant === null) {
+    $cellOccupants = $cellIndex[$columnKey . ':' . $row['day'] . ':' . $row['minutes']] ?? [];
+    if (!$cellOccupants) {
         for ($back = 30; $back <= 210; $back += 30) {
-            $prior = $cellIndex[$columnKey . ':' . $row['day'] . ':' . ($row['minutes'] - $back)] ?? null;
-            if ($prior && (int)ceil((int)$prior['duration_minutes'] / 30) * 30 > $back) {
-                return ['skip' => true];
+            foreach ($cellIndex[$columnKey . ':' . $row['day'] . ':' . ($row['minutes'] - $back)] ?? [] as $prior) {
+                if ((int)ceil((int)$prior['duration_minutes'] / 30) * 30 > $back) {
+                    return ['skip' => true];
+                }
             }
         }
         return ['html' => '', 'class' => '', 'attrs' => []];
     }
 
-    if ($occupant['kind'] === 'hold') {
-        // data-hold-block-id (not data-lesson-id) opens HoldBlockUIManager's
-        // modal, which edits this ONE week.
-        return [
-            'html' => '<span class="cell-student">' . h((string)$occupant['effective_title']) . '</span>'
-                    . '<span class="cell-status">Held</span>',
-            'class' => 'res-hold',
-            'rowspan' => max(1, (int)ceil((int)$occupant['duration_minutes'] / 30)),
-            'attrs' => [
+    $multi = count($cellOccupants) > 1;
+    $items = '';
+    $rowspan = 1;
+    $contexts = [];
+    $soleClass = '';
+
+    foreach ($cellOccupants as $occupant) {
+        $duration = (int)$occupant['duration_minutes'];
+        $rowspan = max($rowspan, (int)ceil($duration / 30));
+
+        if ($occupant['kind'] === 'hold') {
+            // data-hold-block-id (not data-lesson-id) opens HoldBlockUIManager's
+            // modal, which edits this ONE week.
+            $context = date('D M j · g:i a', strtotime((string)$occupant['start_datetime']))
+                . ' · ' . $duration . ' min'
+                . ' · ' . $occupant['location_name'];
+            $contexts[] = $context;
+            $soleClass = 'res-hold';
+            $items .= schedule_cell_item_html((string)$occupant['effective_title'], 'Held', [
                 'data-hold-block-id' => $occupant['id'],
                 'data-hold-title' => $occupant['effective_title'],
-                'data-context' => date('D M j · g:i a', strtotime((string)$occupant['start_datetime']))
-                    . ' · ' . ((int)$occupant['duration_minutes']) . ' min'
-                    . ' · ' . $occupant['location_name'],
-            ],
-        ];
-    }
+                'data-context' => $context,
+            ], $multi ? 'res-hold' : '');
+            continue;
+        }
 
-    $lesson = $occupant;
-    $studentName = trim($lesson['student_first_name'] . ' ' . $lesson['student_last_name']);
-    $missed = $lesson['attended'] !== null && (int)$lesson['attended'] === 0;
-    $attendedValue = $lesson['attended'] === null ? '' : (string)(int)$lesson['attended'];
-    $substituteName = $lesson['substitute_teacher_user_id']
-        ? trim(($lesson['substitute_first_name'] ?? '') . ' ' . ($lesson['substitute_last_name'] ?? ''))
-        : '';
-    $statusBits = [];
-    if ($missed) {
-        $statusBits[] = 'Missed';
-    } elseif ($lesson['attended'] !== null) {
-        $statusBits[] = 'Attended';
-    }
-    if ($substituteName !== '') {
-        $statusBits[] = 'Sub: ' . $substituteName;
-    }
-    $context = date('D M j · g:i a', strtotime((string)$lesson['start_datetime']))
-        . ' · Lesson #' . (int)$lesson['lesson_number']
-        . ' · ' . $lesson['location_name'];
+        $lesson = $occupant;
+        $studentName = trim($lesson['student_first_name'] . ' ' . $lesson['student_last_name']);
+        $missed = $lesson['attended'] !== null && (int)$lesson['attended'] === 0;
+        $attendedValue = $lesson['attended'] === null ? '' : (string)(int)$lesson['attended'];
+        $substituteName = $lesson['substitute_teacher_user_id']
+            ? trim(($lesson['substitute_first_name'] ?? '') . ' ' . ($lesson['substitute_last_name'] ?? ''))
+            : '';
+        $statusBits = [];
+        if ($missed) {
+            $statusBits[] = 'Missed';
+        } elseif ($lesson['attended'] !== null) {
+            $statusBits[] = 'Attended';
+        }
+        if ($substituteName !== '') {
+            $statusBits[] = 'Sub: ' . $substituteName;
+        }
+        $context = date('D M j · g:i a', strtotime((string)$lesson['start_datetime']))
+            . ' · Lesson #' . (int)$lesson['lesson_number']
+            . ' · ' . $lesson['location_name'];
+        $contexts[] = $context;
+        $soleClass = $missed ? 'res-reach-out' : 'res-paid';
 
-    return [
-        'html' => '<span class="cell-student' . ($missed ? ' lesson-cancelled' : '') . '">' . h($studentName) . '</span>'
-                . ($statusBits ? '<span class="cell-status">' . h(implode(' · ', $statusBits)) . '</span>' : ''),
-        'class' => $missed ? 'res-reach-out' : 'res-paid',
-        'rowspan' => max(1, (int)ceil((int)$lesson['duration_minutes'] / 30)),
-        'attrs' => [
+        $items .= schedule_cell_item_html($studentName, implode(' · ', $statusBits), [
             'data-lesson-id' => $lesson['id'],
             'data-student-name' => $studentName,
             'data-attended' => $attendedValue,
             'data-substitute-name' => $substituteName,
             'data-note' => $notesByLesson[(int)$lesson['id']] ?? '',
             'data-context' => $context,
+        ], $multi ? $soleClass : ($missed ? 'lesson-cancelled' : ''));
+    }
+
+    return [
+        'html' => $items,
+        'class' => $multi ? 'res-multi' : $soleClass,
+        'rowspan' => $rowspan,
+        'attrs' => [
+            'data-context' => $multi
+                ? count($cellOccupants) . ' bookings · ' . implode(' / ', $contexts)
+                : $contexts[0],
         ],
     ];
 };

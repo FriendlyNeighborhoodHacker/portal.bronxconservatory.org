@@ -82,7 +82,7 @@ final class LessonManagementTest extends TestCase
             LessonManagement::rescheduleWithinDay($this->ctx, $lessonIds[0], '11:00');
             $this->fail('Expected a conflict.');
         } catch (InvalidArgumentException $e) {
-            $this->assertStringContainsString('overlaps', $e->getMessage());
+            $this->assertStringContainsString('already booked for this teacher', $e->getMessage());
         }
 
         // 11:30 is free.

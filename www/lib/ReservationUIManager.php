@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../partials_typeahead.php';
+require_once __DIR__ . '/HoldBlockManagement.php';
 
 /**
  * The Semester Schedule's cell modals and the delegated cell-click JS.
@@ -15,6 +16,20 @@ require_once __DIR__ . '/../partials_typeahead.php';
  * grid and its color coding recompute server-side.
  */
 class ReservationUIManager {
+
+    /** 30 -> "30 minutes", 90 -> "1 hour 30 minutes", 120 -> "2 hours". */
+    private static function durationLabel(int $minutes): string {
+        $hours = intdiv($minutes, 60);
+        $rest = $minutes % 60;
+        $parts = [];
+        if ($hours > 0) {
+            $parts[] = $hours . ($hours === 1 ? ' hour' : ' hours');
+        }
+        if ($rest > 0 || $hours === 0) {
+            $parts[] = $rest . ' minutes';
+        }
+        return implode(' ', $parts);
+    }
 
     public static function renderModals(int $semesterId): void {
         ?>
@@ -61,9 +76,11 @@ class ReservationUIManager {
                   </label>
                 </div>
                 <p class="small">Confirming generates the semester's lessons and posts its charges.</p>
-                <div class="actions">
-                  <button type="submit" class="button primary">Reserve</button>
-                  <button type="button" class="button" data-modal-close>Cancel</button>
+                <div class="actions actions-split">
+                  <span class="actions-right">
+                    <button type="button" class="button" data-modal-close>Cancel</button>
+                    <button type="submit" class="button primary">Reserve</button>
+                  </span>
                 </div>
               </form>
             </div>
@@ -82,16 +99,18 @@ class ReservationUIManager {
                 </label>
                 <label>Duration
                   <select name="duration_minutes">
-                    <option value="30">30 minutes</option>
-                    <option value="45">45 minutes</option>
-                    <option value="60">60 minutes</option>
+                    <?php foreach (HoldBlockManagement::DURATION_OPTIONS as $minutes): ?>
+                      <option value="<?=$minutes?>"><?=self::durationLabel($minutes)?></option>
+                    <?php endforeach; ?>
                   </select>
                 </label>
                 <p class="small">The slot is held on every class date this semester, so no student
                 can be booked into it.</p>
-                <div class="actions">
-                  <button type="submit" class="button primary">Hold</button>
-                  <button type="button" class="button" data-modal-close>Cancel</button>
+                <div class="actions actions-split">
+                  <span class="actions-right">
+                    <button type="button" class="button" data-modal-close>Cancel</button>
+                    <button type="submit" class="button primary">Hold</button>
+                  </span>
                 </div>
               </form>
             </div>
@@ -118,10 +137,12 @@ class ReservationUIManager {
               </label>
               <p class="small">Confirming generates the semester's lessons and posts its charges;
               reverting to pending deletes the future lessons.</p>
-              <div class="actions">
-                <button type="submit" class="button primary">Save</button>
+              <div class="actions actions-split">
                 <button type="button" class="button danger" id="resEditDelete">Delete reservation</button>
-                <button type="button" class="button" data-modal-close>Cancel</button>
+                <span class="actions-right">
+                  <button type="button" class="button" data-modal-close>Cancel</button>
+                  <button type="submit" class="button primary">Save</button>
+                </span>
               </div>
             </form>
           </div>
@@ -142,17 +163,19 @@ class ReservationUIManager {
               </label>
               <label>Duration
                 <select name="duration_minutes" id="holdEditDuration">
-                  <option value="30">30 minutes</option>
-                  <option value="45">45 minutes</option>
-                  <option value="60">60 minutes</option>
+                  <?php foreach (HoldBlockManagement::DURATION_OPTIONS as $minutes): ?>
+                    <option value="<?=$minutes?>"><?=self::durationLabel($minutes)?></option>
+                  <?php endforeach; ?>
                 </select>
               </label>
               <p class="small">Future blocks follow the change; any week that was edited on its own
               is left alone.</p>
-              <div class="actions">
-                <button type="submit" class="button primary">Save</button>
+              <div class="actions actions-split">
                 <button type="button" class="button danger" id="holdEditDelete">Delete hold block</button>
-                <button type="button" class="button" data-modal-close>Cancel</button>
+                <span class="actions-right">
+                  <button type="button" class="button" data-modal-close>Cancel</button>
+                  <button type="submit" class="button primary">Save</button>
+                </span>
               </div>
             </form>
           </div>
@@ -197,30 +220,39 @@ class ReservationUIManager {
             tab.addEventListener('click', function () { selectTab(tab.dataset.tabTarget); });
           });
 
-          // One delegated handler for every grid cell.
+          // One delegated handler for every grid cell. A filled cell holds one
+          // .cell-item per commitment (usually exactly one), so the click
+          // resolves to the item that was actually clicked.
           document.addEventListener('click', function (e) {
             if (!e.target.closest) return;
             if (e.target.closest('.modal')) return;
-            var cell = e.target.closest('td.grid-cell');
-            if (!cell) return;
 
-            if (cell.dataset.reservationId) {
-              document.getElementById('resEditId').value = cell.dataset.reservationId;
-              document.getElementById('resEditTitle').textContent = cell.dataset.studentName || 'Reservation';
-              document.getElementById('resEditContext').textContent = cell.dataset.context || '';
-              document.getElementById('resEditBalance').textContent = cell.dataset.balanceText || '';
-              document.getElementById('resEditStatus').value = cell.dataset.status;
+            var item = e.target.closest('.cell-item');
+            if (item && item.dataset.reservationId) {
+              document.getElementById('resEditId').value = item.dataset.reservationId;
+              document.getElementById('resEditTitle').textContent = item.dataset.studentName || 'Reservation';
+              document.getElementById('resEditContext').textContent = item.dataset.context || '';
+              document.getElementById('resEditBalance').textContent = item.dataset.balanceText || '';
+              document.getElementById('resEditStatus').value = item.dataset.status;
               document.getElementById('resEditErr').classList.add('hidden');
               openModal(editModal);
-            } else if (cell.dataset.holdReservationId) {
-              document.getElementById('holdEditId').value = cell.dataset.holdReservationId;
-              document.getElementById('holdEditHeading').textContent = cell.dataset.holdTitle || 'Hold block';
-              document.getElementById('holdEditContext').textContent = cell.dataset.context || '';
-              document.getElementById('holdEditTitle').value = cell.dataset.holdTitle || '';
-              document.getElementById('holdEditDuration').value = cell.dataset.duration || '30';
+              return;
+            }
+            if (item && item.dataset.holdReservationId) {
+              document.getElementById('holdEditId').value = item.dataset.holdReservationId;
+              document.getElementById('holdEditHeading').textContent = item.dataset.holdTitle || 'Hold block';
+              document.getElementById('holdEditContext').textContent = item.dataset.context || '';
+              document.getElementById('holdEditTitle').value = item.dataset.holdTitle || '';
+              document.getElementById('holdEditDuration').value = item.dataset.duration || '30';
               document.getElementById('holdEditErr').classList.add('hidden');
               openModal(holdEditModal);
-            } else if (cell.dataset.locationId) {
+              return;
+            }
+            if (item) return; // some other kind of commitment
+
+            var cell = e.target.closest('td.grid-cell');
+            if (!cell) return;
+            if (cell.dataset.locationId) {
               ['resAdd', 'holdAdd'].forEach(function (prefix) {
                 document.getElementById(prefix + 'LocationId').value = cell.dataset.locationId;
                 document.getElementById(prefix + 'TeacherId').value = cell.dataset.teacherId;
