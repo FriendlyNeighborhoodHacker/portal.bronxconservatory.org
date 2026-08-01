@@ -26,6 +26,7 @@ require_once __DIR__ . '/../../www/lib/PeopleCsvImport.php';
 require_once __DIR__ . '/../../www/lib/LocationCsvImport.php';
 require_once __DIR__ . '/../../www/lib/LocationDatesCsvImport.php';
 require_once __DIR__ . '/../../www/lib/LocationTeachersCsvImport.php';
+require_once __DIR__ . '/../../www/lib/HoldBlocksCsvImport.php';
 require_once __DIR__ . '/../../www/lib/StripeCheckout.php';
 require_once __DIR__ . '/../../www/lib/MigrationRunner.php';
 require_once __DIR__ . '/../../www/lib/ActivityLog.php';

@@ -6,6 +6,7 @@
 //   teachers           — create/update teachers (TeacherCsvImport)
 //   location_dates     — a semester's class dates   (LocationDatesCsvImport)
 //   location_teachers  — a semester's teacher-location pairs (LocationTeachersCsvImport)
+//   hold_blocks        — teachers' standing non-lesson time (HoldBlocksCsvImport)
 // In-progress state (parsed rows, mapping, validation) lives in
 // $_SESSION['import_<flow>'].
 require_once __DIR__ . '/../../partials.php';
@@ -15,6 +16,7 @@ require_once __DIR__ . '/../../lib/PeopleCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationDatesCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationTeachersCsvImport.php';
+require_once __DIR__ . '/../../lib/HoldBlocksCsvImport.php';
 require_once __DIR__ . '/../../lib/SemesterManagement.php';
 
 function import_flows(): array {
@@ -46,6 +48,12 @@ function import_flows(): array {
         'location_teachers' => [
             'title' => 'Import Location Teachers',
             'class' => 'LocationTeachersCsvImport',
+            'needs_semester' => true,
+            'default_next' => '/admin/semesters.php',
+        ],
+        'hold_blocks' => [
+            'title' => 'Import Hold Blocks',
+            'class' => 'HoldBlocksCsvImport',
             'needs_semester' => true,
             'default_next' => '/admin/semesters.php',
         ],
@@ -222,6 +230,24 @@ function import_columns_help_html(array $flow): string {
             $example = "Teacher Name,Location Name\n"
                 . "Marisol Vega,Bronx Community College\n"
                 . "James Okafor,Access Bronx Charter School";
+            break;
+
+        case 'hold_blocks':
+            $intro = 'One row per standing block of a teacher\'s non-lesson time — lunch, a '
+                . 'regular errand. Each row holds that slot on every class date this semester, '
+                . 'so no student can be booked into it. The teacher must already be assigned to '
+                . 'the location (import location teachers first).';
+            $columns = [
+                ['Teacher Name', 'required', 'first and last name, e.g. "Marisol Vega"'],
+                ['Location Name', 'required', 'must match an active location for this semester'],
+                ['Day', 'required', 'weekday name, e.g. "Saturday" (or 0=Sunday … 6=Saturday)'],
+                ['Start Time', 'required', '12:00 pm, 12:00 PM, or 12:00'],
+                ['End Time', 'required', 'same formats; must be after Start Time, at most 4 hours later'],
+                ['Title', 'required', 'what the time is for, e.g. "Lunch"'],
+            ];
+            $example = "Teacher Name,Location Name,Day,Start Time,End Time,Title\n"
+                . "Marisol Vega,Access Bronx Charter School,Saturday,12:00 pm,1:30 pm,Lunch\n"
+                . "Andre Baptiste,Bronx Community College,Saturday,12:00 pm,1:30 pm,Lunch";
             break;
     }
 

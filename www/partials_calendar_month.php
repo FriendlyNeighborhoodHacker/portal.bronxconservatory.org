@@ -51,17 +51,19 @@ function calendar_month_html(string $month, array $dayContentByDate, array $navU
         }
         $date = date('Y-m-d', strtotime($month . '-' . sprintf('%02d', $day)));
         $classes = 'cal-day' . ($date === $today ? ' cal-today' : '');
-        $html .= '<td class="' . $classes . '">';
         $dayLabel = (string)$day;
-        if (is_callable($dayLinkFn)) {
-            $html .= '<a class="cal-day-num" href="' . h($dayLinkFn($date)) . '">' . $dayLabel . '</a>';
-        } else {
-            $html .= '<span class="cal-day-num">' . $dayLabel . '</span>';
-        }
+        $body = '<span class="cal-day-num">' . $dayLabel . '</span>';
         foreach ($dayContentByDate[$date] ?? [] as $chipHtml) {
-            $html .= $chipHtml;
+            $body .= $chipHtml;
         }
-        $html .= '</td>';
+        // When the view has a week to link to, the WHOLE cell is the link —
+        // chips are plain spans, so nesting them in the anchor is safe.
+        if (is_callable($dayLinkFn)) {
+            $html .= '<td class="' . $classes . ' cal-day-linked">'
+                . '<a class="cal-day-link" href="' . h($dayLinkFn($date)) . '">' . $body . '</a></td>';
+        } else {
+            $html .= '<td class="' . $classes . '">' . $body . '</td>';
+        }
         $cell++;
     }
     while ($cell < 7) {

@@ -155,6 +155,140 @@ final class ReservationManagementTest extends TestCase
         $this->assertSame([1, 2, 3, 4], array_map(fn($l) => (int)$l['lesson_number'], $lessons));
     }
 
+    // ── Moving a reservation ───────────────────────────────────────────────
+
+    public function testMoveWithinTheDayPreservesPerLessonData(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);
+        [$reservationId] = $this->makeReservation($setup, 'confirmed');
+        $before = $this->lessonRows($reservationId);
+        $this->assertCount(3, $before);
+
+        // A note on week 1 and a "missed" mark on week 2 — the things the old
+        // delete-and-regenerate path silently destroyed.
+        NotesManagement::saveLessonNote($this->ctx, (int)$before[0]['id'], 'Worked on scales.');
+        LessonManagement::markAttendance($this->ctx, (int)$before[1]['id'], false);
+
+        ReservationManagement::updateReservation($this->ctx, $reservationId, [
+            'start_time' => '11:00', 'duration_minutes' => 45,
+        ]);
+
+        $after = $this->lessonRows($reservationId);
+        // Same rows, retimed and resized in place.
+        $this->assertSame(
+            array_map(fn($l) => (int)$l['id'], $before),
+            array_map(fn($l) => (int)$l['id'], $after)
+        );
+        $this->assertSame(
+            ['2030-09-07 11:00:00', '2030-09-14 11:00:00', '2030-09-21 11:00:00'],
+            array_column($after, 'start_datetime')
+        );
+        $this->assertSame([45, 45, 45], array_map(fn($l) => (int)$l['duration_minutes'], $after));
+
+        $note = NotesManagement::lessonNoteFor((int)$before[0]['id'], $this->ctx->id);
+        $this->assertSame('Worked on scales.', $note['body']);
+        $this->assertSame(0, (int)$after[1]['attended']);
+    }
+
+    public function testMoveLeavesHandCustomizedLessonsAlone(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);
+        [$reservationId] = $this->makeReservation($setup, 'confirmed');
+        $lessons = $this->lessonRows($reservationId);
+
+        // Week 2 was rescheduled by hand to 14:00.
+        LessonManagement::rescheduleWithinDay($this->ctx, (int)$lessons[1]['id'], '14:00');
+
+        ReservationManagement::updateReservation($this->ctx, $reservationId, ['start_time' => '11:00']);
+
+        $this->assertSame(
+            ['2030-09-07 11:00:00', '2030-09-14 14:00:00', '2030-09-21 11:00:00'],
+            array_column($this->lessonRows($reservationId), 'start_datetime')
+        );
+    }
+
+    public function testMoveLeavesCollidingLessonsWhereTheyAre(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);
+        [$reservationId] = $this->makeReservation($setup, 'confirmed');
+
+        // Another student's confirmed lesson sits at 11:00 on week 2 only.
+        [$semesterId, $locationId, $teacherId, $dayOfWeek] = $setup;
+        $otherId = ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacherId,
+            'location_id' => $locationId, 'student_user_id' => fx_student('Other', 'Student'),
+            'day_of_week' => $dayOfWeek, 'start_time' => '15:00',
+            'duration_minutes' => 30, 'status' => 'confirmed',
+        ]);
+        pdo()->prepare('UPDATE lessons SET start_datetime=? WHERE semester_lesson_reservation_id=? AND DATE(start_datetime)=?')
+            ->execute(['2030-09-14 11:00:00', $otherId, '2030-09-14']);
+
+        ReservationManagement::updateReservation($this->ctx, $reservationId, ['start_time' => '11:00']);
+
+        $this->assertSame(
+            ['2030-09-07 11:00:00', '2030-09-14 10:00:00', '2030-09-21 11:00:00'],
+            array_column($this->lessonRows($reservationId), 'start_datetime')
+        );
+    }
+
+    public function testMoveDoesNotDisturbPastLessons(): void
+    {
+        $pastFirst = date('Y-m-d', strtotime('-2 weeks', strtotime('last saturday')));
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), $pastFirst, 5);
+        [$reservationId] = $this->makeReservation($setup, 'confirmed');
+
+        $before = [];
+        foreach ($this->lessonRows($reservationId) as $lesson) {
+            if (strtotime((string)$lesson['start_datetime']) <= time()) {
+                $before[(int)$lesson['id']] = (string)$lesson['start_datetime'];
+            }
+        }
+        $this->assertGreaterThan(0, count($before));
+
+        ReservationManagement::updateReservation($this->ctx, $reservationId, ['start_time' => '11:00']);
+
+        foreach ($this->lessonRows($reservationId) as $lesson) {
+            $id = (int)$lesson['id'];
+            if (isset($before[$id])) {
+                $this->assertSame($before[$id], (string)$lesson['start_datetime']);
+            } else {
+                $this->assertSame('11:00:00', substr((string)$lesson['start_datetime'], 11));
+            }
+        }
+    }
+
+    public function testChangingDayOfWeekRegeneratesOnTheNewDates(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3); // Saturdays
+        [$semesterId, $locationId] = $setup;
+        [$reservationId] = $this->makeReservation($setup, 'confirmed');
+
+        foreach (['2030-09-08', '2030-09-15'] as $date) {
+            SemesterManagement::upsertLocationDate($this->ctx, $semesterId, $locationId, $date, '09:00:00', '17:00:00', 'active', 'Sunday');
+        }
+        ReservationManagement::updateReservation($this->ctx, $reservationId, ['day_of_week' => 0]);
+
+        $this->assertSame(
+            ['2030-09-08 10:00:00', '2030-09-15 10:00:00'],
+            array_column($this->lessonRows($reservationId), 'start_datetime')
+        );
+    }
+
+    public function testMoveOntoAnotherReservationsSlotIsRejected(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);
+        [$semesterId, $locationId, $teacherId, $dayOfWeek] = $setup;
+        [$reservationId] = $this->makeReservation($setup);
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacherId,
+            'location_id' => $locationId, 'student_user_id' => fx_student('Other', 'Student'),
+            'day_of_week' => $dayOfWeek, 'start_time' => '11:00', 'duration_minutes' => 30,
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        ReservationManagement::updateReservation($this->ctx, $reservationId, ['start_time' => '11:00']);
+    }
+
     public function testGridDataShape(): void
     {
         $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 2);

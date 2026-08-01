@@ -288,6 +288,149 @@ final class ImportFlowsTest extends TestCase
         $this->assertSame('Already assigned (no change)', $again[0]['changes']);
     }
 
+    // ── Hold blocks ────────────────────────────────────────────────────────
+
+    /** @return array{0:int,1:int,2:int,3:string} [semesterId, locationId, teacherId, locationName] */
+    private function holdBlockSetup(): array
+    {
+        $teacher = fx_teacher('Marisol', 'Vega');
+        // Saturdays, so day 6 matches the generated class dates.
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
+        $locationName = (string)pdo()->query("SELECT name FROM locations WHERE id=$locationId")->fetchColumn();
+        return [$semesterId, $locationId, $teacher, $locationName];
+    }
+
+    public function testHoldBlocksImportCreatesReservationsAndBlocks(): void
+    {
+        [$semesterId, $locationId, $teacher, $locationName] = $this->holdBlockSetup();
+
+        $validated = HoldBlocksCsvImport::validateRows([
+            ['teacher_name' => 'Marisol Vega', 'location_name' => $locationName,
+             'day' => 'Saturday', 'start_time' => '12:00 pm', 'end_time' => '1:30 pm', 'title' => 'Lunch'],
+        ], ['semester_id' => $semesterId]);
+
+        $this->assertSame('valid', $validated[0]['status']);
+        $this->assertStringContainsString('Hold Lunch for Marisol Vega on Saturdays', $validated[0]['changes']);
+
+        $summary = HoldBlocksCsvImport::commit($this->ctx, $validated, ['semester_id' => $semesterId]);
+        $this->assertSame(1, $summary['created']);
+
+        $holds = HoldBlockManagement::holdBlockReservationsForSemester($semesterId);
+        $this->assertCount(1, $holds);
+        $this->assertSame('Lunch', $holds[0]['title']);
+        $this->assertSame('12:00:00', $holds[0]['start_time']);
+        $this->assertSame(90, (int)$holds[0]['duration_minutes']);
+        $this->assertSame($teacher, (int)$holds[0]['teacher_user_id']);
+        $this->assertSame($locationId, (int)$holds[0]['location_id']);
+
+        // One block per active class date, at the imported time.
+        $blocks = HoldBlockManagement::holdBlocksBetween('2030-09-07', '2030-09-21', $semesterId);
+        $this->assertSame(
+            ['2030-09-07 12:00:00', '2030-09-14 12:00:00', '2030-09-21 12:00:00'],
+            array_column($blocks, 'start_datetime')
+        );
+
+        // Re-importing the same slot is a no-op, not a conflict error.
+        $again = HoldBlocksCsvImport::validateRows([
+            ['teacher_name' => 'Marisol Vega', 'location_name' => $locationName,
+             'day' => 'sat', 'start_time' => '12:00', 'end_time' => '13:30', 'title' => 'Lunch'],
+        ], ['semester_id' => $semesterId]);
+        $this->assertSame('Already held (no change)', $again[0]['changes']);
+        $this->assertSame(0, HoldBlocksCsvImport::commit($this->ctx, $again, ['semester_id' => $semesterId])['created']);
+        $this->assertCount(1, HoldBlockManagement::holdBlockReservationsForSemester($semesterId));
+    }
+
+    public function testHoldBlocksImportRejectsBadRows(): void
+    {
+        [$semesterId, , , $locationName] = $this->holdBlockSetup();
+        fx_teacher('Unassigned', 'Teacher');
+
+        $base = ['teacher_name' => 'Marisol Vega', 'location_name' => $locationName,
+                 'day' => 'Saturday', 'start_time' => '12:00 pm', 'end_time' => '1:30 pm', 'title' => 'Lunch'];
+
+        $validated = HoldBlocksCsvImport::validateRows([
+            ['day' => 'Blursday'] + $base,
+            ['start_time' => '2:00 pm', 'end_time' => '1:00 pm'] + $base,
+            ['start_time' => '8:00 am', 'end_time' => '3:00 pm'] + $base,
+            ['title' => '  '] + $base,
+            ['teacher_name' => 'Unassigned Teacher'] + $base,
+            ['teacher_name' => 'Nobody Here'] + $base,
+            ['location_name' => 'Nowhere'] + $base,
+            $base,
+            $base, // duplicate of the row above
+        ], ['semester_id' => $semesterId]);
+
+        $expected = [
+            'Unknown day "Blursday"',
+            'End time must be after the start time.',
+            'cannot be longer than 4 hours',
+            'Title is required',
+            'is not assigned to',
+            'No match found for teacher',
+            'No match found for location',
+        ];
+        foreach ($expected as $i => $fragment) {
+            $this->assertSame('error', $validated[$i]['status'], "row $i should be an error");
+            $this->assertStringContainsString($fragment, implode(' ', $validated[$i]['messages']));
+        }
+        $this->assertSame('valid', $validated[7]['status']);
+        $this->assertSame('error', $validated[8]['status']);
+        $this->assertStringContainsString('Duplicate row', $validated[8]['messages'][0]);
+
+        // Only the one good row commits.
+        $this->assertSame(1, HoldBlocksCsvImport::commit($this->ctx, $validated, ['semester_id' => $semesterId])['created']);
+    }
+
+    public function testHoldBlocksImportRejectsSlotTakenByALesson(): void
+    {
+        [$semesterId, $locationId, $teacher, $locationName] = $this->holdBlockSetup();
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'location_id' => $locationId, 'student_user_id' => fx_student(),
+            'day_of_week' => 6, 'start_time' => '12:30', 'duration_minutes' => 30,
+        ]);
+
+        $validated = HoldBlocksCsvImport::validateRows([
+            ['teacher_name' => 'Marisol Vega', 'location_name' => $locationName,
+             'day' => 'Saturday', 'start_time' => '12:00 pm', 'end_time' => '1:30 pm', 'title' => 'Lunch'],
+        ], ['semester_id' => $semesterId]);
+        // Validation can't see it (it only knows about other hold blocks), so
+        // the commit surfaces the conflict rather than silently double-booking.
+        $this->assertSame('valid', $validated[0]['status']);
+        $this->expectException(InvalidArgumentException::class);
+        HoldBlocksCsvImport::commit($this->ctx, $validated, ['semester_id' => $semesterId]);
+    }
+
+    public function testDayOfWeekParsing(): void
+    {
+        $this->assertSame(6, HoldBlocksCsvImport::parseDayOfWeek('Saturday'));
+        $this->assertSame(6, HoldBlocksCsvImport::parseDayOfWeek('  SAT '));
+        $this->assertSame(0, HoldBlocksCsvImport::parseDayOfWeek('sunday'));
+        $this->assertSame(0, HoldBlocksCsvImport::parseDayOfWeek('0'));
+        $this->assertSame(4, HoldBlocksCsvImport::parseDayOfWeek('Thurs'));
+        $this->assertNull(HoldBlocksCsvImport::parseDayOfWeek('7'));
+        $this->assertNull(HoldBlocksCsvImport::parseDayOfWeek(''));
+        $this->assertNull(HoldBlocksCsvImport::parseDayOfWeek('someday'));
+    }
+
+    public function testSampleHoldBlocksCsvParsesAndValidates(): void
+    {
+        $path = __DIR__ . '/../../../sample_data/hold_blocks.csv';
+        $this->assertFileExists($path);
+        $parsed = CsvImport::parseCsv((string)file_get_contents($path), ',');
+        $this->assertSame(
+            ['Teacher Name', 'Location Name', 'Day', 'Start Time', 'End Time', 'Title'],
+            $parsed['headers']
+        );
+        $this->assertCount(7, $parsed['rows']);
+        foreach ($parsed['rows'] as $row) {
+            $this->assertSame('Lunch', $row[5]);
+            $this->assertSame(6, HoldBlocksCsvImport::parseDayOfWeek($row[2]));
+            $this->assertSame('12:00:00', LocationDatesCsvImport::parseTime($row[3]));
+            $this->assertSame('13:30:00', LocationDatesCsvImport::parseTime($row[4]));
+        }
+    }
+
     public function testTimeAndDateParsing(): void
     {
         $this->assertSame('09:00:00', LocationDatesCsvImport::parseTime('9:00 am'));

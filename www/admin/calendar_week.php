@@ -9,6 +9,7 @@ require_once __DIR__ . '/../lib/LessonManagement.php';
 require_once __DIR__ . '/../lib/HoldBlockManagement.php';
 require_once __DIR__ . '/../lib/NotesManagement.php';
 require_once __DIR__ . '/../lib/LessonUIManager.php';
+require_once __DIR__ . '/../lib/HoldBlockUIManager.php';
 Application::init();
 require_admin();
 
@@ -105,13 +106,16 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson) 
     }
 
     if ($occupant['kind'] === 'hold') {
-        // No data-lesson-id, so LessonUIManager's delegated handler ignores it.
+        // data-hold-block-id (not data-lesson-id) opens HoldBlockUIManager's
+        // modal, which edits this ONE week.
         return [
             'html' => '<span class="cell-student">' . h((string)$occupant['effective_title']) . '</span>'
                     . '<span class="cell-status">Held</span>',
             'class' => 'res-hold',
             'rowspan' => max(1, (int)ceil((int)$occupant['duration_minutes'] / 30)),
             'attrs' => [
+                'data-hold-block-id' => $occupant['id'],
+                'data-hold-title' => $occupant['effective_title'],
                 'data-context' => date('D M j · g:i a', strtotime((string)$occupant['start_datetime']))
                     . ' · ' . ((int)$occupant['duration_minutes']) . ' min'
                     . ' · ' . $occupant['location_name'],
@@ -175,10 +179,11 @@ header_html('Calendar Week', ['wide' => true]);
 <?php else: ?>
   <?=schedule_grid_html($columns, $rows, $cellFn)?>
   <p class="small" style="margin-top:10px;">Click a lesson to reschedule it within the day,
-  mark it missed, assign a substitute, or add a note. Grey cells are hold blocks —
-  edit those on the <a href="/admin/schedule.php">Semester Schedule</a>.</p>
+  mark it missed, assign a substitute, or add a note. Click a grey hold block to change
+  just that week.</p>
 <?php endif; ?>
 
 <?php LessonUIManager::renderModal(); ?>
+<?php HoldBlockUIManager::renderModal(); ?>
 
 <?php footer_html(); ?>

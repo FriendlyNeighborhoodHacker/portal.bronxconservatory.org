@@ -17,6 +17,9 @@ Reset first with `./reset_db.sh`, then upload in this order:
    with Thanksgiving weekend inactive)
 5. **location_teachers.csv** — semester wizard step 4 (the schedule grid's
    columns)
+6. **hold_blocks.csv** — Admin > Semesters > Import Hold Blocks. Gives every
+   teacher a Saturday lunch, 12:00–1:30 pm, at each location they teach at,
+   so those cells are held instead of bookable.
 
 Then open the Semester Schedule and click empty cells to reserve slots for
 the imported students.

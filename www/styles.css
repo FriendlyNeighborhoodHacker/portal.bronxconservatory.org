@@ -1068,8 +1068,32 @@ body.auth .brand-logo {
   text-decoration: none;
 }
 
-a.cal-day-num:hover {
+/* The whole day cell is the link to that week, not just the number. */
+.cal-month td.cal-day-linked {
+  padding: 0;
+}
+
+.cal-day-link {
+  display: block;
+  height: 100%;
+  padding: 4px;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* A shade stronger than --color-accent-soft so hovering today's cell
+   (which already carries that background) still reads as a hover. */
+.cal-day-link:hover {
+  background: #d5e2f6;
+}
+
+.cal-day-link:hover .cal-day-num {
   color: var(--color-primary);
+}
+
+.cal-day-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 .cal-today {

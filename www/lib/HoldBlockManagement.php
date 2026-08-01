@@ -284,7 +284,88 @@ class HoldBlockManagement {
         return $st->fetchAll();
     }
 
+    /** A teacher's blocks on one date, time order (slot-availability checks). */
+    public static function holdBlocksForTeacherOnDate(int $teacherUserId, string $date): array {
+        $st = self::pdo()->prepare(
+            self::BLOCK_SELECT .
+            ' WHERE DATE(b.start_datetime) = ? AND hr.teacher_user_id = ?
+              ORDER BY b.start_datetime'
+        );
+        $st->execute([$date, $teacherUserId]);
+        return $st->fetchAll();
+    }
+
+    public static function getBlock(int $blockId): ?array {
+        $st = self::pdo()->prepare(self::BLOCK_SELECT . ' WHERE b.id=? LIMIT 1');
+        $st->execute([$blockId]);
+        $row = $st->fetch();
+        return $row ?: null;
+    }
+
+    // ── Single occurrences ─────────────────────────────────────────────────
+    //
+    // One week of a standing hold block, edited on the weekly calendar. These
+    // touch only that row; the reservation and its other weeks are untouched.
+    // A retimed week stops following the standing schedule — the reservation's
+    // in-place move deliberately leaves it alone afterwards.
+
+    /** Move one block to another time on its own day. */
+    public static function rescheduleBlockWithinDay(?UserContext $ctx, int $blockId, string $newStartTime): void {
+        self::assertAdmin($ctx);
+        $block = self::requireBlock($blockId);
+        $newStartTime = self::normalizeTime($newStartTime);
+        $newStart = date('Y-m-d', strtotime((string)$block['start_datetime'])) . ' ' . $newStartTime;
+
+        $conflict = ScheduleConflicts::occurrenceConflict(
+            (int)$block['teacher_user_id'], $newStart, (int)$block['duration_minutes'], null, $blockId
+        );
+        if ($conflict !== null) {
+            throw new InvalidArgumentException($conflict);
+        }
+
+        self::pdo()->prepare('UPDATE semester_hold_blocks SET start_datetime=? WHERE id=?')
+            ->execute([$newStart, $blockId]);
+        self::log($ctx, 'hold_block.rescheduled', ['hold_block_id' => $blockId, 'start_datetime' => $newStart]);
+    }
+
+    /**
+     * Give one week its own title, or clear the override so it follows the
+     * reservation's standing title again. A title matching the standing one
+     * is stored as no override at all.
+     */
+    public static function setBlockTitleOverride(?UserContext $ctx, int $blockId, ?string $title): void {
+        self::assertAdmin($ctx);
+        $block = self::requireBlock($blockId);
+
+        $override = $title === null || trim($title) === '' ? null : self::normalizeTitle($title);
+        if ($override === (string)$block['title']) {
+            $override = null;
+        }
+
+        self::pdo()->prepare('UPDATE semester_hold_blocks SET title_override=? WHERE id=?')
+            ->execute([$override, $blockId]);
+        self::log($ctx, 'hold_block.title_overridden', [
+            'hold_block_id' => $blockId, 'title_override' => $override,
+        ]);
+    }
+
+    /** Drop a single week ("no lunch this week"); the reservation stays. */
+    public static function deleteBlock(?UserContext $ctx, int $blockId): void {
+        self::assertAdmin($ctx);
+        self::requireBlock($blockId);
+        self::pdo()->prepare('DELETE FROM semester_hold_blocks WHERE id=?')->execute([$blockId]);
+        self::log($ctx, 'hold_block.deleted', ['hold_block_id' => $blockId]);
+    }
+
     // ── internals ─────────────────────────────────────────────────────────
+
+    private static function requireBlock(int $blockId): array {
+        $block = self::getBlock($blockId);
+        if (!$block) {
+            throw new InvalidArgumentException('Hold block not found.');
+        }
+        return $block;
+    }
 
     private static function requireHoldBlockReservation(int $reservationId): array {
         $st = self::pdo()->prepare('SELECT * FROM semester_hold_block_reservations WHERE id=? LIMIT 1');

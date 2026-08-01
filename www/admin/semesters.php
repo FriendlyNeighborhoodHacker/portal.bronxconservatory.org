@@ -48,6 +48,7 @@ header_html('Semesters');
     <a class="button" href="/admin/semester/locations.php?semester_id=<?=$semesterId?>">Locations</a>
     <a class="button" href="/admin/import/upload.php?flow=location_dates&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Class Dates</a>
     <a class="button" href="/admin/import/upload.php?flow=location_teachers&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Location Teachers</a>
+    <a class="button" href="/admin/import/upload.php?flow=hold_blocks&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Hold Blocks</a>
     <a class="button" href="/admin/semester_select.php?semester_id=<?=$semesterId?>&return=<?=h(urlencode('/admin/schedule.php'))?>">Open Schedule</a>
   </div>
 </div>

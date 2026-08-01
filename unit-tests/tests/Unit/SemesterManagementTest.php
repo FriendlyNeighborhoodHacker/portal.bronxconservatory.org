@@ -42,6 +42,60 @@ final class SemesterManagementTest extends TestCase
         SemesterManagement::createSemester(new UserContext(fx_user('N', 'A'), false), 'fall', 2030, '2030-09-01', '2030-12-20');
     }
 
+    public function testUpdateChangesSeasonYearAndDates(): void
+    {
+        $id = SemesterManagement::createSemester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+        SemesterManagement::updateSemester($this->ctx, $id, 'spring', 2031, '2031-01-15', '2031-05-30');
+
+        $semester = SemesterManagement::find($id);
+        $this->assertSame('Spring 2031', SemesterManagement::label($semester));
+        $this->assertSame('2031-01-15', $semester['start_date']);
+        $this->assertSame('2031-05-30', $semester['end_date']);
+    }
+
+    public function testUpdateRejectsDuplicateSeasonYear(): void
+    {
+        SemesterManagement::createSemester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+        $spring = SemesterManagement::createSemester($this->ctx, 'spring', 2031, '2031-01-15', '2031-05-30');
+
+        $this->expectException(InvalidArgumentException::class);
+        SemesterManagement::updateSemester($this->ctx, $spring, 'fall', 2030, '2031-01-15', '2031-05-30');
+    }
+
+    public function testUpdateRejectsEndBeforeStartAndUnknownSemester(): void
+    {
+        $id = SemesterManagement::createSemester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+        try {
+            SemesterManagement::updateSemester($this->ctx, $id, 'fall', 2030, '2030-12-20', '2030-09-01');
+            $this->fail('Expected end-before-start to be rejected.');
+        } catch (InvalidArgumentException $e) {
+            // expected
+        }
+
+        $this->expectException(InvalidArgumentException::class);
+        SemesterManagement::updateSemester($this->ctx, $id + 999, 'fall', 2031, '2031-09-01', '2031-12-20');
+    }
+
+    public function testUpdateDoesNotTouchClassDates(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 4);
+        [$semesterId] = $setup;
+        $this->assertCount(4, SemesterManagement::locationDates($semesterId));
+
+        // A range that excludes every class date changes nothing but the row.
+        SemesterManagement::updateSemester($this->ctx, $semesterId, 'fall', 2030, '2030-01-01', '2030-01-31');
+        $this->assertCount(4, SemesterManagement::locationDates($semesterId));
+        $this->assertSame(4, SemesterManagement::countLocationDatesOutsideRange($semesterId, '2030-01-01', '2030-01-31'));
+        $this->assertSame(0, SemesterManagement::countLocationDatesOutsideRange($semesterId, '2030-09-01', '2030-12-31'));
+    }
+
+    public function testNonAdminCannotUpdate(): void
+    {
+        $id = SemesterManagement::createSemester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+        $this->expectException(RuntimeException::class);
+        SemesterManagement::updateSemester(new UserContext(fx_user('N', 'A'), false), $id, 'fall', 2031, '2031-09-01', '2031-12-20');
+    }
+
     public function testDefaultSemesterPrefersCurrentThenFutureThenPast(): void
     {
         $past = SemesterManagement::createSemester($this->ctx, 'fall', 2024, '2024-09-01', '2024-12-20');
