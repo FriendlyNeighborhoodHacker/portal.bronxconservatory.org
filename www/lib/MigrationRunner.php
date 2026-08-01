@@ -5,32 +5,47 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/ActivityLog.php';
 
 /**
- * Lists and applies database migrations from db_migrations/, tracking what's
- * been applied in the `schema_migrations` table (created by schema.sql, so
- * fresh installs are tracked from day one).
+ * Lists and applies database migrations from the db_migrations directory,
+ * tracking what's been applied in the `schema_migrations` table (created by
+ * schema.sql, so fresh installs are tracked from day one).
+ *
+ * The migrations directory lives OUTSIDE the web root (top level of the repo
+ * in dev; the deploy checkout in production), so its absolute path is
+ * per-machine configuration: MIGRATIONS_DIR in config.local.php. With no
+ * MIGRATIONS_DIR the runner is considered unconfigured and Admin > Migrations
+ * is switched off — there is deliberately no relative-path fallback, so a
+ * machine can't quietly apply migrations from an unexpected directory.
  *
  * The `schema_migrations` table is the single source of truth: the runner
  * (Admin > Migrations) only ever applies migrations it sees as NOT yet
  * recorded, so it never re-applies an already-applied migration.
  *
  * Applying arbitrary SQL from a web request is only safe because the files
- * come from the server-side db_migrations directory (trusted, checked-in) and
- * callers may only name files that actually exist there — never arbitrary
- * paths or SQL.
+ * come from that server-side directory (trusted, checked-in) and callers may
+ * only name files that actually exist there — never arbitrary paths or SQL.
  */
 final class MigrationRunner {
 
     /** @var ?string Test override for the migrations directory. */
     private static ?string $dirOverrideForTesting = null;
 
-    /** Absolute path to the migrations directory (configurable via MIGRATIONS_DIR). */
+    /**
+     * Is a migrations directory configured on this machine? When false the
+     * migrations UI is disabled (nothing to list, nothing to apply).
+     */
+    public static function isConfigured(): bool {
+        return self::dir() !== '';
+    }
+
+    /**
+     * Absolute path to the migrations directory (MIGRATIONS_DIR), or '' when
+     * this machine has none configured.
+     */
     public static function dir(): string {
         if (self::$dirOverrideForTesting !== null) {
             return self::$dirOverrideForTesting;
         }
-        return defined('MIGRATIONS_DIR')
-            ? (string)MIGRATIONS_DIR
-            : dirname(__DIR__) . '/db_migrations';
+        return defined('MIGRATIONS_DIR') ? trim((string)MIGRATIONS_DIR) : '';
     }
 
     /** Point the runner at a different directory in tests (null to reset). */
@@ -135,9 +150,16 @@ final class MigrationRunner {
      * @param string[]     $requested Filenames selected by the admin.
      * @param ?UserContext $ctx       For the activity log.
      * @return array{applied:string[],skipped:string[],failed:?array{filename:string,error:string}}
-     * @throws RuntimeException if tracking isn't initialized.
+     * @throws RuntimeException if no directory is configured or tracking
+     *         isn't initialized.
      */
     public static function apply(array $requested, ?UserContext $ctx): array {
+        if (!self::isConfigured()) {
+            throw new RuntimeException(
+                'No migrations directory is configured on this server '
+                . '(set MIGRATIONS_DIR in config.local.php).'
+            );
+        }
         if (!self::trackingTableExists()) {
             throw new RuntimeException(
                 'Migration tracking is not initialized. Load the current schema.sql first.'

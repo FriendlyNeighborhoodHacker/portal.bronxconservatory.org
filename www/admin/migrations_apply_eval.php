@@ -11,6 +11,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 require_csrf();
 
+if (!MigrationRunner::isConfigured()) {
+    $_SESSION['migrations_flash_error'] = 'Migrations are not enabled on this server (MIGRATIONS_DIR is not set).';
+    header('Location: /admin/migrations.php');
+    exit;
+}
+
 $requested = $_POST['filenames'] ?? [];
 if (!is_array($requested)) {
     $requested = [];

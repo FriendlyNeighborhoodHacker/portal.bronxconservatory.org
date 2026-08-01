@@ -1,0 +1,37 @@
+# Web root Apache configuration.
+
+# Never show Apache auto-generated directory listings (e.g. /admin/ would
+# otherwise expose an "Index of /admin" page). Directories without an index
+# file return 403 Forbidden instead of listing their contents.
+Options -Indexes
+
+# The application log directory (activity.log, emails.log, ...) sits inside the
+# web root, so deny it outright — logs are read through Admin > Maintenance,
+# never over HTTP. Blocked two ways so a server without mod_rewrite is still
+# covered: the whole logs/ path, and any .log file anywhere under the root.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^logs(/|$) - [F,L]
+</IfModule>
+
+<FilesMatch "\.log$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+# Local configuration holds database and SMTP credentials — never servable
+# (PHP normally executes it, but a misconfigured handler would print it).
+<FilesMatch "^config\.local\.php(\.example)?$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>

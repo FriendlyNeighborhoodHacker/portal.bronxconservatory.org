@@ -1,11 +1,28 @@
 <?php
-// Admin — Database Migrations: lists every migration in db_migrations/ with
-// its applied/not-applied status (from schema_migrations) and lets an admin
-// select and apply the pending ones.
+// Admin — Database Migrations: lists every migration in the configured
+// migrations directory with its applied/not-applied status (from
+// schema_migrations) and lets an admin select and apply the pending ones.
+// The page only works where MIGRATIONS_DIR is configured (see config.local.php).
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/MigrationRunner.php';
 Application::init();
 require_developer();
+
+if (!MigrationRunner::isConfigured()) {
+    header_html('Database Migrations');
+    ?>
+    <h2>Database Migrations</h2>
+    <div class="card">
+      <p class="error"><strong>Migrations are not enabled on this server.</strong>
+      Set <code>MIGRATIONS_DIR</code> in <code>config.local.php</code> to the
+      absolute path of the <code>db_migrations</code> directory for this
+      deployment, then reload this page.</p>
+      <p class="small"><a href="/admin/maintenance.php">&larr; Back to Maintenance</a></p>
+    </div>
+    <?php
+    footer_html();
+    exit;
+}
 
 $trackingReady = MigrationRunner::trackingTableExists();
 $rows          = MigrationRunner::status();

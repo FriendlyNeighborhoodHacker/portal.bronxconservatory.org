@@ -8,7 +8,10 @@ config.local.demo.php
 keys/
 
 # ===== Application logs =====
-www/logs/
+# Ignore the log files themselves, but keep the directory's deny-all .htaccess
+# under version control so it ships with the code.
+www/logs/*
+!www/logs/.htaccess
 *.log
 
 # ===== Image / file cache =====
@@ -45,7 +48,8 @@ www/unit-tests/tests/tmp/
 
 # Local app config / runtime (never commit secrets or logs)
 www/config.local.php
-www/logs/
+www/logs/*
+!www/logs/.htaccess
 www/cache/
 var/
 

@@ -55,7 +55,7 @@ $testPdo = new PDO(
         PDO::ATTR_EMULATE_PREPARES => false,
     ]
 );
-$testPdo->exec((string)file_get_contents(__DIR__ . '/../../www/schema.sql'));
+$testPdo->exec((string)file_get_contents(__DIR__ . '/../../schema.sql'));
 
 set_pdo_for_testing($testPdo);
 

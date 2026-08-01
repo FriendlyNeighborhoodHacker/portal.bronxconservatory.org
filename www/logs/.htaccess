@@ -1,0 +1,12 @@
+# Application logs (activity.log, emails.log, ...). This directory lives under
+# the web root but must never be served over HTTP — logs are read through
+# Admin > Maintenance. www/.htaccess blocks this path too; this file is the
+# backstop for servers where mod_rewrite is unavailable or AllowOverride
+# differs per-directory.
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>
