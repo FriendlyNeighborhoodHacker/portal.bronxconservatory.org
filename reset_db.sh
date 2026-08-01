@@ -48,8 +48,8 @@ DELETE FROM parenthood;
 DELETE FROM private_files;
 DELETE FROM users WHERE email IS NULL OR email NOT IN ($DEV_EMAILS);
 
--- The developers stay, as clean admin accounts.
-UPDATE users SET is_admin = 1, is_deleted = 0 WHERE email IN ($DEV_EMAILS);
+-- The developers stay, as clean admin accounts with Maintenance access.
+UPDATE users SET is_admin = 1, is_developer = 1, is_deleted = 0 WHERE email IN ($DEV_EMAILS);
 
 SET FOREIGN_KEY_CHECKS = 1;
 SQL
