@@ -58,6 +58,129 @@ final class ImportFlowsTest extends TestCase
         $this->assertStringContainsString('existing user (Phil Phone)', $validated[0]['changes']);
     }
 
+    // ── Students & parents (one file) ─────────────────────────────────────
+
+    public function testPeopleImportBuildsFamiliesFromOneFile(): void
+    {
+        // Denise already exists in the system as a parent of another child.
+        $denise = fx_user('Denise', 'Brown', ['email' => 'denise@example.org']);
+        $existingKid = fx_student('Solo', 'Kid');
+        pdo()->exec("INSERT INTO parenthood (parent_user_id, child_user_id) VALUES ($denise, $existingKid)");
+
+        $rows = [
+            // A parent row (referenced below by name and by email).
+            ['first_name' => 'Rosa', 'last_name' => 'Ramos', 'email' => 'rosa@example.org',
+             'address_street_1' => '1188 Elder Ave'],
+            // Students referencing the in-file parent two different ways.
+            ['first_name' => 'Lucia', 'last_name' => 'Ramos', 'class_of' => '2031',
+             'instruments' => 'Piano', 'parents' => 'Rosa Ramos'],
+            ['first_name' => 'Marco', 'last_name' => 'Ramos', 'class_of' => '2033',
+             'instruments' => 'Violin', 'parents' => 'rosa@example.org'],
+            // A student referencing an EXISTING person by email.
+            ['first_name' => 'Devon', 'last_name' => 'Brown', 'grade' => '9',
+             'instruments' => 'Violin; Viola', 'parents' => 'denise@example.org'],
+            // Errors: unknown parent, unknown instrument.
+            ['first_name' => 'Lost', 'last_name' => 'Kid', 'parents' => 'Ghost Adult'],
+            ['first_name' => 'Bad', 'last_name' => 'Axe', 'instruments' => 'Theremin'],
+        ];
+        $validated = PeopleCsvImport::validateRows($rows);
+
+        $this->assertSame(['valid', 'valid', 'valid', 'valid', 'error', 'error'],
+            array_column($validated, 'status'));
+        $this->assertStringContainsString('Create parent', $validated[0]['changes']);
+        $this->assertStringContainsString('Create student; link parent Rosa Ramos', $validated[1]['changes']);
+        $this->assertStringContainsString('link parent Rosa Ramos', $validated[2]['changes']);
+        $this->assertStringContainsString('link parent Denise Brown', $validated[3]['changes']);
+        $this->assertStringContainsString('not found', $validated[4]['messages'][0]);
+        $this->assertStringContainsString('Unknown instrument', $validated[5]['messages'][0]);
+
+        $summary = PeopleCsvImport::commit($this->ctx, $validated);
+        $this->assertSame(['created' => 4, 'updated' => 0, 'skipped' => 2], $summary);
+
+        // One Rosa, linked to both siblings; Devon linked to existing Denise.
+        $rosaIds = array_column(pdo()->query("SELECT id FROM users WHERE email='rosa@example.org'")->fetchAll(), 'id');
+        $this->assertCount(1, $rosaIds);
+        $rosa = (int)$rosaIds[0];
+        $lucia = (int)pdo()->query("SELECT id FROM users WHERE first_name='Lucia'")->fetchColumn();
+        $marco = (int)pdo()->query("SELECT id FROM users WHERE first_name='Marco'")->fetchColumn();
+        $devon = (int)pdo()->query("SELECT id FROM users WHERE first_name='Devon'")->fetchColumn();
+        $this->assertTrue(StudentTeacherManagement::isParentOf($rosa, $lucia));
+        $this->assertTrue(StudentTeacherManagement::isParentOf($rosa, $marco));
+        $this->assertTrue(StudentTeacherManagement::isParentOf($denise, $devon));
+
+        // Roles fell out of the references: Rosa is only a parent (no student
+        // profile despite being in the same file); Lucia is only a student.
+        $this->assertSame(['parent'], Application::rolesForUser($rosa));
+        $this->assertSame(['student'], Application::rolesForUser($lucia));
+        $this->assertSame(['Violin', 'Viola'], InstrumentCatalog::namesForStudent($devon));
+        $this->assertSame('1188 Elder Ave', UserManagement::findById($rosa)['address_street_1']);
+    }
+
+    public function testPeopleImportReferencedRowWithStudentFieldsIsBoth(): void
+    {
+        // An adult student who is also their child\'s parent.
+        $validated = PeopleCsvImport::validateRows([
+            ['first_name' => 'Ana', 'last_name' => 'Adult', 'email' => 'ana@example.org', 'instruments' => 'Voice'],
+            ['first_name' => 'Nina', 'last_name' => 'Adult', 'class_of' => '2032', 'parents' => 'Ana Adult'],
+        ]);
+        $this->assertStringContainsString('Create parent + student', $validated[0]['changes']);
+
+        PeopleCsvImport::commit($this->ctx, $validated);
+        $ana = (int)pdo()->query("SELECT id FROM users WHERE email='ana@example.org'")->fetchColumn();
+        Application::clearRolesCacheForTesting();
+        $this->assertSame(['parent', 'student'], Application::rolesForUser($ana));
+    }
+
+    public function testPeopleImportIsIdempotentAndGuardsAmbiguity(): void
+    {
+        // Existing student matched by exact name (no email/phone).
+        $lucia = fx_student('Lucia', 'Ramos');
+
+        $rows = [
+            ['first_name' => 'Rosa', 'last_name' => 'Ramos', 'email' => 'rosa@example.org'],
+            ['first_name' => 'Lucia', 'last_name' => 'Ramos', 'class_of' => '2031', 'parents' => 'Rosa Ramos'],
+        ];
+        $validated = PeopleCsvImport::validateRows($rows);
+        $this->assertStringContainsString('Update existing person (Lucia Ramos) as student', $validated[1]['changes']);
+        PeopleCsvImport::commit($this->ctx, $validated);
+
+        // Re-importing the same file updates instead of duplicating.
+        $again = PeopleCsvImport::validateRows($rows);
+        PeopleCsvImport::commit($this->ctx, $again);
+        $this->assertSame(1, (int)pdo()->query("SELECT COUNT(*) FROM users WHERE email='rosa@example.org'")->fetchColumn());
+        $this->assertSame(1, (int)pdo()->query("SELECT COUNT(*) FROM parenthood")->fetchColumn());
+        $this->assertSame(2031, (int)pdo()->query("SELECT class_of FROM student_profiles WHERE user_id=$lucia")->fetchColumn());
+
+        // Two in-file rows with the same name: referencing that name errors.
+        $ambiguous = PeopleCsvImport::validateRows([
+            ['first_name' => 'Twin', 'last_name' => 'Cruz'],
+            ['first_name' => 'Twin', 'last_name' => 'Cruz'],
+            ['first_name' => 'Kid', 'last_name' => 'Cruz', 'parents' => 'Twin Cruz'],
+        ]);
+        $this->assertSame('error', $ambiguous[2]['status']);
+        $this->assertStringContainsString('use their emails instead', $ambiguous[2]['messages'][0]);
+    }
+
+    public function testPeopleImportErroredParentRowBlocksItsChildren(): void
+    {
+        $validated = PeopleCsvImport::validateRows([
+            // Parent row is broken (bad email)...
+            ['first_name' => 'Rosa', 'last_name' => 'Ramos', 'email' => 'not-an-email'],
+            // ...so the child that references it cannot be linked safely.
+            ['first_name' => 'Lucia', 'last_name' => 'Ramos', 'parents' => 'Rosa Ramos'],
+        ]);
+        $this->assertSame('error', $validated[0]['status']);
+        $this->assertSame('error', $validated[1]['status']);
+        $this->assertStringContainsString('has errors', $validated[1]['messages'][0]);
+
+        // A person cannot be their own parent.
+        $self = PeopleCsvImport::validateRows([
+            ['first_name' => 'Loop', 'last_name' => 'Self', 'email' => 'loop@example.org', 'parents' => 'loop@example.org'],
+        ]);
+        $this->assertSame('error', $self[0]['status']);
+        $this->assertStringContainsString('own parent', $self[0]['messages'][0]);
+    }
+
     // ── Location dates ─────────────────────────────────────────────────────
 
     public function testLocationDatesImportUpsertsAndResyncsLessons(): void

@@ -1,0 +1,29 @@
+First Name,Last Name,Email,Cell Phone Number,Home Phone,Address Street 1,Address City,Address State,Address Zip,Date of Birth,Class Of,Grade,School Name,Instruments,Parents
+Rosa,Ramos,rosa.ramos@example.org,718-555-0201,,1188 Elder Ave,Bronx,NY,10472,,,,,,
+Hector,Ramos,hector.ramos@example.org,718-555-0221,,1188 Elder Ave,Bronx,NY,10472,,,,,,
+Denise,Brown,denise.brown@example.org,347-555-0202,,2005 University Ave,Bronx,NY,10453,,,,,,
+Mamadou,Diallo,mamadou.diallo@example.org,646-555-0203,,900 Sheridan Ave,Bronx,NY,10451,,,,,,
+Carmen,Rivera,carmen.rivera@example.org,718-555-0204,,650 Jackson Ave,Bronx,NY,10455,,,,,,
+Luis,Cruz,luis.cruz@example.org,917-555-0205,,55 E 190th St,Bronx,NY,10468,,,,,,
+Marisol,Cruz,marisol.cruz@example.org,917-555-0225,,55 E 190th St,Bronx,NY,10468,,,,,,
+Abena,Osei,abena.osei@example.org,347-555-0206,,1520 Sedgwick Ave,Bronx,NY,10457,,,,,,
+Elena,Torres,elena.torres@example.org,718-555-0207,,2830 Grand Concourse,Bronx,NY,10458,,,,,,
+Layla,Al-Sayed,layla.alsayed@example.org,929-555-0208,,333 E 181st St,Bronx,NY,10457,,,,,,
+Tanya,Johnson,tanya.johnson@example.org,718-555-0209,,1010 E 163rd St,Bronx,NY,10459,,,,,,
+Wei,Chen,wei.chen@example.org,646-555-0210,,2710 Valentine Ave,Bronx,NY,10458,,,,,,
+Gloria,Martinez,gloria.martinez@example.org,347-555-0211,,480 Concord Ave,Bronx,NY,10455,,,,,,
+Keisha,Thompson,keisha.thompson@example.org,718-555-0212,,1170 Ogden Ave,Bronx,NY,10452,,,,,,
+Lucia,Ramos,,,,,,,,3/14/2013,2031,7,MS 223,Piano,Rosa Ramos; Hector Ramos
+Marco,Ramos,,,,,,,,9/2/2015,2033,5,PS 157,Violin,Rosa Ramos; Hector Ramos
+Devon,Brown,,,,,,,,6/21/2011,2029,9,University Heights HS,"Violin, Viola",Denise Brown
+Amara,Diallo,,,,,,,,1/8/2014,2032,6,MS 331,Voice,Mamadou Diallo
+Jayden,Rivera,,,,,,,,11/30/2012,2030,8,MS 45,Guitar,Carmen Rivera
+Isabella,Cruz,,,,,,,,4/17/2016,2034,4,PS 86,Piano,Luis Cruz; Marisol Cruz
+Ethan,Cruz,,,,,,,,4/17/2016,2034,4,PS 86,Cello,Luis Cruz; Marisol Cruz
+Naomi,Osei,,,,,,,,7/5/2013,2031,7,MS 118,Piano,Abena Osei
+Sebastian,Torres,,,,,,,,2/26/2010,2028,10,Bronx Science,Double Bass,Elena Torres
+Fatima,Al-Sayed,,,,,,,,10/12/2014,2032,6,MS 223,Violin,layla.alsayed@example.org
+Chris,Johnson,,,,,,,,5/9/2012,2030,8,MS 45,Guitar,Tanya Johnson
+Mei,Chen,,,,,,,,8/23/2015,2033,5,PS 24,Piano,Wei Chen
+Angel,Martinez,,,,,,,,12/1/2011,2029,9,DeWitt Clinton HS,Voice,Gloria Martinez
+Kayla,Thompson,,,,,,,,3/3/2014,2032,6,MS 331,Cello,Keisha Thompson

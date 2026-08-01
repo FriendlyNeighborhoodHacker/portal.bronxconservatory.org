@@ -20,17 +20,22 @@ $showMoreFilters = $teacherId !== null || $instrumentId !== null;
 
 $flash = $_SESSION['people_flash'] ?? null;
 $flashError = $_SESSION['people_flash_error'] ?? null;
-unset($_SESSION['people_flash'], $_SESSION['people_flash_error']);
+$importFlash = $_SESSION['import_flash'] ?? null;
+unset($_SESSION['people_flash'], $_SESSION['people_flash_error'], $_SESSION['import_flash']);
 
 header_html('Students');
 ?>
 
 <div class="page-head">
   <h2>Students</h2>
-  <a class="button primary" href="/admin/student_add.php">Add Student</a>
+  <span class="actions">
+    <a class="button" href="/admin/import/upload.php?flow=people&next=<?=h(urlencode('/admin/students.php'))?>">Upload Students &amp; Parents CSV</a>
+    <a class="button primary" href="/admin/student_add.php">Add Student</a>
+  </span>
 </div>
 
 <?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
+<?php if ($importFlash): ?><p class="flash"><?=h($importFlash)?></p><?php endif; ?>
 <?php if ($flashError): ?><p class="error"><?=h($flashError)?></p><?php endif; ?>
 
 <form method="get" action="/admin/students.php" data-auto-submit class="card">

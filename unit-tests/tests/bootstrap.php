@@ -20,6 +20,7 @@ require_once __DIR__ . '/../../www/lib/ResourceManagement.php';
 require_once __DIR__ . '/../../www/lib/AnnouncementManagement.php';
 require_once __DIR__ . '/../../www/lib/CsvImport.php';
 require_once __DIR__ . '/../../www/lib/TeacherCsvImport.php';
+require_once __DIR__ . '/../../www/lib/PeopleCsvImport.php';
 require_once __DIR__ . '/../../www/lib/LocationDatesCsvImport.php';
 require_once __DIR__ . '/../../www/lib/LocationTeachersCsvImport.php';
 require_once __DIR__ . '/../../www/lib/StripeCheckout.php';

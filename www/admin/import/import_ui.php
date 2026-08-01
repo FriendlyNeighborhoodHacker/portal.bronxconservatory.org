@@ -11,6 +11,7 @@
 require_once __DIR__ . '/../../partials.php';
 require_once __DIR__ . '/../../lib/CsvImport.php';
 require_once __DIR__ . '/../../lib/TeacherCsvImport.php';
+require_once __DIR__ . '/../../lib/PeopleCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationDatesCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationTeachersCsvImport.php';
 require_once __DIR__ . '/../../lib/SemesterManagement.php';
@@ -22,6 +23,12 @@ function import_flows(): array {
             'class' => 'TeacherCsvImport',
             'needs_semester' => false,
             'default_next' => '/admin/teachers.php',
+        ],
+        'people' => [
+            'title' => 'Import Students & Parents',
+            'class' => 'PeopleCsvImport',
+            'needs_semester' => false,
+            'default_next' => '/admin/students.php',
         ],
         'location_dates' => [
             'title' => 'Import Location Dates',
@@ -127,6 +134,42 @@ function import_columns_help_html(array $flow): string {
             $example = "First Name,Last Name,Email,Cell Phone Number\n"
                 . "Marisol,Vega,marisol@example.org,718-555-0101\n"
                 . "James,Okafor,james@example.org,718-555-0102";
+            break;
+
+        case 'people':
+            $intro = 'One file for the whole roster: one row per person — students AND their '
+                . 'parents share the same columns. A student row\'s "Parents" column lists who '
+                . 'their parents are (names or emails, separated by ; or ,) — each must match '
+                . 'another row in this file or a person already in the system. Anyone listed as '
+                . 'a parent becomes a parent; everyone else becomes a student. Row order doesn\'t '
+                . 'matter, and siblings naturally share the same parent rows.';
+            $columns = [
+                ['First Name', 'required', ''],
+                ['Last Name', 'required', ''],
+                ['Email', 'optional', 'used to match existing people, and as a Parents identifier'],
+                ['Cell Phone Number', 'optional', 'used to match existing people when present'],
+                ['Parents', 'optional', 'e.g. "Rosa Ramos; Hector Ramos" or "rosa@example.org"'],
+                ['Suffix', 'optional', ''],
+                ['Preferred Name', 'optional', ''],
+                ['Secondary Email', 'optional', ''],
+                ['Home Phone', 'optional', ''],
+                ['Address Street 1', 'optional', ''],
+                ['Address Street 2', 'optional', ''],
+                ['Address City', 'optional', ''],
+                ['Address State', 'optional', ''],
+                ['Address Zip', 'optional', ''],
+                ['Date of Birth', 'optional', 'students — 2014-03-05 or 3/5/2014'],
+                ['Class Of', 'optional', 'students — graduation year, e.g. 2031'],
+                ['Grade', 'optional', 'students — e.g. 7'],
+                ['School Name', 'optional', 'students'],
+                ['Instruments', 'optional', 'students — separated by ; or , — e.g. "Piano; Violin"'],
+            ];
+            $example = "First Name,Last Name,Email,Class Of,Instruments,Parents\n"
+                . "Rosa,Ramos,rosa@example.org,,,\n"
+                . "Denise,Brown,denise.brown@example.org,,,\n"
+                . "Lucia,Ramos,,2031,Piano,Rosa Ramos\n"
+                . "Marco,Ramos,,2033,Violin,Rosa Ramos\n"
+                . "Devon,Brown,,2029,\"Violin, Viola\",denise.brown@example.org";
             break;
 
         case 'location_dates':
