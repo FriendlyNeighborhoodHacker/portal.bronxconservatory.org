@@ -3,7 +3,7 @@
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/MigrationRunner.php';
 Application::init();
-require_admin();
+require_developer();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /admin/migrations.php');

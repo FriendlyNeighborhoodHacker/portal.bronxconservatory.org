@@ -9,7 +9,9 @@ SET time_zone = '+00:00';
 -- ===== Users =====
 -- One users row per person: parents, students, teachers, and admins.
 -- Roles are derived from related rows, not stored here:
---   admin   — is_admin flag
+--   admin     — is_admin flag
+--   developer — is_developer flag; with is_admin it unlocks the Maintenance
+--               section (migrations, activity log, email log)
 --   teacher — teacher_profiles row
 --   parent  — parenthood row (as parent_user_id)
 --   student — student_profiles row
@@ -42,6 +44,7 @@ CREATE TABLE users (
   shirt_size VARCHAR(10) DEFAULT NULL,
   password_hash VARCHAR(255) NOT NULL DEFAULT '',
   is_admin TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'App administrator',
+  is_developer TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'With is_admin, unlocks Admin > Maintenance (migrations, logs)',
   is_deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Soft delete: cannot sign in, hidden from lists',
   email_verify_token VARCHAR(64) DEFAULT NULL,
   email_verified_at DATETIME DEFAULT NULL,
@@ -517,8 +520,8 @@ CREATE TABLE stripe_webhook_events (
   processed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
-INSERT INTO users (first_name,last_name,email,password_hash,is_admin,email_verified_at)
-VALUES ('Brian','Rosenthal','brian.rosenthal@gmail.com','$2y$12$2IMMsNZ3pwUpTPmcXKQFr.P2grgudYlZZ/m2Y4jTxV1tjGDI9bX7.',1,NOW());
+INSERT INTO users (first_name,last_name,email,password_hash,is_admin,is_developer,email_verified_at)
+VALUES ('Brian','Rosenthal','brian.rosenthal@gmail.com','$2y$12$2IMMsNZ3pwUpTPmcXKQFr.P2grgudYlZZ/m2Y4jTxV1tjGDI9bX7.',1,1,NOW());
 
-INSERT INTO users (first_name,last_name,email,password_hash,is_admin,email_verified_at)
-VALUES ('Lilly','Rosenthal','lillyjrosenthal123@gmail.com','$2y$12$2IMMsNZ3pwUpTPmcXKQFr.P2grgudYlZZ/m2Y4jTxV1tjGDI9bX7.',1,NOW());
+INSERT INTO users (first_name,last_name,email,password_hash,is_admin,is_developer,email_verified_at)
+VALUES ('Lilly','Rosenthal','lillyjrosenthal123@gmail.com','$2y$12$2IMMsNZ3pwUpTPmcXKQFr.P2grgudYlZZ/m2Y4jTxV1tjGDI9bX7.',1,1,NOW());

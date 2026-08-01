@@ -34,7 +34,7 @@ if (isset($_GET['err'])) {
 
 // For repopulating form after errors - get from URL parameters or use current user data
 $form = [];
-$formFields = ['first_name', 'last_name', 'email', 'is_admin'];
+$formFields = ['first_name', 'last_name', 'email', 'is_admin', 'is_developer'];
 foreach ($formFields as $field) {
     if (isset($_GET[$field])) {
         $form[$field] = $_GET[$field];
@@ -132,17 +132,27 @@ if (isset($_GET['photo_err'])) { $err = 'Photo upload failed.'; }
         <?php endif; ?>
       </label>
       <?php if ($canEditAdmin && $hasLogin): ?>
-        <label class="inline">
-          <input type="checkbox" name="is_admin" value="1" <?= !empty($form['is_admin']) ? 'checked' : '' ?>>
-          Admin user
-        </label>
+        <div class="stack">
+          <label class="inline">
+            <input type="checkbox" name="is_admin" value="1" <?= !empty($form['is_admin']) ? 'checked' : '' ?>>
+            Admin user
+          </label>
+          <span class="small">Access to the admin side of the portal.</span>
+          <label class="inline">
+            <input type="checkbox" name="is_developer" value="1" <?= !empty($form['is_developer']) ? 'checked' : '' ?>>
+            Developer
+          </label>
+          <span class="small">With Admin, access to Admin &gt; Maintenance (migrations, activity log, email log).</span>
+        </div>
       <?php elseif (!$hasLogin): ?>
         <div class="small" style="color: #6c757d;">
           Admin status: No (people without a login cannot be admins)
         </div>
       <?php else: ?>
         <div class="small" style="color: #6c757d;">
-          Admin status: <?= !empty($user['is_admin']) ? 'Yes' : 'No' ?> (cannot change your own admin status)
+          Admin status: <?= !empty($user['is_admin']) ? 'Yes' : 'No' ?><br>
+          Developer: <?= !empty($user['is_developer']) ? 'Yes' : 'No' ?><br>
+          (cannot change your own admin or developer status)
         </div>
       <?php endif; ?>
     </div>

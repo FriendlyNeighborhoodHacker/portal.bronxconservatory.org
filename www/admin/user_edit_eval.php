@@ -119,6 +119,9 @@ $last_name = trim($_POST['last_name'] ?? '');
 $email = trim($_POST['email'] ?? '');
 $canGrantAdmin = $canEditAdmin && $hasLogin; // no-login users cannot be admins
 $is_admin = $canGrantAdmin && !empty($_POST['is_admin']) ? 1 : ($canGrantAdmin ? 0 : (int)$user['is_admin']);
+// The developer flag rides the same gate: it only means anything alongside
+// admin, and nobody may drop their own (that would lock them out of Maintenance).
+$is_developer = $canGrantAdmin && !empty($_POST['is_developer']) ? 1 : ($canGrantAdmin ? 0 : (int)$user['is_developer']);
 
 // Validation
 $errors = [];
@@ -147,7 +150,8 @@ if (!empty($errors)) {
         'first_name' => $first_name,
         'last_name' => $last_name,
         'email' => $email,
-        'is_admin' => $is_admin
+        'is_admin' => $is_admin,
+        'is_developer' => $is_developer,
     ];
     $query = http_build_query($params);
     header('Location: /admin/user_edit.php?' . $query);
@@ -166,9 +170,10 @@ try {
     
     $updated = UserManagement::updateProfile($ctx, $userId, $updateData);
     
-    // Update admin flag if allowed
+    // Update admin / developer flags if allowed
     if ($canGrantAdmin) {
         UserManagement::setAdminFlag($ctx, $userId, (bool)$is_admin);
+        UserManagement::setDeveloperFlag($ctx, $userId, (bool)$is_developer);
     }
 
     if ($updated || $canGrantAdmin) {
@@ -189,7 +194,8 @@ try {
         'first_name' => $first_name,
         'last_name' => $last_name,
         'email' => $email,
-        'is_admin' => $is_admin
+        'is_admin' => $is_admin,
+        'is_developer' => $is_developer,
     ];
     $query = http_build_query($params);
     header('Location: /admin/user_edit.php?' . $query);

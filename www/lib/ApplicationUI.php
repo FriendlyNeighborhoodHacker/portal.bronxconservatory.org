@@ -112,6 +112,7 @@ class ApplicationUI {
             '/admin/semesters.php', '/admin/semester/',
             '/admin/users.php', '/admin/user_',
             '/admin/settings.php',
+            '/admin/maintenance.php',
             '/admin/migrations',
             '/admin/activity_log.php', '/admin/email_log.php',
             '/admin/import/',
@@ -119,18 +120,25 @@ class ApplicationUI {
         ];
     }
 
-    /** The Admin section's submenu links. */
+    /**
+     * The Admin section's submenu links. The developer tools (migrations and
+     * the logs) collapse into a single "Maintenance" entry, and only a
+     * developer sees it — see require_developer().
+     */
     private static function adminSubnavItems(): array {
-        return [
+        $items = [
             ['path' => '/admin/announcements.php', 'label' => 'Announcements', 'prefixes' => ['/admin/announcement']],
             ['path' => '/admin/locations.php', 'label' => 'Locations', 'prefixes' => ['/admin/location']],
             ['path' => '/admin/semesters.php', 'label' => 'Semesters', 'prefixes' => ['/admin/semester', '/admin/setup/', '/admin/import/']],
             ['path' => '/admin/users.php', 'label' => 'Users', 'prefixes' => ['/admin/user']],
             ['path' => '/admin/settings.php', 'label' => 'Settings', 'prefixes' => ['/admin/settings.php']],
-            ['path' => '/admin/migrations.php', 'label' => 'Migrations', 'prefixes' => ['/admin/migrations']],
-            ['path' => '/admin/activity_log.php', 'label' => 'Activity Log', 'prefixes' => ['/admin/activity_log.php']],
-            ['path' => '/admin/email_log.php', 'label' => 'Email Log', 'prefixes' => ['/admin/email_log.php']],
         ];
+        if (is_developer()) {
+            $items[] = ['path' => '/admin/maintenance.php', 'label' => 'Maintenance',
+                'prefixes' => ['/admin/maintenance.php', '/admin/migrations',
+                               '/admin/activity_log.php', '/admin/email_log.php']];
+        }
+        return $items;
     }
 
     /**

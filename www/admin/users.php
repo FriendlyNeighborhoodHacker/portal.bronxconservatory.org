@@ -60,6 +60,7 @@ header_html('Users');
           <th>Name</th>
           <th>Email</th>
           <th>Admin</th>
+          <th>Developer</th>
           <th>Status</th>
           <th>Created</th>
           <th></th>
@@ -71,6 +72,7 @@ header_html('Users');
             <td><?= h(trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''))) ?></td>
             <td><?= h($user['email'] ?? '') ?></td>
             <td><?= !empty($user['is_admin']) ? 'Yes' : 'No' ?></td>
+            <td><?= !empty($user['is_developer']) ? 'Yes' : 'No' ?></td>
             <td>
               <?php if (!empty($user['email_verified_at'])): ?>
                 <span class="status-verified">Verified</span>

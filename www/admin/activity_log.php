@@ -3,7 +3,7 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/ActivityLog.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
 Application::init();
-require_admin();
+require_developer();
 
 function int_param(string $key, int $default = 0): int {
   $v = $_GET[$key] ?? null;

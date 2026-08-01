@@ -108,6 +108,24 @@ final class UserManagementTest extends TestCase
         $this->assertNull(UserManagement::findById($id)['suffix']);
     }
 
+    public function testDeveloperFlagIsAdminOnlyAndSeparateFromAdmin(): void
+    {
+        $id = fx_user('Dev', 'Eloper', ['email' => 'dev@example.org', 'password_hash' => 'h']);
+        $this->assertSame(0, (int)UserManagement::findById($id)['is_developer']);
+
+        UserManagement::setDeveloperFlag($this->ctx, $id, true);
+        $user = UserManagement::findById($id);
+        $this->assertSame(1, (int)$user['is_developer']);
+        // Developer is its own flag: granting it does not make anyone an admin.
+        $this->assertSame(0, (int)$user['is_admin']);
+
+        UserManagement::setDeveloperFlag($this->ctx, $id, false);
+        $this->assertSame(0, (int)UserManagement::findById($id)['is_developer']);
+
+        $this->expectException(RuntimeException::class);
+        UserManagement::setDeveloperFlag(new UserContext($id, false), $id, true);
+    }
+
     public function testParentMayUpdateTheirOwnChildsProfile(): void
     {
         $childId = fx_student('Kid', 'One');

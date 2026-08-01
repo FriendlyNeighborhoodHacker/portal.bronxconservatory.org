@@ -5,7 +5,7 @@
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/MigrationRunner.php';
 Application::init();
-require_admin();
+require_developer();
 
 $trackingReady = MigrationRunner::trackingTableExists();
 $rows          = MigrationRunner::status();

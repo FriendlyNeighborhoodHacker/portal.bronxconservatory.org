@@ -173,3 +173,26 @@ function require_admin(): void {
         die('Admin access required');
     }
 }
+
+// The Maintenance section (migrations, activity log, email log) is for admins
+// who are also flagged as developers.
+function is_developer(): bool {
+    $user = current_user();
+    if (!$user || empty($user['is_admin'])) {
+        return false;
+    }
+    // On an install where the is_developer migration hasn't run yet the column
+    // doesn't exist, so every admin counts as a developer — otherwise the
+    // Maintenance section that applies that very migration is unreachable.
+    if (!array_key_exists('is_developer', $user)) {
+        return true;
+    }
+    return !empty($user['is_developer']);
+}
+
+function require_developer(): void {
+    if (!is_developer()) {
+        http_response_code(403);
+        die('Developer access required');
+    }
+}

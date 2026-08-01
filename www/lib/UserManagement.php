@@ -402,7 +402,7 @@ class UserManagement {
 
     // List all users (admin only). Soft-deleted users are hidden unless asked for.
     public static function listUsers(string $search = '', bool $includeDeleted = false): array {
-        $sql = 'SELECT id, first_name, last_name, email, is_admin, is_deleted, email_verified_at, created_at,
+        $sql = 'SELECT id, first_name, last_name, email, is_admin, is_developer, is_deleted, email_verified_at, created_at,
                        (password_hash <> \'\') AS has_password FROM users';
         $where = [];
         $params = [];
@@ -531,6 +531,21 @@ class UserManagement {
             self::log('user.set_admin', $id, ['is_admin' => $isAdmin ? 1 : 0]);
         }
         
+        return $ok;
+    }
+
+    // Set developer flag. With is_admin this unlocks Admin > Maintenance
+    // (migrations, activity log, email log); on its own it grants nothing.
+    public static function setDeveloperFlag(UserContext $ctx, int $id, bool $isDeveloper): bool {
+        self::assertAdmin($ctx);
+
+        $st = self::pdo()->prepare('UPDATE users SET is_developer = ? WHERE id = ?');
+        $ok = $st->execute([$isDeveloper ? 1 : 0, $id]);
+
+        if ($ok) {
+            self::log('user.set_developer', $id, ['is_developer' => $isDeveloper ? 1 : 0]);
+        }
+
         return $ok;
     }
 
