@@ -17,6 +17,8 @@ class ReservationManagement {
 
     public const STATUSES = ['pending_reach_out', 'pending_confirmation', 'confirmed'];
 
+    private const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
     private static function pdo(): PDO {
         return pdo();
     }
@@ -27,8 +29,15 @@ class ReservationManagement {
      * Create a reservation. $fields: semester_id, teacher_user_id,
      * location_id, student_user_id, day_of_week (0=Sun..6=Sat), start_time
      * ("HH:MM"), duration_minutes, status? (defaults pending_reach_out).
+     *
+     * $options['post_charges'] (default true) controls whether confirming
+     * here also posts the semester's charges. Bulk loads that describe a
+     * schedule which already exists — the schedule CSV import, carrying a
+     * semester forward — pass false: the money for those students was
+     * settled outside this system, so their balances are loaded separately
+     * rather than invented from the schedule.
      */
-    public static function createReservation(?UserContext $ctx, array $fields): int {
+    public static function createReservation(?UserContext $ctx, array $fields, array $options = []): int {
         self::assertAdmin($ctx);
 
         $semesterId = (int)($fields['semester_id'] ?? 0);
@@ -75,7 +84,9 @@ class ReservationManagement {
 
         if ($status === 'confirmed') {
             self::generateLessonsForReservation($ctx, $id);
-            Billing::postSemesterConfirmationCharges($ctx, $studentUserId, $semesterId);
+            if ($options['post_charges'] ?? true) {
+                Billing::postSemesterConfirmationCharges($ctx, $studentUserId, $semesterId);
+            }
         }
 
         self::log($ctx, 'reservation.created', [
@@ -227,6 +238,141 @@ class ReservationManagement {
         }
 
         self::log($ctx, 'reservation.deleted', ['reservation_id' => $reservationId]);
+    }
+
+    // ── Carrying a semester forward ────────────────────────────────────────
+
+    /**
+     * Preview carrying $sourceSemesterId's schedule into $targetSemesterId:
+     * one entry per source reservation, in the same shape the CSV imports use
+     * (status / changes / messages), so the admin sees exactly what will
+     * happen before anything is written.
+     *
+     * Everything carried over lands as pending_reach_out regardless of what it
+     * was: the organization starts from last semester's roster and then calls
+     * each family to confirm. Nothing is charged and no lessons are generated
+     * until someone actually confirms the reservation.
+     */
+    public static function carryForwardPreview(int $targetSemesterId, int $sourceSemesterId): array {
+        if (!SemesterManagement::find($targetSemesterId) || !SemesterManagement::find($sourceSemesterId)) {
+            throw new InvalidArgumentException('Both semesters must exist.');
+        }
+        if ($targetSemesterId === $sourceSemesterId) {
+            throw new InvalidArgumentException('Pick a different semester to carry forward from.');
+        }
+
+        // The target's grid columns: a pair that no longer teaches there this
+        // semester has nowhere to put the reservation.
+        $columns = [];
+        foreach (SemesterManagement::locationTeachers($targetSemesterId) as $pair) {
+            $columns[$pair['location_id'] . ':' . $pair['teacher_user_id']] = true;
+        }
+        // Already carried over? Keyed by student+teacher+location rather than
+        // by slot, so re-running after an admin has moved someone's time does
+        // not create a second reservation for them.
+        $existing = [];
+        foreach (self::reservationsForSemester($targetSemesterId) as $r) {
+            $existing[$r['student_user_id'] . ':' . $r['teacher_user_id'] . ':' . $r['location_id']] = true;
+        }
+
+        $out = [];
+        $claimed = [];
+        foreach (self::sourceReservationsForCarryForward($sourceSemesterId) as $i => $r) {
+            $messages = [];
+            $status = 'valid';
+            $changes = '';
+
+            $locationId = (int)$r['location_id'];
+            $teacherUserId = (int)$r['teacher_user_id'];
+            $studentUserId = (int)$r['student_user_id'];
+            $dayOfWeek = (int)$r['day_of_week'];
+            $startTime = (string)$r['start_time'];
+            $duration = (int)$r['duration_minutes'];
+
+            if (!isset($columns[$locationId . ':' . $teacherUserId])) {
+                $status = 'error';
+                $messages[] = trim((string)$r['teacher_first_name'] . ' ' . (string)$r['teacher_last_name'])
+                    . ' does not teach at ' . (string)$r['location_name'] . ' this semester.';
+            } elseif (isset($existing[$studentUserId . ':' . $teacherUserId . ':' . $locationId])) {
+                $changes = 'Already carried over (no change)';
+            } else {
+                $conflict = self::carryForwardClaimConflict($claimed, $teacherUserId, $dayOfWeek, $startTime, $duration)
+                    ?? ScheduleConflicts::weeklySlotConflict(
+                        $targetSemesterId, $teacherUserId, $dayOfWeek, $startTime, $duration
+                    );
+                if ($conflict !== null) {
+                    $status = 'error';
+                    $messages[] = $conflict;
+                } else {
+                    $claimed[] = [
+                        'teacher_user_id' => $teacherUserId,
+                        'day_of_week' => $dayOfWeek,
+                        'start_time' => $startTime,
+                        'duration_minutes' => $duration,
+                    ];
+                    $changes = 'Reserve as pending reach out';
+                }
+            }
+
+            $out[] = [
+                'row' => $i + 1,
+                'data' => [
+                    'student_name' => trim((string)$r['student_first_name'] . ' ' . (string)$r['student_last_name']),
+                    'teacher_name' => trim((string)$r['teacher_first_name'] . ' ' . (string)$r['teacher_last_name']),
+                    'location_name' => (string)$r['location_name'],
+                    'day' => self::DAY_LABELS[$dayOfWeek],
+                    'start_time' => date('g:i a', strtotime('1970-01-01 ' . $startTime)),
+                    'duration_minutes' => (string)$duration,
+                    'status' => (string)$r['status'],
+                ],
+                '_fields' => [
+                    'semester_id' => $targetSemesterId,
+                    'teacher_user_id' => $teacherUserId,
+                    'location_id' => $locationId,
+                    'student_user_id' => $studentUserId,
+                    'day_of_week' => $dayOfWeek,
+                    'start_time' => substr($startTime, 0, 5),
+                    'duration_minutes' => $duration,
+                    'status' => 'pending_reach_out',
+                ],
+                'status' => $status,
+                'changes' => $changes,
+                'messages' => $messages,
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Carry $sourceSemesterId's schedule into $targetSemesterId as
+     * pending_reach_out reservations. Re-runnable: rows that already exist or
+     * cannot be placed are counted as skipped, never duplicated.
+     * Returns ['created' => n, 'skipped' => n].
+     */
+    public static function carryForwardFromSemester(?UserContext $ctx, int $targetSemesterId, int $sourceSemesterId): array {
+        self::assertAdmin($ctx);
+        $created = 0;
+        $skipped = 0;
+        foreach (self::carryForwardPreview($targetSemesterId, $sourceSemesterId) as $entry) {
+            if ($entry['status'] !== 'valid' || $entry['changes'] === 'Already carried over (no change)') {
+                $skipped++;
+                continue;
+            }
+            try {
+                // The preview simulated the conflict checks; createReservation
+                // runs them for real against a database that is changing under
+                // us, so a late clash is skipped rather than fatal.
+                self::createReservation($ctx, $entry['_fields'], ['post_charges' => false]);
+                $created++;
+            } catch (InvalidArgumentException $e) {
+                $skipped++;
+            }
+        }
+        self::log($ctx, 'reservation.carried_forward', [
+            'semester_id' => $targetSemesterId, 'from_semester_id' => $sourceSemesterId,
+            'created' => $created, 'skipped' => $skipped,
+        ]);
+        return ['created' => $created, 'skipped' => $skipped];
     }
 
     // ── Lesson generation ──────────────────────────────────────────────────
@@ -418,6 +564,52 @@ class ReservationManagement {
     }
 
     // ── internals ─────────────────────────────────────────────────────────
+
+    /**
+     * The source semester's live reservations, with the names the preview
+     * shows. Deleted ones are left behind — the point is who is enrolled now.
+     */
+    private static function sourceReservationsForCarryForward(int $semesterId): array {
+        $st = self::pdo()->prepare(
+            "SELECT r.*,
+                    su.first_name AS student_first_name, su.last_name AS student_last_name,
+                    tu.first_name AS teacher_first_name, tu.last_name AS teacher_last_name,
+                    l.name AS location_name
+             FROM semester_lesson_reservations r
+             JOIN users su ON su.id = r.student_user_id
+             JOIN users tu ON tu.id = r.teacher_user_id
+             JOIN locations l ON l.id = r.location_id
+             WHERE r.semester_id=? AND r.status <> 'deleted'
+               AND su.is_deleted = 0 AND tu.is_deleted = 0
+             ORDER BY l.name, tu.last_name, r.day_of_week, r.start_time"
+        );
+        $st->execute([$semesterId]);
+        return $st->fetchAll();
+    }
+
+    /** Overlap with a slot an earlier preview row already claimed for this teacher. */
+    private static function carryForwardClaimConflict(
+        array $claimed,
+        int $teacherUserId,
+        int $dayOfWeek,
+        string $startTime,
+        int $durationMinutes
+    ): ?string {
+        $start = strtotime('1970-01-01 ' . $startTime);
+        $end = $start + $durationMinutes * 60;
+        foreach ($claimed as $other) {
+            if ($other['teacher_user_id'] !== $teacherUserId || $other['day_of_week'] !== $dayOfWeek) {
+                continue;
+            }
+            $otherStart = strtotime('1970-01-01 ' . $other['start_time']);
+            $otherEnd = $otherStart + $other['duration_minutes'] * 60;
+            if ($start < $otherEnd && $otherStart < $end) {
+                return 'Another reservation being carried forward already takes this teacher\'s '
+                    . date('g:i a', $otherStart) . '–' . date('g:i a', $otherEnd) . ' slot.';
+            }
+        }
+        return null;
+    }
 
     private static function requireReservation(int $reservationId): array {
         $st = self::pdo()->prepare('SELECT * FROM semester_lesson_reservations WHERE id=? LIMIT 1');

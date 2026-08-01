@@ -5,9 +5,12 @@ adding a second semester on top of the same roster.
 
 - **general/** — data that outlives any one semester: locations, teachers,
   students and parents. Upload once.
-- **fall_semester/** — the semester-scoped files for Fall 2026.
-- **spring_semester/** — the same three files for Spring 2027, so you can
-  create a second semester against the same people and locations.
+- **fall_semester/** — the semester-scoped files for Fall 2026, including the
+  schedule itself.
+- **spring_semester/** — the same setup files for Spring 2027, so you can
+  create a second semester against the same people and locations. There is
+  deliberately no schedule file here: spring's schedule comes from
+  pre-populating off fall.
 
 ## 1. General setup
 
@@ -37,17 +40,29 @@ Reset first with `./reset_db.sh`, then upload in this order:
    lunch: a teacher can't be in two places at once, and the importer rejects
    the second row if you add it.
 
-   Import this BEFORE reserving lesson slots. A teacher may only ever hold
-   one commitment at a time, so if a student is already booked at 12:30 the
+   Import this BEFORE the schedule. A teacher may only ever hold one
+   commitment at a time, so if a student is already booked at 12:30 the
    validation step rejects that teacher's lunch and tells you which student,
    time and location is in the way.
 
-Then open the Semester Schedule and click empty cells to reserve slots for
-the imported students.
+7. **fall_semester/semester_location_reservations.csv** — the last wizard step
+   (Admin > Semesters > Import Schedule). One row per weekly lesson slot: all
+   14 students, one slot each, 10 confirmed and 4 still pending. Confirmed rows
+   generate their lessons, but **no charges are posted** — this file is how an
+   existing schedule moves into the portal, and those families' balances came
+   from wherever they were kept before.
+
+   Things it exercises: 45- and 60-minute lessons alongside the usual 30;
+   siblings booked at the same hour with different teachers (the Ramos and Cruz
+   pairs); James Okafor teaching at Access in the morning and Bronx Community
+   College after his lunch block.
+
+Then open the Semester Schedule — the grid is full — and click empty cells to
+add more.
 
 ## 3. Spring 2027 (the second semester)
 
-Same three steps against the same roster, which is the point — nothing in
+The same setup steps against the same roster, which is the point — nothing in
 **general/** gets re-uploaded. Create the semester (Spring 2027, 2027-01-25 –
 2027-05-23), pick both locations, then upload
 **spring_semester/location_dates.csv**, **location_teachers.csv** and
@@ -64,3 +79,12 @@ confused for each other, and so semester-scoped data is visibly scoped:
   both sites (Okafor and Lin) — each still gets exactly one lunch row.
 - Marisol Vega has a second hold block, a 9:00–9:30 am faculty meeting, since
   a teacher may hold several non-overlapping blocks in a week.
+
+Then, instead of uploading a schedule: **Admin > Semesters > Pre-populate from
+Previous**, with Fall 2026 as the source. All 14 students come across keeping
+their teacher, location, day and time, every one of them **pending reach out** —
+the list to call through. Nothing is confirmed, no lessons are generated and
+nobody is charged. Re-running it is safe: rows already carried over are skipped
+rather than duplicated, and anything that no longer fits (a teacher who left
+that location, a slot a new hold block now covers) is listed as an error and
+left out.

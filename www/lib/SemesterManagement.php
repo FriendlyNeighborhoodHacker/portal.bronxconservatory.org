@@ -121,6 +121,26 @@ class SemesterManagement {
         return $st->fetchAll();
     }
 
+    /**
+     * The semester immediately before this one — the most recent one that
+     * started earlier. Used as the default source when carrying a schedule
+     * forward into a new semester.
+     */
+    public static function previousSemester(int $semesterId): ?array {
+        $semester = self::find($semesterId);
+        if (!$semester) {
+            return null;
+        }
+        $st = self::pdo()->prepare(
+            'SELECT * FROM semesters
+             WHERE id <> ? AND (start_date < ? OR (start_date = ? AND id < ?))
+             ORDER BY start_date DESC, id DESC LIMIT 1'
+        );
+        $st->execute([$semesterId, $semester['start_date'], $semester['start_date'], $semesterId]);
+        $row = $st->fetch();
+        return $row ?: null;
+    }
+
     public static function hasAnySemester(): bool {
         return (int)self::pdo()->query('SELECT COUNT(*) FROM semesters')->fetchColumn() > 0;
     }

@@ -352,6 +352,113 @@ final class ReservationManagementTest extends TestCase
         ReservationManagement::updateReservation($this->ctx, $reservationId, ['start_time' => '11:00']);
     }
 
+    // ── Carrying a semester forward ────────────────────────────────────────
+
+    /**
+     * A next semester on the same location with Saturday class dates.
+     * @return array{0:int,1:int,2:int,3:int,4:array} the fx_semester_with_dates shape
+     */
+    private function nextSemester(int $teacherId): array
+    {
+        return fx_semester_with_dates(
+            $this->ctx, $teacherId, '2031-02-01', 3, 'spring', 2031, '2031-01-25', '2031-05-30'
+        );
+    }
+
+    public function testCarryForwardCopiesTheScheduleAsPendingReachOut(): void
+    {
+        Settings::set('registration_cost', '50.00');
+        Settings::set('semester_lesson_cost', '300.00');
+        $teacher = fx_teacher();
+        $fall = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
+        $student = fx_student('Lucia', 'Ramos');
+        $this->makeReservation($fall, 'confirmed', $student);
+        [$spring] = $this->nextSemester($teacher);
+
+        $preview = ReservationManagement::carryForwardPreview($spring, $fall[0]);
+        $this->assertCount(1, $preview);
+        $this->assertSame('valid', $preview[0]['status']);
+        $this->assertSame('Reserve as pending reach out', $preview[0]['changes']);
+        $this->assertSame('Lucia Ramos', $preview[0]['data']['student_name']);
+        $this->assertSame('confirmed', $preview[0]['data']['status']); // what it WAS
+
+        $summary = ReservationManagement::carryForwardFromSemester($this->ctx, $spring, $fall[0]);
+        $this->assertSame(['created' => 1, 'skipped' => 0], $summary);
+
+        $carried = ReservationManagement::reservationsForSemester($spring);
+        $this->assertCount(1, $carried);
+        // Everything survives the trip except the confirmation itself.
+        $this->assertSame('pending_reach_out', $carried[0]['status']);
+        $this->assertSame($student, (int)$carried[0]['student_user_id']);
+        $this->assertSame($teacher, (int)$carried[0]['teacher_user_id']);
+        $this->assertSame('10:00:00', $carried[0]['start_time']);
+        $this->assertSame([], $this->lessonRows((int)$carried[0]['id']));
+        // Not confirmed, so nothing is owed for the new semester yet.
+        $this->assertSame(0, Billing::balanceForStudentSemesterCents($student, $spring));
+
+        // Re-running is a no-op rather than a second copy.
+        $this->assertSame(
+            ['created' => 0, 'skipped' => 1],
+            ReservationManagement::carryForwardFromSemester($this->ctx, $spring, $fall[0])
+        );
+        $this->assertCount(1, ReservationManagement::reservationsForSemester($spring));
+    }
+
+    public function testCarryForwardSkipsTeachersWhoLeftAndSlotsThatAreTaken(): void
+    {
+        $staying = fx_teacher('Stays', 'Here');
+        $leaving = fx_teacher('Moved', 'On');
+        [$fallId, $fallLocation, , $dayOfWeek] = fx_semester_with_dates($this->ctx, $staying, '2030-09-07', 3);
+        SemesterManagement::addLocationTeacher($this->ctx, $fallId, $fallLocation, $leaving);
+
+        $kept = fx_student('Kept', 'Student');
+        $orphaned = fx_student('Orphaned', 'Student');
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $fallId, 'teacher_user_id' => $staying, 'location_id' => $fallLocation,
+            'student_user_id' => $kept, 'day_of_week' => $dayOfWeek, 'start_time' => '10:00',
+        ]);
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $fallId, 'teacher_user_id' => $leaving, 'location_id' => $fallLocation,
+            'student_user_id' => $orphaned, 'day_of_week' => $dayOfWeek, 'start_time' => '11:00',
+        ]);
+
+        // Next semester: only the staying teacher, and their 10:00 is lunch.
+        [$springId, $springLocation] = $this->nextSemester($staying);
+        HoldBlockManagement::createHoldBlockReservation($this->ctx, [
+            'semester_id' => $springId, 'teacher_user_id' => $staying, 'location_id' => $springLocation,
+            'day_of_week' => $dayOfWeek, 'start_time' => '10:00', 'duration_minutes' => 60, 'title' => 'Lunch',
+        ]);
+
+        $preview = ReservationManagement::carryForwardPreview($springId, $fallId);
+        $this->assertSame(['error', 'error'], array_column($preview, 'status'));
+        $this->assertStringContainsString('hold block ("Lunch")', $preview[0]['messages'][0]);
+        $this->assertStringContainsString('does not teach at', $preview[1]['messages'][0]);
+
+        $this->assertSame(
+            ['created' => 0, 'skipped' => 2],
+            ReservationManagement::carryForwardFromSemester($this->ctx, $springId, $fallId)
+        );
+        $this->assertSame([], ReservationManagement::reservationsForSemester($springId));
+    }
+
+    public function testCarryForwardRefusesTheSameSemester(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 2);
+        $this->expectException(InvalidArgumentException::class);
+        ReservationManagement::carryForwardPreview($setup[0], $setup[0]);
+    }
+
+    public function testPreviousSemesterIsTheOneThatStartedBefore(): void
+    {
+        $fall = fx_semester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+        $spring = fx_semester($this->ctx, 'spring', 2031, '2031-01-25', '2031-05-30');
+        $summer = fx_semester($this->ctx, 'summer', 2031, '2031-06-15', '2031-08-15');
+
+        $this->assertNull(SemesterManagement::previousSemester($fall));
+        $this->assertSame($fall, (int)SemesterManagement::previousSemester($spring)['id']);
+        $this->assertSame($spring, (int)SemesterManagement::previousSemester($summer)['id']);
+    }
+
     public function testGridDataShape(): void
     {
         $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 2);

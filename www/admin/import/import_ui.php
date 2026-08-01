@@ -7,6 +7,7 @@
 //   location_dates     — a semester's class dates   (LocationDatesCsvImport)
 //   location_teachers  — a semester's teacher-location pairs (LocationTeachersCsvImport)
 //   hold_blocks        — teachers' standing non-lesson time (HoldBlocksCsvImport)
+//   reservations       — a semester's whole schedule (SemesterReservationsCsvImport)
 // In-progress state (parsed rows, mapping, validation) lives in
 // $_SESSION['import_<flow>'].
 require_once __DIR__ . '/../../partials.php';
@@ -17,6 +18,7 @@ require_once __DIR__ . '/../../lib/LocationCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationDatesCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationTeachersCsvImport.php';
 require_once __DIR__ . '/../../lib/HoldBlocksCsvImport.php';
+require_once __DIR__ . '/../../lib/SemesterReservationsCsvImport.php';
 require_once __DIR__ . '/../../lib/SemesterManagement.php';
 
 function import_flows(): array {
@@ -54,6 +56,12 @@ function import_flows(): array {
         'hold_blocks' => [
             'title' => 'Import Hold Blocks',
             'class' => 'HoldBlocksCsvImport',
+            'needs_semester' => true,
+            'default_next' => '/admin/semesters.php',
+        ],
+        'reservations' => [
+            'title' => 'Import Schedule',
+            'class' => 'SemesterReservationsCsvImport',
             'needs_semester' => true,
             'default_next' => '/admin/semesters.php',
         ],
@@ -248,6 +256,27 @@ function import_columns_help_html(array $flow): string {
             $example = "Teacher Name,Location Name,Day,Start Time,End Time,Title\n"
                 . "Marisol Vega,Access Bronx Charter School,Saturday,12:00 pm,1:30 pm,Lunch\n"
                 . "Andre Baptiste,Bronx Community College,Saturday,12:00 pm,1:30 pm,Lunch";
+            break;
+
+        case 'reservations':
+            $intro = 'One row per weekly lesson slot — the whole semester schedule in one file, '
+                . 'for moving a schedule you already run into the portal. Students and teachers '
+                . 'must already exist, and the teacher must be assigned to the location (import '
+                . 'class dates, location teachers and hold blocks first). Confirmed rows generate '
+                . 'their lessons, but NO charges are posted for any row: balances carried over '
+                . 'from your old system are loaded separately, so nobody is billed twice.';
+            $columns = [
+                ['Student Name', 'required', 'first and last name, e.g. "Lucia Ramos" (or their email)'],
+                ['Teacher Name', 'required', 'first and last name, e.g. "Marisol Vega"'],
+                ['Location Name', 'required', 'must match an active location for this semester'],
+                ['Day', 'required', 'weekday name, e.g. "Saturday" (or 0=Sunday … 6=Saturday)'],
+                ['Start Time', 'required', '10:00 am, 10:00 AM, or 10:00'],
+                ['Duration Minutes', 'optional', 'e.g. 30, 45, 60 — blank means 30'],
+                ['Status', 'optional', 'pending reach out (default), pending confirmation, or confirmed'],
+            ];
+            $example = "Student Name,Teacher Name,Location Name,Day,Start Time,Duration Minutes,Status\n"
+                . "Lucia Ramos,Marisol Vega,Access Bronx Charter School,Saturday,10:00 am,30,confirmed\n"
+                . "Devon Brown,Sofia Petrov,Access Bronx Charter School,Saturday,11:00 am,60,pending confirmation";
             break;
     }
 

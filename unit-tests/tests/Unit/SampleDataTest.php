@@ -54,6 +54,39 @@ final class SampleDataTest extends TestCase
         // only be in one place — plus Vega's spring faculty meeting.
         $this->assertCount(6, HoldBlockManagement::holdBlockReservationsForSemester($fall));
         $this->assertCount(7, HoldBlockManagement::holdBlockReservationsForSemester($spring));
+
+        // Fall's schedule arrives by CSV: every student gets exactly one slot,
+        // and loading it bills nobody.
+        $fallReservations = ReservationManagement::reservationsForSemester($fall);
+        $this->assertCount(14, $fallReservations);
+        $this->assertCount(14, array_unique(array_column($fallReservations, 'student_user_id')));
+        $this->assertSame(
+            ['confirmed' => 10, 'pending_confirmation' => 2, 'pending_reach_out' => 2], // ksorted
+            $this->countByStatus($fallReservations)
+        );
+        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+
+        // Spring's schedule arrives the other way: carried forward from fall,
+        // all pending reach out, nothing materialized.
+        $this->assertSame(
+            ['created' => 14, 'skipped' => 0],
+            ReservationManagement::carryForwardFromSemester($this->ctx, $spring, $fall)
+        );
+        $springReservations = ReservationManagement::reservationsForSemester($spring);
+        $this->assertSame(['pending_reach_out' => 14], $this->countByStatus($springReservations));
+        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+        $ids = implode(',', array_map('intval', array_column($springReservations, 'id')));
+        $this->assertSame(0, (int)pdo()->query(
+            "SELECT COUNT(*) FROM lessons WHERE semester_lesson_reservation_id IN ($ids)"
+        )->fetchColumn());
+    }
+
+    /** @return array<string,int> status => count, in status-name order */
+    private function countByStatus(array $reservations): array
+    {
+        $counts = array_count_values(array_column($reservations, 'status'));
+        ksort($counts);
+        return $counts;
     }
 
     private function importSemesterFiles(int $semesterId, string $dir): void
@@ -62,6 +95,9 @@ final class SampleDataTest extends TestCase
         $this->import($dir . '/location_dates.csv', LocationDatesCsvImport::class, $context);
         $this->import($dir . '/location_teachers.csv', LocationTeachersCsvImport::class, $context);
         $this->import($dir . '/hold_blocks.csv', HoldBlocksCsvImport::class, $context);
+        if (is_file($this->root . '/' . $dir . '/semester_location_reservations.csv')) {
+            $this->import($dir . '/semester_location_reservations.csv', SemesterReservationsCsvImport::class, $context);
+        }
     }
 
     /** Parse, auto-map the headers, assert every row validates, then commit. */

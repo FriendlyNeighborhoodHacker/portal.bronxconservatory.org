@@ -48,6 +48,16 @@ We need a concept of a "semester".  It should have a season and a year.  The sea
 .. Step 2: Select the active locations for the semester (from the locations in the system)
 .. Step 3: Upload a list of location-dates by csv ("Location Name", "Date", "start_time", "end_time", "status" (active or inactive), "notes" (like "Holiday Week")).
 .. Step 4: Upload a list of location-teacher information for the semester ("Teacher Name", "Location Name")
+.. Step 5: Upload the teachers' hold blocks ("Teacher Name", "Location Name", "Day", "Start Time", "End Time", "Title")
+.. Step 6: Upload the schedule itself — one row per weekly lesson slot ("Student Name", "Teacher Name", "Location Name", "Day", "Start Time", "Duration Minutes", "Status"). This is how an existing schedule is moved into the portal, so it never posts charges: confirmed rows generate their lessons, but balances carried over from the old system are loaded separately.
+
+Instead of uploading a schedule, a semester can be PRE-POPULATED from a previous
+semester's schedule: every student keeps their teacher, location, day and time,
+and comes across as "pending_reach_out" — the organization starts from last
+semester's roster and calls each family to confirm. Nothing is confirmed, no
+lessons are generated and nobody is charged until an admin confirms each
+reservation. A reservation whose teacher no longer teaches at that location, or
+whose slot is now taken (a new hold block, say), is skipped and reported.
 
 
 7. Semester
@@ -136,6 +146,8 @@ Step 3a: start_date, end_date, season, year
 Step 3b: Select the active locations for the semester (from the locations in the system)
 Step 3c: Upload a list of location-dates by csv ("Location Name", "Date", "start_time", "end_time", "status" (active or inactive), "notes" (like "Holiday Week")).
 Step 3d: Upload a list of location-teacher information for the semester ("Teacher Name", "Location Name")
+Step 3e: Upload the teachers' hold blocks (lunch and the like)
+Step 3f: Upload the schedule ("Student Name", "Teacher Name", "Location Name", "Day", "Start Time", "Duration Minutes", "Status") — no charges are posted by this step
 
 If there are no semesters, the admin should go through this wizard.  If there is at least one semester, the system should figure out what is the "current" semester (based on the current date and start and end date).  If there is a current semester, we should default to the current semester.  Otherwise, we should default to the next semester in the future.  Otherwise we should default to the most recent semester in the past.
 

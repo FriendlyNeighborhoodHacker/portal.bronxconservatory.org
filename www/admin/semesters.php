@@ -3,6 +3,7 @@
 // re-run any wizard step (locations, class-dates import, teachers import).
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/SemesterManagement.php';
+require_once __DIR__ . '/../lib/ReservationManagement.php';
 Application::init();
 require_admin();
 
@@ -32,6 +33,7 @@ header_html('Semesters');
   $locations = SemesterManagement::activeLocations($semesterId);
   $dates = SemesterManagement::locationDates($semesterId);
   $columns = SemesterManagement::locationTeachers($semesterId);
+  $reservations = ReservationManagement::reservationsForSemester($semesterId);
 ?>
 <div class="card">
   <h3><?=h(SemesterManagement::label($semester))?>
@@ -42,6 +44,7 @@ header_html('Semesters');
     &middot; <?=count($locations)?> location<?=count($locations) === 1 ? '' : 's'?>
     &middot; <?=count($dates)?> class date<?=count($dates) === 1 ? '' : 's'?>
     &middot; <?=count($columns)?> teacher assignment<?=count($columns) === 1 ? '' : 's'?>
+    &middot; <?=count($reservations)?> reservation<?=count($reservations) === 1 ? '' : 's'?>
   </div>
   <div class="actions">
     <a class="button" href="/admin/semester/edit.php?semester_id=<?=$semesterId?>">Edit</a>
@@ -49,6 +52,10 @@ header_html('Semesters');
     <a class="button" href="/admin/import/upload.php?flow=location_dates&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Class Dates</a>
     <a class="button" href="/admin/import/upload.php?flow=location_teachers&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Location Teachers</a>
     <a class="button" href="/admin/import/upload.php?flow=hold_blocks&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Hold Blocks</a>
+    <a class="button" href="/admin/import/upload.php?flow=reservations&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Schedule</a>
+    <?php if (count($semesters) > 1): ?>
+      <a class="button" href="/admin/semester/prepopulate.php?semester_id=<?=$semesterId?>">Pre-populate from Previous</a>
+    <?php endif; ?>
     <a class="button" href="/admin/semester_select.php?semester_id=<?=$semesterId?>&return=<?=h(urlencode('/admin/schedule.php'))?>">Open Schedule</a>
   </div>
 </div>

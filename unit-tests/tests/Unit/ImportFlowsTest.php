@@ -458,6 +458,193 @@ final class ImportFlowsTest extends TestCase
         }
     }
 
+    // ── Schedule (semester lesson reservations) ────────────────────────────
+
+    /**
+     * A semester with two teachers at one location and Saturday class dates.
+     * @return array{0:int,1:int,2:int,3:int,4:string}
+     *   [semesterId, locationId, vegaId, okaforId, locationName]
+     */
+    private function scheduleSetup(): array
+    {
+        $vega = fx_teacher('Marisol', 'Vega');
+        $okafor = fx_teacher('James', 'Okafor');
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, $vega, '2030-09-07', 3);
+        SemesterManagement::addLocationTeacher($this->ctx, $semesterId, $locationId, $okafor);
+        $locationName = (string)pdo()->query("SELECT name FROM locations WHERE id=$locationId")->fetchColumn();
+        return [$semesterId, $locationId, $vega, $okafor, $locationName];
+    }
+
+    private function scheduleRow(string $student, string $teacher, string $locationName, array $overrides = []): array
+    {
+        return $overrides + [
+            'student_name' => $student,
+            'teacher_name' => $teacher,
+            'location_name' => $locationName,
+            'day' => 'Saturday',
+            'start_time' => '10:00 am',
+            'duration_minutes' => '30',
+            'status' => 'confirmed',
+        ];
+    }
+
+    public function testScheduleImportCreatesReservationsAndLessonsWithoutCharging(): void
+    {
+        Settings::set('registration_cost', '50.00');
+        Settings::set('semester_lesson_cost', '300.00');
+        [$semesterId, $locationId, $vega, , $locationName] = $this->scheduleSetup();
+        $lucia = fx_student('Lucia', 'Ramos');
+
+        $validated = SemesterReservationsCsvImport::validateRows([
+            $this->scheduleRow('Lucia Ramos', 'Marisol Vega', $locationName),
+        ], ['semester_id' => $semesterId]);
+
+        $this->assertSame('valid', $validated[0]['status']);
+        $this->assertStringContainsString('Reserve Lucia Ramos with Marisol Vega', $validated[0]['changes']);
+        $this->assertStringContainsString('Saturdays, 10:00 am–10:30 am (confirmed)', $validated[0]['changes']);
+
+        $summary = SemesterReservationsCsvImport::commit($this->ctx, $validated, ['semester_id' => $semesterId]);
+        $this->assertSame(1, $summary['created']);
+
+        $reservations = ReservationManagement::reservationsForSemester($semesterId);
+        $this->assertCount(1, $reservations);
+        $this->assertSame('confirmed', $reservations[0]['status']);
+        $this->assertSame($lucia, (int)$reservations[0]['student_user_id']);
+        $this->assertSame($vega, (int)$reservations[0]['teacher_user_id']);
+        $this->assertSame($locationId, (int)$reservations[0]['location_id']);
+        $this->assertSame('10:00:00', $reservations[0]['start_time']);
+
+        // Confirmed, so the lessons exist — but this is a migration of a
+        // schedule that already ran, so no money moved.
+        $st = pdo()->prepare('SELECT COUNT(*) FROM lessons WHERE semester_lesson_reservation_id=?');
+        $st->execute([(int)$reservations[0]['id']]);
+        $this->assertSame(3, (int)$st->fetchColumn());
+        $this->assertSame(0, Billing::balanceForStudentCents($lucia));
+        $this->assertSame([], Billing::ledgerForStudent($lucia, $semesterId));
+
+        // Re-importing the same row changes nothing.
+        $again = SemesterReservationsCsvImport::validateRows([
+            $this->scheduleRow('Lucia Ramos', 'Marisol Vega', $locationName, ['start_time' => '10:00']),
+        ], ['semester_id' => $semesterId]);
+        $this->assertSame('Already reserved (no change)', $again[0]['changes']);
+        $this->assertSame(0, SemesterReservationsCsvImport::commit($this->ctx, $again, ['semester_id' => $semesterId])['created']);
+        $this->assertCount(1, ReservationManagement::reservationsForSemester($semesterId));
+    }
+
+    public function testScheduleImportDefaultsAndStatusAliases(): void
+    {
+        [$semesterId, , , , $locationName] = $this->scheduleSetup();
+        fx_student('Lucia', 'Ramos');
+        fx_student('Marco', 'Ramos');
+
+        $validated = SemesterReservationsCsvImport::validateRows([
+            // No duration and no status: 30 minutes, pending reach out.
+            $this->scheduleRow('Lucia Ramos', 'Marisol Vega', $locationName,
+                ['duration_minutes' => '', 'status' => '']),
+            $this->scheduleRow('Marco Ramos', 'James Okafor', $locationName,
+                ['status' => 'Pending Confirmation', 'duration_minutes' => '45']),
+        ], ['semester_id' => $semesterId]);
+
+        $this->assertSame(['valid', 'valid'], array_column($validated, 'status'));
+        $this->assertStringContainsString('10:00 am–10:30 am (pending reach out)', $validated[0]['changes']);
+        $this->assertStringContainsString('10:00 am–10:45 am (pending confirmation)', $validated[1]['changes']);
+
+        SemesterReservationsCsvImport::commit($this->ctx, $validated, ['semester_id' => $semesterId]);
+        $reservations = ReservationManagement::reservationsForSemester($semesterId);
+        $this->assertSame(['pending_reach_out', 'pending_confirmation'], array_column($reservations, 'status'));
+        $this->assertSame([30, 45], array_map('intval', array_column($reservations, 'duration_minutes')));
+        // Nothing is confirmed, so nothing was materialized.
+        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM lessons')->fetchColumn());
+    }
+
+    public function testScheduleImportFlagsUnknownPeopleBadValuesAndWrongDay(): void
+    {
+        [$semesterId, , , , $locationName] = $this->scheduleSetup();
+        fx_student('Lucia', 'Ramos');
+        fx_teacher('Zoe', 'Zither'); // a teacher, but not at this location
+
+        $validated = SemesterReservationsCsvImport::validateRows([
+            $this->scheduleRow('Nobody Here', 'Marisol Vega', $locationName),
+            $this->scheduleRow('Lucia Ramos', 'Zoe Zither', $locationName),
+            $this->scheduleRow('Lucia Ramos', 'Marisol Vega', 'Narnia'),
+            $this->scheduleRow('Lucia Ramos', 'Marisol Vega', $locationName, ['duration_minutes' => '600']),
+            $this->scheduleRow('Lucia Ramos', 'Marisol Vega', $locationName, ['status' => 'maybe']),
+            // Class dates are Saturdays only, so a Tuesday slot never happens.
+            $this->scheduleRow('Lucia Ramos', 'Marisol Vega', $locationName, ['day' => 'Tuesday']),
+        ], ['semester_id' => $semesterId]);
+
+        $this->assertSame(array_fill(0, 6, 'error'), array_column($validated, 'status'));
+        $this->assertStringContainsString('No match found for student', $validated[0]['messages'][0]);
+        $this->assertStringContainsString('not assigned to', $validated[1]['messages'][0]);
+        $this->assertStringContainsString('No match found for location', $validated[2]['messages'][0]);
+        $this->assertStringContainsString('between 1 and 240 minutes', $validated[3]['messages'][0]);
+        $this->assertStringContainsString('Unknown status', $validated[4]['messages'][0]);
+        $this->assertStringContainsString('no active class dates on Tuesdays', $validated[5]['messages'][0]);
+
+        $this->assertSame(0, SemesterReservationsCsvImport::commit($this->ctx, $validated, ['semester_id' => $semesterId])['created']);
+        $this->assertSame([], ReservationManagement::reservationsForSemester($semesterId));
+    }
+
+    public function testScheduleImportRejectsDoubleBookingWithinTheFile(): void
+    {
+        [$semesterId, , , , $locationName] = $this->scheduleSetup();
+        fx_student('Lucia', 'Ramos');
+        fx_student('Marco', 'Ramos');
+
+        $validated = SemesterReservationsCsvImport::validateRows([
+            $this->scheduleRow('Lucia Ramos', 'Marisol Vega', $locationName),
+            // Same teacher, overlapping time, different student.
+            $this->scheduleRow('Marco Ramos', 'Marisol Vega', $locationName,
+                ['start_time' => '10:15 am']),
+            // Same student, overlapping time, different teacher.
+            $this->scheduleRow('Lucia Ramos', 'James Okafor', $locationName),
+            // Exactly the same cell twice.
+            $this->scheduleRow('Marco Ramos', 'James Okafor', $locationName, ['start_time' => '11:00 am']),
+            $this->scheduleRow('Lucia Ramos', 'James Okafor', $locationName, ['start_time' => '11:00 am']),
+        ], ['semester_id' => $semesterId]);
+
+        $this->assertSame(['valid', 'error', 'error', 'valid', 'error'], array_column($validated, 'status'));
+        $this->assertStringContainsString('already books this teacher', $validated[1]['messages'][0]);
+        $this->assertStringContainsString('already books this student', $validated[2]['messages'][0]);
+        $this->assertStringContainsString('Duplicate row', $validated[4]['messages'][0]);
+
+        $this->assertSame(2, SemesterReservationsCsvImport::commit($this->ctx, $validated, ['semester_id' => $semesterId])['created']);
+    }
+
+    public function testScheduleImportRespectsHoldBlocksAndExistingReservations(): void
+    {
+        [$semesterId, $locationId, $vega, , $locationName] = $this->scheduleSetup();
+        fx_student('Lucia', 'Ramos');
+        fx_student('Marco', 'Ramos');
+        HoldBlockManagement::createHoldBlockReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $vega, 'location_id' => $locationId,
+            'day_of_week' => 6, 'start_time' => '12:00', 'duration_minutes' => 90, 'title' => 'Lunch',
+        ]);
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $vega, 'location_id' => $locationId,
+            'student_user_id' => fx_student('Naomi', 'Osei'), 'day_of_week' => 6,
+            'start_time' => '10:00', 'duration_minutes' => 30, 'status' => 'confirmed',
+        ]);
+
+        $validated = SemesterReservationsCsvImport::validateRows([
+            $this->scheduleRow('Lucia Ramos', 'Marisol Vega', $locationName, ['start_time' => '12:30 pm']),
+            $this->scheduleRow('Marco Ramos', 'Marisol Vega', $locationName),
+        ], ['semester_id' => $semesterId]);
+
+        $this->assertSame(['error', 'error'], array_column($validated, 'status'));
+        $this->assertStringContainsString('hold block ("Lunch")', $validated[0]['messages'][0]);
+        $this->assertStringContainsString("Naomi Osei's weekly slot", $validated[1]['messages'][0]);
+    }
+
+    public function testSampleScheduleCsvHeadersMatchTheImporter(): void
+    {
+        $path = __DIR__ . '/../../../sample_data/fall_semester/semester_location_reservations.csv';
+        $this->assertFileExists($path);
+        $parsed = CsvImport::parseCsv((string)file_get_contents($path), ',');
+        $this->assertSame(array_values(SemesterReservationsCsvImport::targetFields()), $parsed['headers']);
+        $this->assertCount(14, $parsed['rows']);
+    }
+
     public function testTimeAndDateParsing(): void
     {
         $this->assertSame('09:00:00', LocationDatesCsvImport::parseTime('9:00 am'));
