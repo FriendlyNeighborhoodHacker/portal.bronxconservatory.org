@@ -60,6 +60,29 @@ class InstrumentCatalog {
         self::log($ctx, 'teacher.set_instruments', ['teacher_user_id' => $teacherUserId, 'instrument_ids' => array_values($instrumentIds)]);
     }
 
+    // Add to a student's instrument set (keeps what they already have).
+    public static function addStudentInstruments(?UserContext $ctx, int $studentUserId, array $instrumentIds): void {
+        self::addInstruments('student_instruments', 'student_user_id', $studentUserId, $instrumentIds);
+        self::log($ctx, 'student.add_instruments', ['student_user_id' => $studentUserId, 'instrument_ids' => array_values($instrumentIds)]);
+    }
+
+    public static function addTeacherInstruments(?UserContext $ctx, int $teacherUserId, array $instrumentIds): void {
+        if (!$ctx || !$ctx->admin) {
+            throw new RuntimeException('Admins only');
+        }
+        self::addInstruments('teacher_instruments', 'teacher_user_id', $teacherUserId, $instrumentIds);
+        self::log($ctx, 'teacher.add_instruments', ['teacher_user_id' => $teacherUserId, 'instrument_ids' => array_values($instrumentIds)]);
+    }
+
+    private static function addInstruments(string $table, string $userColumn, int $userId, array $instrumentIds): void {
+        $insert = self::pdo()->prepare("INSERT IGNORE INTO $table ($userColumn, instrument_id) VALUES (?, ?)");
+        foreach (array_unique(array_map('intval', $instrumentIds)) as $instrumentId) {
+            if ($instrumentId > 0) {
+                $insert->execute([$userId, $instrumentId]);
+            }
+        }
+    }
+
     private static function setInstruments(string $table, string $userColumn, int $userId, array $instrumentIds): void {
         $pdo = self::pdo();
         $pdo->prepare("DELETE FROM $table WHERE $userColumn = ?")->execute([$userId]);

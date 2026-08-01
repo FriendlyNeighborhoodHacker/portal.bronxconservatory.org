@@ -42,4 +42,42 @@ final class UserManagementTest extends TestCase
         $this->expectException(RuntimeException::class);
         UserManagement::deleteUser($this->ctx, $this->ctx->id);
     }
+
+    public function testAdoptOrCreatePersonReusesExistingEmail(): void
+    {
+        $existing = fx_user('Brian', 'R', ['email' => 'brian@example.org', 'password_hash' => 'h']);
+
+        // Same email typed into an Add form: the account is adopted, the
+        // typed fields refresh it, nothing throws.
+        $person = UserManagement::adoptOrCreatePerson($this->ctx, [
+            'first_name' => 'Brian',
+            'last_name' => 'Rosenthal',
+            'email' => 'BRIAN@example.org',
+            'cell_phone' => '914-555-0000',
+        ]);
+        $this->assertTrue($person['existed']);
+        $this->assertSame($existing, (int)$person['id']);
+        $user = UserManagement::findById($existing);
+        $this->assertSame('Rosenthal', $user['last_name']);
+        $this->assertSame('914-555-0000', $user['cell_phone']);
+
+        // A fresh email creates a lightweight person.
+        $created = UserManagement::adoptOrCreatePerson($this->ctx, [
+            'first_name' => 'Nell', 'last_name' => 'New', 'email' => 'nell@example.org',
+        ]);
+        $this->assertFalse($created['existed']);
+        $this->assertNotSame($existing, (int)$created['id']);
+    }
+
+    public function testAdoptOrCreatePersonRestoresSoftDeletedAccount(): void
+    {
+        $deleted = fx_user('Gone', 'Girl', ['email' => 'gone@example.org', 'is_deleted' => true]);
+
+        $person = UserManagement::adoptOrCreatePerson($this->ctx, [
+            'first_name' => 'Gone', 'last_name' => 'Girl', 'email' => 'gone@example.org',
+        ]);
+        $this->assertTrue($person['existed']);
+        $this->assertSame($deleted, (int)$person['id']);
+        $this->assertSame(0, (int)UserManagement::findById($deleted)['is_deleted']);
+    }
 }

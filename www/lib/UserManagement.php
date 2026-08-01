@@ -126,6 +126,66 @@ class UserManagement {
         self::log('user.invite_sent', $userId, ['email' => $user['email']]);
     }
 
+    /** Find a user by email regardless of deleted state (admin matching). */
+    public static function findByEmailAnyState(string $email): ?array {
+        $email = self::normEmail($email);
+        if (!$email) return null;
+        $st = self::pdo()->prepare('SELECT * FROM users WHERE email=? LIMIT 1');
+        $st->execute([$email]);
+        $row = $st->fetch();
+        return $row ?: null;
+    }
+
+    /**
+     * The person an admin just typed into an Add Teacher / Add Student /
+     * Add Parent form: if the email already belongs to an account, adopt it —
+     * restore it if soft-deleted and refresh the typed fields — instead of
+     * failing with "email already exists". Otherwise create a lightweight
+     * no-login account. The caller then attaches the role (teacher profile,
+     * student profile, parenthood link).
+     *
+     * $data: first_name, last_name (required); email, cell_phone, suffix,
+     * preferred_name (optional). Returns ['id' => int, 'existed' => bool].
+     */
+    public static function adoptOrCreatePerson(UserContext $ctx, array $data): array {
+        self::assertAdmin($ctx);
+
+        $email = self::normEmail($data['email'] ?? null);
+        $existing = $email !== null ? self::findByEmailAnyState($email) : null;
+
+        // Only the typed, non-empty extras are written — never wiping
+        // whatever the existing account already has.
+        $extras = [];
+        foreach (['cell_phone', 'suffix', 'preferred_name'] as $key) {
+            if (trim((string)($data[$key] ?? '')) !== '') {
+                $extras[$key] = (string)$data[$key];
+            }
+        }
+
+        if ($existing) {
+            $userId = (int)$existing['id'];
+            if (!empty($existing['is_deleted'])) {
+                self::restoreUser($ctx, $userId);
+            }
+            self::updateProfile($ctx, $userId, $extras + [
+                'first_name' => (string)($data['first_name'] ?? ''),
+                'last_name' => (string)($data['last_name'] ?? ''),
+            ]);
+            return ['id' => $userId, 'existed' => true];
+        }
+
+        $userId = self::createUser($ctx, [
+            'first_name' => (string)($data['first_name'] ?? ''),
+            'last_name' => (string)($data['last_name'] ?? ''),
+            'email' => $email ?? '',
+            'no_login' => true,
+        ]);
+        if ($extras) {
+            self::updateProfile($ctx, $userId, $extras);
+        }
+        return ['id' => $userId, 'existed' => false];
+    }
+
     // Find user by ID
     public static function findById(int $id): ?array {
         $st = self::pdo()->prepare('SELECT * FROM users WHERE id=? LIMIT 1');

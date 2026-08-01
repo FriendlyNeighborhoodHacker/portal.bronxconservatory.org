@@ -20,19 +20,17 @@ try {
     if ($childId <= 0) {
         throw new InvalidArgumentException('A child is required.');
     }
-    $parentId = UserManagement::createUser($ctx, [
+    // If the email already belongs to an account, adopt it (restore if
+    // soft-deleted, refresh the typed fields) rather than failing.
+    $person = UserManagement::adoptOrCreatePerson($ctx, [
         'first_name' => (string)($_POST['first_name'] ?? ''),
         'last_name' => (string)($_POST['last_name'] ?? ''),
         'email' => (string)($_POST['email'] ?? ''),
-        'no_login' => true,
+        'cell_phone' => (string)($_POST['cell_phone'] ?? ''),
     ]);
-    $cell = trim((string)($_POST['cell_phone'] ?? ''));
-    if ($cell !== '') {
-        UserManagement::updateProfile($ctx, $parentId, ['cell_phone' => $cell]);
-    }
     $role = trim((string)($_POST['role'] ?? '')) ?: null;
-    StudentTeacherManagement::linkParentChild($ctx, $parentId, $childId, $role);
-    echo json_encode(['ok' => true, 'parent_user_id' => $parentId]);
+    StudentTeacherManagement::linkParentChild($ctx, (int)$person['id'], $childId, $role);
+    echo json_encode(['ok' => true, 'parent_user_id' => (int)$person['id']]);
 } catch (\Throwable $e) {
     echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
 }

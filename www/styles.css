@@ -756,15 +756,18 @@ details summary {
 
 /* ===== BCM: brand wordmark ===== */
 
-.brand-mark {
-  font-size: 22px;
-  margin-right: 8px;
-  vertical-align: -2px;
-}
-
 .brand-name {
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+/* The logo is white-on-transparent: on light surfaces (the login card's
+   wordmark) invert it to dark so it stays visible. */
+body.auth .brand-logo {
+  filter: invert(1);
+  opacity: 0.85;
+  height: 44px;
+  vertical-align: middle;
 }
 
 /* ===== BCM: site footer (copyright + phone number on every page) ===== */
