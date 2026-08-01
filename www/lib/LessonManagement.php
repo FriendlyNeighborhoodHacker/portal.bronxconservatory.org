@@ -116,6 +116,34 @@ class LessonManagement {
         return $st->fetchAll();
     }
 
+    /** Every lesson a teacher teaches in one semester (as effective teacher). */
+    public static function lessonsForTeacherInSemester(int $teacherUserId, int $semesterId): array {
+        $st = self::pdo()->prepare(
+            self::LESSON_SELECT .
+            ' WHERE r.semester_id = ?
+                AND COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) = ?
+              ORDER BY l.start_datetime'
+        );
+        $st->execute([$semesterId, $teacherUserId]);
+        return $st->fetchAll();
+    }
+
+    /** Every lesson a set of students has in one semester. */
+    public static function lessonsForStudentsInSemester(array $studentUserIds, int $semesterId): array {
+        $ids = array_values(array_map('intval', $studentUserIds));
+        if (!$ids) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $st = self::pdo()->prepare(
+            self::LESSON_SELECT .
+            " WHERE r.semester_id = ? AND r.student_user_id IN ($placeholders)
+              ORDER BY l.start_datetime"
+        );
+        $st->execute(array_merge([$semesterId], $ids));
+        return $st->fetchAll();
+    }
+
     /** Lessons in a date range for a set of students (parent/student calendars). */
     public static function lessonsBetweenForStudents(array $studentUserIds, string $fromDate, string $toDate): array {
         $ids = array_values(array_map('intval', $studentUserIds));

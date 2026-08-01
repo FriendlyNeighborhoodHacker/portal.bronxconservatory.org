@@ -360,6 +360,25 @@ class ReservationManagement {
         return $st->fetchAll();
     }
 
+    /** A teacher's non-deleted reservations (optionally one semester). */
+    public static function reservationsForTeacher(int $teacherUserId, ?int $semesterId = null): array {
+        $sql = "SELECT r.*,
+                       su.first_name AS student_first_name, su.last_name AS student_last_name,
+                       l.name AS location_name
+                FROM semester_lesson_reservations r
+                JOIN users su ON su.id = r.student_user_id
+                JOIN locations l ON l.id = r.location_id
+                WHERE r.teacher_user_id=? AND r.status <> 'deleted'";
+        $params = [$teacherUserId];
+        if ($semesterId !== null) {
+            $sql .= ' AND r.semester_id=?';
+            $params[] = $semesterId;
+        }
+        $st = self::pdo()->prepare($sql . ' ORDER BY r.day_of_week, r.start_time');
+        $st->execute($params);
+        return $st->fetchAll();
+    }
+
     /** A student's non-deleted reservations (optionally one semester). */
     public static function reservationsForStudent(int $studentUserId, ?int $semesterId = null): array {
         $sql = "SELECT r.*,

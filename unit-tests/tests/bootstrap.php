@@ -17,6 +17,7 @@ require_once __DIR__ . '/../../www/lib/ReservationManagement.php';
 require_once __DIR__ . '/../../www/lib/HoldBlockManagement.php';
 require_once __DIR__ . '/../../www/lib/Billing.php';
 require_once __DIR__ . '/../../www/lib/LessonManagement.php';
+require_once __DIR__ . '/../../www/lib/ScheduleTimeline.php';
 require_once __DIR__ . '/../../www/lib/NotesManagement.php';
 require_once __DIR__ . '/../../www/lib/ResourceManagement.php';
 require_once __DIR__ . '/../../www/lib/AnnouncementManagement.php';

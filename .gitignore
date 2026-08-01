@@ -2,6 +2,8 @@
 config.local.php
 config.local.demo.php
 
+.DS_Store
+
 # ===== RSA keys for JWT signing =====
 keys/
 

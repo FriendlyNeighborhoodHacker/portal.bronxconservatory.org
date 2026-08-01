@@ -160,30 +160,21 @@ class ApplicationUI {
             $groups[] = ['id' => 'subnavAdmin', 'owner' => 'Admin', 'items' => $items];
         }
 
-        // Calendar pages: an overview / Week pair, toggled by the "Calendar"
-        // top-nav item. The admin overview lists the whole semester's class
-        // dates (no month to preserve); the teacher's is still a month grid.
+        // Calendar pages: a whole-semester overview / Week pair, toggled by
+        // the "Calendar" top-nav item. Neither overview is a month grid any
+        // more, so there is no month to carry between them.
         $calendarPairs = [
-            '/admin/calendar' => ['/admin/calendar.php', '/admin/calendar_week.php', 'Semester', false],
-            '/teacher/calendar' => ['/teacher/calendar.php', '/teacher/calendar_week.php', 'Month', true],
+            '/admin/calendar' => ['/admin/calendar.php', '/admin/calendar_week.php'],
+            '/teacher/calendar' => ['/teacher/calendar.php', '/teacher/calendar_week.php'],
         ];
-        foreach ($calendarPairs as $prefix => [$overviewPath, $weekPath, $overviewLabel, $keepsMonth]) {
+        foreach ($calendarPairs as $prefix => [$overviewPath, $weekPath]) {
             if (strpos($script, $prefix) === 0) {
                 $date = (string)($_GET['date'] ?? '');
                 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
                     $date = '';
                 }
-                $overviewQuery = '';
-                if ($keepsMonth) {
-                    $month = (string)($_GET['month'] ?? '');
-                    if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
-                        $month = $date !== '' ? substr($date, 0, 7) : '';
-                    }
-                    $overviewQuery = $month !== '' ? '?month=' . $month : '';
-                }
                 $groups[] = ['id' => 'subnavCalendar', 'owner' => 'Calendar', 'items' => [
-                    ['path' => $overviewPath . $overviewQuery,
-                     'label' => $overviewLabel, 'active' => $script === $overviewPath],
+                    ['path' => $overviewPath, 'label' => 'Semester', 'active' => $script === $overviewPath],
                     ['path' => $weekPath . ($date !== '' ? '?date=' . $date : ''),
                      'label' => 'Week', 'active' => $script === $weekPath],
                 ]];

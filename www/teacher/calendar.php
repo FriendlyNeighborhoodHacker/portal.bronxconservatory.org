@@ -1,9 +1,11 @@
 <?php
-// Teacher Calendar — monthly view: each day shows the teacher's lesson count
-// and locations. Clicking a day opens the weekly list.
+// Teacher Calendar — the whole semester as one chronological list: every
+// lesson with its date, time and location, plus the holiday weeks when a
+// location where they teach is closed and there is no lesson.
 require_once __DIR__ . '/../partials.php';
-require_once __DIR__ . '/../partials_calendar_month.php';
-require_once __DIR__ . '/../lib/LessonManagement.php';
+require_once __DIR__ . '/../partials_semester_timeline.php';
+require_once __DIR__ . '/../lib/ScheduleTimeline.php';
+require_once __DIR__ . '/../lib/SemesterManagement.php';
 Application::init();
 require_login();
 
@@ -14,37 +16,24 @@ if (!in_array('teacher', $roles, true) && !in_array('admin', $roles, true)) {
     die('Teachers only');
 }
 
-$month = (string)($_GET['month'] ?? '');
-if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
-    $month = date('Y-m');
-}
-$monthStart = $month . '-01';
-$monthEnd = date('Y-m-t', strtotime($monthStart));
-
-$dayContent = [];
-foreach (LessonManagement::lessonsBetweenForTeacher((int)$me['id'], $monthStart, $monthEnd) as $lesson) {
-    $date = date('Y-m-d', strtotime((string)$lesson['start_datetime']));
-    $label = date('g:i a', strtotime((string)$lesson['start_datetime'])) . ' '
-        . trim(($lesson['student_preferred_name'] ?: $lesson['student_first_name']) . ' ' . $lesson['student_last_name']);
-    $missed = $lesson['attended'] !== null && (int)$lesson['attended'] === 0;
-    $dayContent[$date][] = '<span class="cal-chip' . ($missed ? ' cal-missed' : '') . '" title="'
-        . h($label . ' · ' . $lesson['location_name']) . '">' . h($label) . '</span>';
-}
+$semester = SemesterManagement::resolveDefaultSemester();
+$entries = $semester
+    ? ScheduleTimeline::forTeacher((int)$me['id'], (int)$semester['id'])
+    : [];
 
 header_html('My Calendar');
 ?>
 
-<h2>My Calendar</h2>
-
-<div class="card">
-<?=calendar_month_html($month, $dayContent, [
-    'prev' => '/teacher/calendar.php?month=' . date('Y-m', strtotime($monthStart . ' -1 month')),
-    'next' => '/teacher/calendar.php?month=' . date('Y-m', strtotime($monthStart . ' +1 month')),
-], [
-    'dayLinkFn' => fn(string $date): string => '/teacher/calendar_week.php?date=' . $date,
-])?>
+<div class="page-head">
+  <h2>My Calendar<?php if ($semester): ?> — <?=h(SemesterManagement::label($semester))?><?php endif; ?></h2>
 </div>
 
-<p class="small">Click a day to see that week's lessons as a list.</p>
+<?=semester_timeline_html($entries, fn(array $lesson): string => trim(
+    ($lesson['student_preferred_name'] ?: $lesson['student_first_name'])
+    . ' ' . $lesson['student_last_name']
+))?>
+
+<p class="small">Open the <a href="/teacher/calendar_week.php">Week</a> view to mark attendance
+and write lesson notes.</p>
 
 <?php footer_html(); ?>
