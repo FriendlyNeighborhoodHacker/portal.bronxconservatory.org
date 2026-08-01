@@ -15,7 +15,7 @@ ApplicationUI::minimalHeaderHtml('Register — Family');
   <h1>BCM <?=h(registration_semester_label($semester))?> Registration</h1>
   <?=registration_steps_html(1)?>
 
-  <p>Please use this form to register<?php if (StripeCheckout::isConfigured()): ?> and pay tuition<?php endif; ?>.
+  <p>Please use this form to register and pay tuition if you are a BRONX RESIDENT studying IN PERSON.<?php if (StripeCheckout::isConfigured()): ?> and pay tuition<?php endif; ?>.
     It will take only about 5 minutes to complete. If you would like to discuss scheduling,
     have any questions, prefer to pay over the phone, or would like to be considered for
     scholarship, please still fill out this form and we will call you to follow up.</p>
