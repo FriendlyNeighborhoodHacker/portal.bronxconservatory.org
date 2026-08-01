@@ -39,12 +39,13 @@ CREATE TABLE IF NOT EXISTS leads (
   converted_at DATETIME DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  -- Indexes are declared inline (not as separate CREATE INDEX statements)
+  -- so CREATE TABLE IF NOT EXISTS covers them and this file stays re-runnable.
+  KEY idx_leads_status (status, created_at),
+  KEY idx_leads_email (email),
   CONSTRAINT fk_lead_semester FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE SET NULL,
   CONSTRAINT fk_lead_conv_parent FOREIGN KEY (converted_parent_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
-
-CREATE INDEX idx_leads_status ON leads(status, created_at);
-CREATE INDEX idx_leads_email ON leads(email);
 
 CREATE TABLE IF NOT EXISTS lead_students (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -57,17 +58,22 @@ CREATE TABLE IF NOT EXISTS lead_students (
   guitar_ensemble TINYINT(1) NOT NULL DEFAULT 0,
   converted_student_user_id INT DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_ls_lead (lead_id),
   CONSTRAINT fk_ls_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
   CONSTRAINT fk_ls_conv_student FOREIGN KEY (converted_student_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
-CREATE INDEX idx_ls_lead ON lead_students(lead_id);
-
 -- New settings only; existing keys (registration_cost, recital_fee) are
--- deliberately left alone.
-INSERT IGNORE INTO settings (key_name, value) VALUES
+-- deliberately left alone. Blank values are filled in (a settings save made
+-- before this migration ran creates the rows empty), but a value an admin
+-- has actually set is never overwritten — so this is safe to re-run.
+INSERT INTO settings (key_name, value) VALUES
   ('tuition_30', '420.00'),
   ('tuition_60', '840.00'),
   ('tuition_ensemble', '270.00'),
-  ('installment_fee', '20.00'),
-  ('registration_semester_id', '');
+  ('installment_fee', '20.00')
+ON DUPLICATE KEY UPDATE value = IF(settings.value IS NULL OR settings.value = '', VALUES(value), settings.value);
+
+-- Registration is closed until an admin picks a semester, so this one stays
+-- blank when it is missing.
+INSERT IGNORE INTO settings (key_name, value) VALUES ('registration_semester_id', '');
