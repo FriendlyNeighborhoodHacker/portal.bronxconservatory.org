@@ -14,16 +14,16 @@ $me = current_user();
 $children = StudentTeacherManagement::childrenOfParent((int)$me['id']);
 $childIds = array_map(fn($c) => (int)$c['id'], $children);
 
-$semester = SemesterManagement::resolveDefaultSemester();
-$entries = $semester
-    ? ScheduleTimeline::forStudents($childIds, (int)$semester['id'])
-    : [];
+// Every semester still to come, so next semester shows up as soon as it
+// is planned.
+$semesters = SemesterManagement::currentAndFutureSemesters();
+$entries = ScheduleTimeline::forStudents($childIds, $semesters);
 
 header_html('Family Calendar');
 ?>
 
 <div class="page-head">
-  <h2>Family Calendar<?php if ($semester): ?> — <?=h(SemesterManagement::label($semester))?><?php endif; ?></h2>
+  <h2>Family Calendar</h2>
 </div>
 
 <?=semester_timeline_html($entries, function (array $lesson): string {

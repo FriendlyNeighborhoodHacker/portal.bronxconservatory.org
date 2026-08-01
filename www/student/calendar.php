@@ -16,16 +16,16 @@ if (!in_array('student', $roles, true) && empty($me['is_admin'])) {
     die('Students only');
 }
 
-$semester = SemesterManagement::resolveDefaultSemester();
-$entries = $semester
-    ? ScheduleTimeline::forStudents([(int)$me['id']], (int)$semester['id'])
-    : [];
+// Every semester still to come, so next semester shows up as soon as it
+// is planned.
+$semesters = SemesterManagement::currentAndFutureSemesters();
+$entries = ScheduleTimeline::forStudents([(int)$me['id']], $semesters);
 
 header_html('My Calendar');
 ?>
 
 <div class="page-head">
-  <h2>My Calendar<?php if ($semester): ?> — <?=h(SemesterManagement::label($semester))?><?php endif; ?></h2>
+  <h2>My Calendar</h2>
 </div>
 
 <?=semester_timeline_html($entries, function (array $lesson): string {

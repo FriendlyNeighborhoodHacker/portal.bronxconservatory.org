@@ -107,6 +107,20 @@ class SemesterManagement {
         return self::pdo()->query('SELECT * FROM semesters ORDER BY start_date DESC, id DESC')->fetchAll();
     }
 
+    /**
+     * Semesters that have not finished yet — the one in progress plus every
+     * one already planned — earliest first. The personal calendars show all
+     * of these at once, so a family can see next semester as soon as its
+     * dates are entered.
+     */
+    public static function currentAndFutureSemesters(?string $today = null): array {
+        $st = self::pdo()->prepare(
+            'SELECT * FROM semesters WHERE end_date >= ? ORDER BY start_date, id'
+        );
+        $st->execute([$today ?? date('Y-m-d')]);
+        return $st->fetchAll();
+    }
+
     public static function hasAnySemester(): bool {
         return (int)self::pdo()->query('SELECT COUNT(*) FROM semesters')->fetchColumn() > 0;
     }

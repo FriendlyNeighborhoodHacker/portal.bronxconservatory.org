@@ -1078,6 +1078,23 @@ body.auth .brand-logo {
   padding-left: 16px;
 }
 
+/* Which semester a row belongs to. Only rendered once the list spans more
+   than one, so a date is never ambiguous. */
+.sem-date-tag {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  background: var(--color-accent-soft);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+/* "Showing lessons from: Fall 2026, Spring 2027" above the list. */
+.timeline-note {
+  margin: 0 0 8px;
+  color: var(--color-text-muted);
+}
+
 /* A lesson the student didn't attend, on the personal calendars. */
 .sem-date-missed .sem-date-head strong,
 .sem-date-missed .sem-date-time {

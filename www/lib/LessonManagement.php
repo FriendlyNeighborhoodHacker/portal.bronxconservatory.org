@@ -116,31 +116,38 @@ class LessonManagement {
         return $st->fetchAll();
     }
 
-    /** Every lesson a teacher teaches in one semester (as effective teacher). */
-    public static function lessonsForTeacherInSemester(int $teacherUserId, int $semesterId): array {
+    /** Every lesson a teacher teaches across these semesters (as effective teacher). */
+    public static function lessonsForTeacherInSemesters(int $teacherUserId, array $semesterIds): array {
+        $semesterIds = array_values(array_unique(array_map('intval', $semesterIds)));
+        if (!$semesterIds) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($semesterIds), '?'));
         $st = self::pdo()->prepare(
             self::LESSON_SELECT .
-            ' WHERE r.semester_id = ?
+            " WHERE r.semester_id IN ($placeholders)
                 AND COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) = ?
-              ORDER BY l.start_datetime'
+              ORDER BY l.start_datetime"
         );
-        $st->execute([$semesterId, $teacherUserId]);
+        $st->execute(array_merge($semesterIds, [$teacherUserId]));
         return $st->fetchAll();
     }
 
-    /** Every lesson a set of students has in one semester. */
-    public static function lessonsForStudentsInSemester(array $studentUserIds, int $semesterId): array {
-        $ids = array_values(array_map('intval', $studentUserIds));
-        if (!$ids) {
+    /** Every lesson a set of students has across these semesters. */
+    public static function lessonsForStudentsInSemesters(array $studentUserIds, array $semesterIds): array {
+        $ids = array_values(array_unique(array_map('intval', $studentUserIds)));
+        $semesterIds = array_values(array_unique(array_map('intval', $semesterIds)));
+        if (!$ids || !$semesterIds) {
             return [];
         }
-        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $studentPlaceholders = implode(',', array_fill(0, count($ids), '?'));
+        $semesterPlaceholders = implode(',', array_fill(0, count($semesterIds), '?'));
         $st = self::pdo()->prepare(
             self::LESSON_SELECT .
-            " WHERE r.semester_id = ? AND r.student_user_id IN ($placeholders)
+            " WHERE r.semester_id IN ($semesterPlaceholders) AND r.student_user_id IN ($studentPlaceholders)
               ORDER BY l.start_datetime"
         );
-        $st->execute(array_merge([$semesterId], $ids));
+        $st->execute(array_merge($semesterIds, $ids));
         return $st->fetchAll();
     }
 
