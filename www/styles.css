@@ -1394,3 +1394,33 @@ body.auth .brand-logo {
   font-weight: 700;
   color: var(--color-text-muted);
 }
+
+/* The question a group of radios/checkboxes answers. Sits just under the
+   section heading and reads as the prompt — .small (12px, muted) is for
+   footnotes and caveats, not for something the user has to answer. */
+.form-question {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-navy);
+  margin: 0 0 8px;
+}
+
+/* Checkbox/radio options one per line, for option sets whose labels are long
+   enough that a wrapping row (.choice-grid) reads as a jumble. */
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The asterisk marking a required field. */
+.required {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+/* A full sentence of instructions inside a <label>. Labels are 500-weight,
+   which reads as bold once the text is longer than a field name. */
+.label-prose {
+  font-weight: 400;
+}

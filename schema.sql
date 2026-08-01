@@ -589,6 +589,7 @@ CREATE TABLE lead_students (
   instrument VARCHAR(50) NOT NULL COMMENT 'As chosen: Voice/Piano/Violin/Viola/Guitar/Cello-Bass',
   lesson_length_minutes INT NOT NULL DEFAULT 30 COMMENT '30 or 60',
   guitar_ensemble TINYINT(1) NOT NULL DEFAULT 0,
+  shirt_size VARCHAR(10) DEFAULT NULL COMMENT 'Optional — copied to users.shirt_size on convert',
   converted_student_user_id INT DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_ls_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,

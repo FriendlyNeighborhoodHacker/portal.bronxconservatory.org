@@ -65,7 +65,8 @@ ApplicationUI::minimalHeaderHtml('Register — Review');
       <strong><?=h($student['first_name'] . ' ' . $student['last_name'])?></strong><?php
         if (trim((string)($student['class_of'] ?? '')) !== ''): ?> (Class of <?=h($student['class_of'])?>)<?php endif; ?>
       — <?=h($student['instrument'])?>,
-      <?=(int)$student['lesson_length_minutes']?>-minute lessons<?=!empty($student['guitar_ensemble']) ? ' + Guitar Ensemble' : ''?>
+      <?=(int)$student['lesson_length_minutes']?>-minute lessons<?=!empty($student['guitar_ensemble']) ? ' + Guitar Ensemble' : ''?><?php
+        if (trim((string)($student['shirt_size'] ?? '')) !== ''): ?>, shirt <?=h($student['shirt_size'])?><?php endif; ?>
     </p>
     <?php endforeach; ?>
     <p class="small">

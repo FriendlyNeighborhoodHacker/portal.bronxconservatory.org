@@ -117,7 +117,7 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
 <h3>Students</h3>
 <div class="card">
   <table class="list">
-    <thead><tr><th>Name</th><th>Class of</th><th>Instrument</th><th>Lesson</th><th>Guitar Ensemble</th><th>Converted</th></tr></thead>
+    <thead><tr><th>Name</th><th>Class of</th><th>Instrument</th><th>Lesson</th><th>Guitar Ensemble</th><th>Shirt</th><th>Converted</th></tr></thead>
     <tbody>
       <?php foreach ($students as $student): ?>
       <tr>
@@ -126,6 +126,7 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
         <td><?=h($student['instrument'])?></td>
         <td><?=(int)$student['lesson_length_minutes']?> min</td>
         <td><?=!empty($student['guitar_ensemble']) ? 'Yes' : '—'?></td>
+        <td><?=h($student['shirt_size'] ?: '—')?></td>
         <td class="small"><?=!empty($student['converted_student_user_id'])
             ? '<a href="/admin/student_edit.php?id=' . (int)$student['converted_student_user_id'] . '">view student</a>'
             : '—'?></td>

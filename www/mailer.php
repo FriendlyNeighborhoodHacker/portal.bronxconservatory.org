@@ -374,6 +374,9 @@ function send_lead_registration_email(array $lead, array $students, array $quote
     if (!empty($student['guitar_ensemble'])) {
       $detail .= ' + Guitar Ensemble';
     }
+    if (trim((string)($student['shirt_size'] ?? '')) !== '') {
+      $detail .= ', shirt size ' . $e($student['shirt_size']);
+    }
     $studentRows .= '<li>' . $e($student['first_name'] . ' ' . $student['last_name'])
       . (!empty($student['class_of']) ? ' (Class of ' . (int)$student['class_of'] . ')' : '')
       . ' — ' . $detail . '</li>';

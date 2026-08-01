@@ -23,6 +23,7 @@ foreach ((array)($_POST['students'] ?? []) as $student) {
         'instrument' => (string)($student['instrument'] ?? ''),
         'lesson_length_minutes' => (int)($student['lesson_length_minutes'] ?? 30),
         'guitar_ensemble' => !empty($student['guitar_ensemble']) ? 1 : 0,
+        'shirt_size' => trim((string)($student['shirt_size'] ?? '')),
     ];
 }
 if (!$students) {

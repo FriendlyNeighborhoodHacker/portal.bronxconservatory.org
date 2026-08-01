@@ -53,6 +53,14 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
             <?php endforeach; ?>
           </select>
         </label>
+        <label>Shirt size <span class="small">(optional)</span>
+          <select name="students[<?=$i?>][shirt_size]">
+            <option value="">Choose…</option>
+            <?php foreach (LeadManagement::SHIRT_SIZES as $size): ?>
+            <option value="<?=h($size)?>"<?=($student['shirt_size'] ?? '') === $size ? ' selected' : ''?>><?=h($size)?></option>
+            <?php endforeach; ?>
+          </select>
+        </label>
         <label>Lesson length
           <select name="students[<?=$i?>][lesson_length_minutes]">
             <option value="30"<?=(int)($student['lesson_length_minutes'] ?? 30) === 30 ? ' selected' : ''?>>30 minutes (<?=$dollars(Settings::tuition30Cents())?>/semester)</option>
@@ -72,10 +80,11 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
     </div>
 
     <h3>Location Preference</h3>
-    <p class="small">Bronx Conservatory of Music has two locations. Please indicate your
-      preference here. PLEASE NOTE: if you want any day other than Saturday, select
+    <p class="form-question" id="q-location">Bronx Conservatory of Music has two locations.
+      Please indicate your preference here.</p>
+    <p class="small">PLEASE NOTE: if you want any day other than Saturday, select
       Access Bronx Charter School.</p>
-    <div class="stack" style="gap:6px;">
+    <div class="stack" style="gap:6px;" role="radiogroup" aria-labelledby="q-location">
       <label class="inline">
         <input type="radio" name="location_preference" value="Bronx Community College"<?=($scheduling['location_preference'] ?? '') === 'Bronx Community College' ? ' checked' : ''?>>
         <span><strong>Bronx Community College</strong>, 200 Hall of Fame Terrace (ample parking) —
@@ -99,10 +108,12 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
     </div>
 
     <h3>Scheduling Information</h3>
-    <p class="small">Please check ALL boxes representing (in whole or in part) times that you
-      are able to attend BCM. Please note that studios fill quickly, and while we take this
+    <p>Please check ALL boxes representing (in whole or in part) times that you are able to
+      attend BCM.</p>
+    <p class="small">Please note that studios fill quickly, and while we take this
       information into consideration, preferred times are not always available.</p>
-    <div class="choice-grid">
+    <p class="form-question" id="q-availability">Check All That Apply <span class="required">*</span></p>
+    <div class="choice-list" role="group" aria-labelledby="q-availability">
       <?php foreach (LeadManagement::AVAILABILITY_BLOCKS as $value => $label): ?>
       <label class="inline">
         <input type="checkbox" name="availability_blocks[]" value="<?=h($value)?>"<?=in_array($value, (array)($scheduling['availability_blocks'] ?? []), true) ? ' checked' : ''?>>
@@ -112,9 +123,9 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
     </div>
 
     <h3>Additional Information</h3>
-    <label>Are you only available Tuesdays after 5:00? Need to leave by 10:30 on Saturday?
-      Please use this (optional) space to let us know any particular constraints/requests
-      that you have, or further clarify the info given above.
+    <label><span class="label-prose">Are you only available Tuesdays after 5:00? Need to leave
+      by 10:30 on Saturday? Please use this (optional) space to let us know any particular
+      constraints/requests that you have, or further clarify the info given above.</span>
       <textarea name="scheduling_notes" rows="3"><?=h($scheduling['notes'] ?? '')?></textarea>
     </label>
 
