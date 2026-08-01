@@ -145,6 +145,7 @@ class ReservationUIManager {
                 </span>
               </div>
             </form>
+            <p class="small"><a id="resEditStudentLink" href="#"></a></p>
           </div>
         </div>
 
@@ -234,6 +235,11 @@ class ReservationUIManager {
               document.getElementById('resEditContext').textContent = item.dataset.context || '';
               document.getElementById('resEditBalance').textContent = item.dataset.balanceText || '';
               document.getElementById('resEditStatus').value = item.dataset.status;
+              // Way out of the grid: everything else about this student
+              // (parents, instruments, charges) lives on their own page.
+              var studentLink = document.getElementById('resEditStudentLink');
+              studentLink.textContent = 'Edit ' + (item.dataset.studentName || 'student');
+              studentLink.href = '/admin/student_edit.php?id=' + encodeURIComponent(item.dataset.studentId || '');
               document.getElementById('resEditErr').classList.add('hidden');
               openModal(editModal);
               return;
