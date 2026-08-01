@@ -74,6 +74,11 @@ $SETTINGS_DEF = [
     'hint'  => 'Public registration form: one-time per-family fee for paying tuition in two installments.',
     'type'  => 'text',
   ],
+  'semester_weeks' => [
+    'label' => 'Lessons per semester',
+    'hint'  => 'Public registration form: used for the "$420 for 15 weeks ($28 per lesson)" breakdown.',
+    'type'  => 'text',
+  ],
   'registration_semester_id' => [
     'label' => 'Registration open for',
     'hint'  => 'The semester the public Register form signs families up for. "Registration closed" hides the form.',

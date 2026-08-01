@@ -11,7 +11,7 @@ $error = registration_flash_error();
 $students = array_values((array)$state['students']) ?: [[]];
 $scheduling = (array)$state['scheduling'];
 
-$dollars = fn(int $c) => registration_dollars($c);
+$dollars = fn(int $c) => registration_money($c);
 
 ApplicationUI::minimalHeaderHtml('Register — Students');
 ?>

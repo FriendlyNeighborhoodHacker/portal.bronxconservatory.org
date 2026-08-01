@@ -1387,3 +1387,10 @@ body.auth .brand-logo {
   color: #0a6e3d;
   white-space: nowrap;
 }
+
+/* The "+" separators between tuition and fee lines on the registration form */
+.tuition-plus {
+  margin: 6px 0;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}

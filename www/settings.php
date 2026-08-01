@@ -78,6 +78,13 @@ class Settings {
         return self::dollarsToCents(self::get('installment_fee', '0'));
     }
 
+    // Lessons in a full semester — used to show families what a semester's
+    // tuition works out to per lesson ("$420 for 15 weeks ($28 per lesson)").
+    public static function semesterWeeks(): int {
+        $weeks = (int)self::get('semester_weeks', '15');
+        return $weeks > 0 ? $weeks : 15;
+    }
+
     // The semester the public registration wizard is open for; null means
     // registration is closed (the wizard shows a friendly closed page).
     public static function registrationSemesterId(): ?int {

@@ -133,18 +133,41 @@ function registration_dollars(int $cents): string {
     return '$' . number_format($cents / 100, 2);
 }
 
+// Marketing copy money: whole dollars lose the ".00" ("$420", "$28.33").
+function registration_money(int $cents): string {
+    return '$' . ($cents % 100 === 0
+        ? number_format(intdiv($cents, 100))
+        : number_format($cents / 100, 2));
+}
+
+// "$420 for 15 weeks ($28 per lesson)" — the per-lesson figure is derived so
+// it can never drift from the prices in Settings.
+function registration_price_breakdown(int $cents, string $unit = 'lesson'): string {
+    $weeks = Settings::semesterWeeks();
+    $perLesson = (int)round($cents / $weeks);
+    return registration_money($cents) . ' for ' . $weeks . ' weeks ('
+        . registration_money($perLesson) . ' per ' . $unit . ')';
+}
+
 // The tuition table shown in the step-1 intro — rendered from Settings so
 // the copy can never drift from the actual quote math.
 function registration_tuition_intro_html(array $semester): string {
-    $d = fn(int $cents) => registration_dollars($cents);
+    $plus = '<p class="tuition-plus">+</p>';
     return '<div class="card"><p><strong>' . h(registration_semester_label($semester)) . ' Tuition:</strong></p>'
         . '<ul class="stack" style="gap:2px;">'
-        . '<li>30-minute private lessons (full semester): <strong>' . $d(Settings::tuition30Cents()) . '</strong></li>'
-        . '<li>60-minute private lessons (full semester): <strong>' . $d(Settings::tuition60Cents()) . '</strong></li>'
-        . '<li>30-minute Guitar Ensemble (full semester): <strong>' . $d(Settings::tuitionEnsembleCents()) . '</strong></li>'
+        . '<li>30-minute private lessons (full semester): <strong>'
+        . registration_price_breakdown(Settings::tuition30Cents()) . '</strong></li>'
+        . '<li>60-minute private lessons (full semester): <strong>'
+        . registration_price_breakdown(Settings::tuition60Cents()) . '</strong></li>'
+        . '<li>30-minute Guitar Ensemble (full semester): <strong>'
+        . registration_price_breakdown(Settings::tuitionEnsembleCents(), 'session') . '</strong></li>'
         . '</ul>'
-        . '<p class="small">Plus a registration fee of <strong>' . $d(Settings::registrationCostCents()) . '</strong> (one per family per semester) '
-        . 'and a Recital &amp; Logistics fee of <strong>' . $d(Settings::recitalFeeCents()) . '</strong> per lesson block.</p>'
+        . $plus
+        . '<p>Registration fee: <strong>' . registration_money(Settings::registrationCostCents())
+        . '</strong> (one per family per semester).</p>'
+        . $plus
+        . '<p>Recital &amp; Logistics fee: <strong>' . registration_money(Settings::recitalFeeCents())
+        . '</strong> per lesson block.</p>'
         . '<p class="small">Registrations done after the start of the semester (space permitting) will be prorated to the remaining weeks of term.</p>'
         . '</div>';
 }

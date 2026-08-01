@@ -87,6 +87,7 @@ INSERT INTO settings (key_name, value) VALUES
   ('tuition_60', '840.00'),
   ('tuition_ensemble', '270.00'),
   ('installment_fee', '20.00'),
+  ('semester_weeks', '15'),
   ('registration_semester_id', '')
 ON DUPLICATE KEY UPDATE value=VALUES(value);
 
