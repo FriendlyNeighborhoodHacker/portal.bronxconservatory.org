@@ -84,7 +84,7 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
       Please indicate your preference here.
       <span class="small">PLEASE NOTE: if you want any day other than Saturday, select
       Access Bronx Charter School.</span></p>
-    <div class="stack" style="gap:6px;" role="radiogroup" aria-labelledby="q-location">
+    <div class="choice-list choice-indent" role="radiogroup" aria-labelledby="q-location">
       <label class="inline">
         <input type="radio" name="location_preference" value="Bronx Community College"<?=($scheduling['location_preference'] ?? '') === 'Bronx Community College' ? ' checked' : ''?>>
         <span><strong>Bronx Community College</strong>, 200 Hall of Fame Terrace (ample parking) —

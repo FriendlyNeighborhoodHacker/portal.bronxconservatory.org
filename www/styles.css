@@ -1460,3 +1460,9 @@ label .label-prose {
 #address-element {
   margin: 6px 0 4px;
 }
+
+/* Options set in from the question they answer, so the choices read as a
+   group belonging to it rather than as more body copy. */
+.choice-indent {
+  padding-left: 22px;
+}
