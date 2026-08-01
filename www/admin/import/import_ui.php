@@ -91,6 +91,94 @@ function import_query_string(array $flow): string {
     return '?' . http_build_query($params);
 }
 
+/**
+ * Per-flow instructions for the upload step: which columns to include
+ * (required vs. optional, accepted formats) and an example CSV. Column names
+ * don't have to match exactly — the mapping step lets the admin fix them —
+ * but using these names maps everything automatically.
+ */
+function import_columns_help_html(array $flow): string {
+    $columns = [];
+    $example = '';
+    $intro = '';
+
+    switch ($flow['key']) {
+        case 'teachers':
+            $intro = 'One row per teacher. First and last name are required, plus an email '
+                . 'or a cell phone number (used to match people who are already in the system).';
+            $columns = [
+                ['First Name', 'required', ''],
+                ['Last Name', 'required', ''],
+                ['Email', 'required*', '*either Email or Cell Phone Number'],
+                ['Cell Phone Number', 'required*', '*either Email or Cell Phone Number'],
+                ['Suffix', 'optional', ''],
+                ['Preferred Name', 'optional', ''],
+                ['Secondary Email', 'optional', ''],
+                ['Home Phone', 'optional', ''],
+                ['Address Street 1', 'optional', ''],
+                ['Address Street 2', 'optional', ''],
+                ['Address City', 'optional', ''],
+                ['Address State', 'optional', ''],
+                ['Address Zip', 'optional', ''],
+                ['Emergency Contact Name', 'optional', ''],
+                ['Emergency Contact Phone', 'optional', ''],
+                ['Shirt Size', 'optional', ''],
+            ];
+            $example = "First Name,Last Name,Email,Cell Phone Number\n"
+                . "Marisol,Vega,marisol@example.org,718-555-0101\n"
+                . "James,Okafor,james@example.org,718-555-0102";
+            break;
+
+        case 'location_dates':
+            $intro = 'One row per class date per location. The location name must match one of '
+                . 'this semester\'s active locations. Inactive rows are breaks/holidays: no '
+                . 'lessons are generated for them, and the notes text is shown to families.';
+            $columns = [
+                ['Location Name', 'required', 'must match an active location for this semester'],
+                ['Date', 'required', '2026-09-12 or 9/12/2026'],
+                ['Start Time', 'required', '9:00 am, 4:30 PM, or 14:30'],
+                ['End Time', 'required', 'same formats as Start Time'],
+                ['Status', 'optional', '"active" or "inactive" — blank means active'],
+                ['Notes', 'optional', 'e.g. "Day 1" or "Holiday Week" (shown for inactive dates)'],
+            ];
+            $example = "Location Name,Date,Start Time,End Time,Status,Notes\n"
+                . "Bronx Community College,9/12/2026,9:00 am,5:00 pm,active,Day 1\n"
+                . "Bronx Community College,9/19/2026,9:00 am,5:00 pm,inactive,Holiday Week";
+            break;
+
+        case 'location_teachers':
+            $intro = 'One row per teacher-location pair: which teachers teach at which location '
+                . 'this semester (these pairs become the Semester Schedule grid\'s columns). '
+                . 'Teacher names must match teachers already in the system — upload teachers first.';
+            $columns = [
+                ['Teacher Name', 'required', 'first and last name, e.g. "Marisol Vega"'],
+                ['Location Name', 'required', 'must match an active location for this semester'],
+            ];
+            $example = "Teacher Name,Location Name\n"
+                . "Marisol Vega,Bronx Community College\n"
+                . "James Okafor,Access Bronx Charter School";
+            break;
+    }
+
+    $html = '<div class="card"><h3>What to include</h3>';
+    if ($intro !== '') {
+        $html .= '<p class="small">' . h($intro) . '</p>';
+    }
+    $html .= '<table class="list"><thead><tr><th>Column</th><th></th><th>Notes</th></tr></thead><tbody>';
+    foreach ($columns as [$name, $requirement, $note]) {
+        $html .= '<tr><td><code>' . h($name) . '</code></td>'
+            . '<td class="small">' . h($requirement) . '</td>'
+            . '<td class="small">' . h($note) . '</td></tr>';
+    }
+    $html .= '</tbody></table>';
+    $html .= '<p class="small" style="margin-bottom:4px;">Example:</p>'
+        . '<pre class="import-example">' . h($example) . '</pre>'
+        . '<p class="small" style="margin-bottom:0;">The first line must be the header row. '
+        . 'Different column names are fine — you can fix the mapping in the next step.</p>';
+    $html .= '</div>';
+    return $html;
+}
+
 /** The step indicator bar (1 Upload · 2 Mapping · 3 Validation · 4 Commit). */
 function import_steps_html(array $flow, int $current): string {
     $steps = ['Upload', 'Mapping', 'Validation', 'Commit'];

@@ -967,6 +967,17 @@ details summary {
   color: #0a6e3d;
 }
 
+/* Example CSV block on the import upload step */
+.import-example {
+  background: #f6f5f2;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  overflow-x: auto;
+  margin: 0 0 10px;
+}
+
 /* ===== BCM: monthly calendar ===== */
 
 .cal-header {

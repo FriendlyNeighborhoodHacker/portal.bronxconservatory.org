@@ -19,6 +19,8 @@ header_html($flow['title']);
 <?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
 <?php if ($flashError): ?><p class="error"><?=h($flashError)?></p><?php endif; ?>
 
+<?=import_columns_help_html($flow)?>
+
 <div class="card">
   <form method="post" action="/admin/import/parse_eval.php" enctype="multipart/form-data" class="stack">
     <?=import_hidden_fields_html($flow)?>
