@@ -30,6 +30,7 @@ header_html('Semester Locations');
   <span class="wizard-step"><span class="wizard-step-num">4</span> Teachers per Location</span>
   <span class="wizard-step"><span class="wizard-step-num">5</span> Hold Blocks</span>
   <span class="wizard-step"><span class="wizard-step-num">6</span> Schedule</span>
+  <span class="wizard-step"><span class="wizard-step-num">7</span> Charges &amp; Payments</span>
 </div>
 
 <?php if ($err): ?><p class="error"><?=h($err)?></p><?php endif; ?>

@@ -57,8 +57,24 @@ Reset first with `./reset_db.sh`, then upload in this order:
    pairs); James Okafor teaching at Access in the morning and Bronx Community
    College after his lunch block.
 
-Then open the Semester Schedule — the grid is full — and click empty cells to
-add more.
+8. **fall_semester/ledger_entries.csv** — the final wizard step (Admin >
+   Semesters > Import Charges & Payments). Where the money already stood when
+   the portal took over: each of the 10 confirmed students carries a $35
+   registration fee, a $15 recital fee and $425 of lessons ($475), dated
+   Aug 15 before the semester opened. Then the payments that had come in:
+
+   - Lucia and Marco Ramos paid in full (two checks, Aug 20)
+   - Devon Brown paid half, $237.50, in September
+   - the other seven confirmed students have not paid
+
+   Which is the point of the file — after uploading it the Semester Schedule
+   shows every colour at once: green (paid), purple (half a semester owing),
+   yellow (the full semester owing), plus the pending-confirmation and
+   pending-reach-out students, who were never charged. Re-uploading it is
+   safe; rows already on the ledger are skipped rather than doubled.
+
+Then open the Semester Schedule — the grid is full and colour-coded — and
+click empty cells to add more.
 
 ## 3. Spring 2027 (the second semester)
 

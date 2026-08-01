@@ -8,6 +8,7 @@
 //   location_teachers  — a semester's teacher-location pairs (LocationTeachersCsvImport)
 //   hold_blocks        — teachers' standing non-lesson time (HoldBlocksCsvImport)
 //   reservations       — a semester's whole schedule (SemesterReservationsCsvImport)
+//   ledger_entries     — opening charges and payments (LedgerEntriesCsvImport)
 // In-progress state (parsed rows, mapping, validation) lives in
 // $_SESSION['import_<flow>'].
 require_once __DIR__ . '/../../partials.php';
@@ -19,6 +20,7 @@ require_once __DIR__ . '/../../lib/LocationDatesCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationTeachersCsvImport.php';
 require_once __DIR__ . '/../../lib/HoldBlocksCsvImport.php';
 require_once __DIR__ . '/../../lib/SemesterReservationsCsvImport.php';
+require_once __DIR__ . '/../../lib/LedgerEntriesCsvImport.php';
 require_once __DIR__ . '/../../lib/SemesterManagement.php';
 
 function import_flows(): array {
@@ -62,6 +64,12 @@ function import_flows(): array {
         'reservations' => [
             'title' => 'Import Schedule',
             'class' => 'SemesterReservationsCsvImport',
+            'needs_semester' => true,
+            'default_next' => '/admin/semesters.php',
+        ],
+        'ledger_entries' => [
+            'title' => 'Import Charges & Payments',
+            'class' => 'LedgerEntriesCsvImport',
             'needs_semester' => true,
             'default_next' => '/admin/semesters.php',
         ],
@@ -277,6 +285,27 @@ function import_columns_help_html(array $flow): string {
             $example = "Student Name,Teacher Name,Location Name,Day,Start Time,Duration Minutes,Status\n"
                 . "Lucia Ramos,Marisol Vega,Access Bronx Charter School,Saturday,10:00 am,30,confirmed\n"
                 . "Devon Brown,Sofia Petrov,Access Bronx Charter School,Saturday,11:00 am,60,pending confirmation";
+            break;
+
+        case 'ledger_entries':
+            $intro = 'Where every family\'s money already stands: one row per charge they ran up '
+                . 'and per payment they made, on the date it actually happened. This is how balances '
+                . 'come across when the portal takes over an existing roster — the schedule import '
+                . 'deliberately posts no charges, so these rows are what makes the Semester Schedule '
+                . 'colour-code who owes what. Every row belongs to the semester shown above. '
+                . 'Re-uploading the same file changes nothing: rows already on the ledger are skipped.';
+            $columns = [
+                ['Student Name', 'required', 'first and last name, e.g. "Lucia Ramos" (or their email)'],
+                ['Entry Type', 'required', 'registration, lessons, recital fee, payment, scholarship or other'],
+                ['Amount', 'required', 'dollars, always positive — e.g. 425.00 or $425'],
+                ['Date', 'optional', '8/15/2026 or 2026-08-15 — blank means the semester start date'],
+                ['Debit or Credit', 'optional', 'charges default to debit, payments to credit; required for "other"'],
+                ['Description', 'optional', 'e.g. "Check #1042" — a sensible default is used when blank'],
+            ];
+            $example = "Student Name,Entry Type,Amount,Date,Debit or Credit,Description\n"
+                . "Lucia Ramos,registration,35.00,8/15/2026,,\n"
+                . "Lucia Ramos,lessons,425.00,8/15/2026,,\n"
+                . "Lucia Ramos,payment,475.00,8/20/2026,,Check #1042";
             break;
     }
 

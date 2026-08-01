@@ -50,6 +50,7 @@ We need a concept of a "semester".  It should have a season and a year.  The sea
 .. Step 4: Upload a list of location-teacher information for the semester ("Teacher Name", "Location Name")
 .. Step 5: Upload the teachers' hold blocks ("Teacher Name", "Location Name", "Day", "Start Time", "End Time", "Title")
 .. Step 6: Upload the schedule itself — one row per weekly lesson slot ("Student Name", "Teacher Name", "Location Name", "Day", "Start Time", "Duration Minutes", "Status"). This is how an existing schedule is moved into the portal, so it never posts charges: confirmed rows generate their lessons, but balances carried over from the old system are loaded separately.
+.. Step 7: Upload the opening charges and payments — one ledger row each ("Student Name", "Entry Type", "Amount", "Date", "Debit or Credit", "Description"). This is the other half of taking over an existing roster: the fees families already ran up and the payments they already made, on the dates they happened, so the schedule's balance colours are right from day one. Re-uploading the same file is a no-op — rows already on the ledger are skipped.
 
 Instead of uploading a schedule, a semester can be PRE-POPULATED from a previous
 semester's schedule: every student keeps their teacher, location, day and time,
@@ -148,6 +149,7 @@ Step 3c: Upload a list of location-dates by csv ("Location Name", "Date", "start
 Step 3d: Upload a list of location-teacher information for the semester ("Teacher Name", "Location Name")
 Step 3e: Upload the teachers' hold blocks (lunch and the like)
 Step 3f: Upload the schedule ("Student Name", "Teacher Name", "Location Name", "Day", "Start Time", "Duration Minutes", "Status") — no charges are posted by this step
+Step 3g: Upload the opening charges and payments ("Student Name", "Entry Type", "Amount", "Date", "Debit or Credit", "Description") — the balances families arrive with
 
 If there are no semesters, the admin should go through this wizard.  If there is at least one semester, the system should figure out what is the "current" semester (based on the current date and start and end date).  If there is a current semester, we should default to the current semester.  Otherwise, we should default to the next semester in the future.  Otherwise we should default to the most recent semester in the past.
 

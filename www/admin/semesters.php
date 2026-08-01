@@ -53,6 +53,7 @@ header_html('Semesters');
     <a class="button" href="/admin/import/upload.php?flow=location_teachers&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Location Teachers</a>
     <a class="button" href="/admin/import/upload.php?flow=hold_blocks&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Hold Blocks</a>
     <a class="button" href="/admin/import/upload.php?flow=reservations&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Schedule</a>
+    <a class="button" href="/admin/import/upload.php?flow=ledger_entries&semester_id=<?=$semesterId?>&next=<?=h(urlencode('/admin/semesters.php'))?>">Import Charges &amp; Payments</a>
     <?php if (count($semesters) > 1): ?>
       <a class="button" href="/admin/semester/prepopulate.php?semester_id=<?=$semesterId?>">Pre-populate from Previous</a>
     <?php endif; ?>

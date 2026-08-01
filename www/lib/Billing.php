@@ -167,6 +167,95 @@ class Billing {
         return $recorded;
     }
 
+    /**
+     * One ledger row loaded from a CSV when the portal takes over an existing
+     * roster: the charges a family already ran up and the payments they
+     * already made, on the dates they actually happened. Unlike the other
+     * writers here nothing is derived — the caller states the date, the side
+     * of the ledger and the entry type — because this is history, not a
+     * charge the portal is deciding to post.
+     *
+     * $fields: student_user_id, entry_date, accounting_type, entry_type,
+     * amount_cents, semester_id (nullable), description.
+     */
+    public static function importEntry(?UserContext $ctx, array $fields): int {
+        self::assertAdmin($ctx);
+        $amountCents = (int)($fields['amount_cents'] ?? 0);
+        self::assertPositive($amountCents);
+
+        $accountingType = (string)($fields['accounting_type'] ?? '');
+        if (!in_array($accountingType, ['debit', 'credit'], true)) {
+            throw new InvalidArgumentException('Accounting type must be debit or credit.');
+        }
+        $entryType = (string)($fields['entry_type'] ?? '');
+        if (!in_array($entryType, self::ENTRY_TYPES, true)) {
+            throw new InvalidArgumentException('Unknown entry type.');
+        }
+        $studentUserId = (int)($fields['student_user_id'] ?? 0);
+        if ($studentUserId <= 0) {
+            throw new InvalidArgumentException('A student is required.');
+        }
+        $semesterId = isset($fields['semester_id']) ? (int)$fields['semester_id'] : null;
+
+        $id = self::insertEntry(
+            $ctx,
+            $studentUserId,
+            self::normalizeDate((string)($fields['entry_date'] ?? '')),
+            $accountingType,
+            $entryType,
+            $amountCents,
+            $semesterId !== null && $semesterId > 0 ? $semesterId : null,
+            (string)($fields['description'] ?? '')
+        );
+        self::log($ctx, 'billing.entry_imported', [
+            'student_user_id' => $studentUserId, 'entry_type' => $entryType,
+            'accounting_type' => $accountingType, 'amount_cents' => $amountCents,
+        ]);
+        return $id;
+    }
+
+    /**
+     * Is this exact row already on the ledger? Lets a re-run of the same
+     * initialization file report "no change" instead of doubling everyone's
+     * balance. $fields as for importEntry().
+     */
+    public static function entryExists(array $fields): bool {
+        $semesterId = isset($fields['semester_id']) ? (int)$fields['semester_id'] : 0;
+        $st = self::pdo()->prepare(
+            'SELECT 1 FROM ledger_entries
+             WHERE for_student_user_id=? AND entry_date=? AND accounting_type=? AND entry_type=?
+               AND amount_cents=? AND ' . ($semesterId > 0 ? 'semester_id=?' : 'semester_id IS NULL') . '
+             LIMIT 1'
+        );
+        $params = [
+            (int)($fields['student_user_id'] ?? 0),
+            self::normalizeDate((string)($fields['entry_date'] ?? '')),
+            (string)($fields['accounting_type'] ?? ''),
+            (string)($fields['entry_type'] ?? ''),
+            (int)($fields['amount_cents'] ?? 0),
+        ];
+        if ($semesterId > 0) {
+            $params[] = $semesterId;
+        }
+        $st->execute($params);
+        return (bool)$st->fetchColumn();
+    }
+
+    /** "$1,234.56", "1234.56", "1234" -> cents. Null when it isn't money. */
+    public static function parseAmountCents(string $amount): ?int {
+        $amount = trim($amount);
+        if ($amount === '') {
+            return null;
+        }
+        $negative = str_starts_with($amount, '-') || (str_starts_with($amount, '(') && str_ends_with($amount, ')'));
+        $digits = preg_replace('/[^0-9.]/', '', $amount) ?? '';
+        if ($digits === '' || !preg_match('/^\d+(\.\d{1,2})?$/', $digits)) {
+            return null;
+        }
+        $cents = (int)round(((float)$digits) * 100);
+        return $negative ? -$cents : $cents;
+    }
+
     // ── Balances ───────────────────────────────────────────────────────────
 
     /** All-time balance in cents: positive = the family owes money. */

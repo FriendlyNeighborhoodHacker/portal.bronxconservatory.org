@@ -645,6 +645,144 @@ final class ImportFlowsTest extends TestCase
         $this->assertCount(14, $parsed['rows']);
     }
 
+    // ── Ledger entries (opening charges and payments) ──────────────────────
+
+    private function ledgerRow(string $student, string $entryType, string $amount, array $overrides = []): array
+    {
+        return $overrides + [
+            'student_name' => $student,
+            'entry_type' => $entryType,
+            'amount' => $amount,
+            'date' => '8/15/2026',
+            'accounting_type' => '',
+            'description' => '',
+        ];
+    }
+
+    public function testLedgerImportPostsChargesAndPaymentsWithTheirOwnDates(): void
+    {
+        $semesterId = fx_semester($this->ctx, 'fall', 2026, '2026-09-08', '2026-12-20');
+        $lucia = fx_student('Lucia', 'Ramos');
+        $context = ['semester_id' => $semesterId];
+
+        $validated = LedgerEntriesCsvImport::validateRows([
+            $this->ledgerRow('Lucia Ramos', 'registration', '35.00'),
+            $this->ledgerRow('Lucia Ramos', 'recital fee', '$15'),
+            $this->ledgerRow('Lucia Ramos', 'lessons', '425.00'),
+            $this->ledgerRow('Lucia Ramos', 'payment', '237.50',
+                ['date' => '9/5/2026', 'description' => 'Check #1042']),
+        ], $context);
+
+        $this->assertSame(array_fill(0, 4, 'valid'), array_column($validated, 'status'));
+        $this->assertStringContainsString('Charge Lucia Ramos $35.00 — registration', $validated[0]['changes']);
+        $this->assertStringContainsString('Credit Lucia Ramos $237.50 — payment, Sep 5, 2026', $validated[3]['changes']);
+
+        $this->assertSame(4, LedgerEntriesCsvImport::commit($this->ctx, $validated, $context)['created']);
+
+        // 475 charged, 237.50 paid: exactly half the semester's debit.
+        $this->assertSame(23750, Billing::balanceForStudentSemesterCents($lucia, $semesterId));
+        $ledger = Billing::ledgerForStudent($lucia, $semesterId);
+        $this->assertCount(4, $ledger);
+        $this->assertSame(['debit', 'debit', 'debit', 'credit'], array_column($ledger, 'accounting_type'));
+        $this->assertSame(
+            ['registration', 'recital_fee', 'lessons', 'payment'],
+            array_column($ledger, 'entry_type')
+        );
+        // Dates come from the file, not from today.
+        $this->assertSame('2026-08-15', $ledger[0]['entry_date']);
+        $this->assertSame('2026-09-05', $ledger[3]['entry_date']);
+        $this->assertSame('Check #1042', $ledger[3]['description']);
+        $this->assertSame('Semester registration', $ledger[0]['description']); // defaulted
+
+        // Re-running the same file is a no-op, so nobody's balance doubles.
+        $again = LedgerEntriesCsvImport::validateRows([
+            $this->ledgerRow('Lucia Ramos', 'registration', '35.00'),
+        ], $context);
+        $this->assertSame('Already recorded (no change)', $again[0]['changes']);
+        $this->assertSame(0, LedgerEntriesCsvImport::commit($this->ctx, $again, $context)['created']);
+        $this->assertSame(23750, Billing::balanceForStudentSemesterCents($lucia, $semesterId));
+    }
+
+    public function testLedgerImportDefaultsDateToSemesterStartAndSideToEntryType(): void
+    {
+        $semesterId = fx_semester($this->ctx, 'fall', 2026, '2026-09-08', '2026-12-20');
+        $student = fx_student('Mei', 'Chen');
+        $context = ['semester_id' => $semesterId];
+
+        $validated = LedgerEntriesCsvImport::validateRows([
+            $this->ledgerRow('Mei Chen', 'lessons', '425', ['date' => '']),
+            $this->ledgerRow('Mei Chen', 'scholarship', '100', ['date' => '']),
+            // "other" can go either way, so the row has to say.
+            $this->ledgerRow('Mei Chen', 'other', '20', ['date' => '', 'accounting_type' => 'credit']),
+        ], $context);
+
+        $this->assertSame(array_fill(0, 3, 'valid'), array_column($validated, 'status'));
+        LedgerEntriesCsvImport::commit($this->ctx, $validated, $context);
+
+        $ledger = Billing::ledgerForStudent($student, $semesterId);
+        $this->assertSame(['2026-09-08', '2026-09-08', '2026-09-08'], array_column($ledger, 'entry_date'));
+        $this->assertSame(['debit', 'credit', 'credit'], array_column($ledger, 'accounting_type'));
+        $this->assertSame(30500, Billing::balanceForStudentSemesterCents($student, $semesterId));
+    }
+
+    public function testLedgerImportFlagsBadRows(): void
+    {
+        $semesterId = fx_semester($this->ctx, 'fall', 2026, '2026-09-08', '2026-12-20');
+        fx_student('Lucia', 'Ramos');
+        $context = ['semester_id' => $semesterId];
+
+        $validated = LedgerEntriesCsvImport::validateRows([
+            $this->ledgerRow('Nobody Here', 'registration', '35.00'),
+            $this->ledgerRow('Lucia Ramos', 'gala tickets', '35.00'),
+            $this->ledgerRow('Lucia Ramos', 'registration', 'free'),
+            $this->ledgerRow('Lucia Ramos', 'registration', '-35.00'),
+            $this->ledgerRow('Lucia Ramos', 'registration', '35.00', ['date' => 'whenever']),
+            $this->ledgerRow('Lucia Ramos', 'other', '20.00'),
+            $this->ledgerRow('Lucia Ramos', 'payment', '100.00', ['accounting_type' => 'sideways']),
+            // Byte-for-byte the same as an earlier row.
+            $this->ledgerRow('Lucia Ramos', 'lessons', '425.00'),
+            $this->ledgerRow('Lucia Ramos', 'lessons', '425.00'),
+        ], $context);
+
+        $this->assertSame(
+            ['error', 'error', 'error', 'error', 'error', 'error', 'error', 'valid', 'error'],
+            array_column($validated, 'status')
+        );
+        $this->assertStringContainsString('No match found for student', $validated[0]['messages'][0]);
+        $this->assertStringContainsString('Unknown entry type', $validated[1]['messages'][0]);
+        $this->assertStringContainsString('Amount is required', $validated[2]['messages'][0]);
+        $this->assertStringContainsString('must be positive', $validated[3]['messages'][0]);
+        $this->assertStringContainsString('not a valid date', $validated[4]['messages'][0]);
+        $this->assertStringContainsString('debit or a credit', $validated[5]['messages'][0]);
+        $this->assertStringContainsString('Debit or Credit must be', $validated[6]['messages'][0]);
+        $this->assertStringContainsString('Identical to row 8', $validated[8]['messages'][0]);
+
+        $this->assertSame(1, LedgerEntriesCsvImport::commit($this->ctx, $validated, $context)['created']);
+    }
+
+    public function testAmountParsing(): void
+    {
+        $this->assertSame(42500, Billing::parseAmountCents('425'));
+        $this->assertSame(42500, Billing::parseAmountCents(' $425.00 '));
+        $this->assertSame(123456, Billing::parseAmountCents('$1,234.56'));
+        $this->assertSame(23750, Billing::parseAmountCents('237.5'));
+        $this->assertSame(-3500, Billing::parseAmountCents('-35.00'));
+        $this->assertSame(-3500, Billing::parseAmountCents('(35.00)'));
+        $this->assertNull(Billing::parseAmountCents(''));
+        $this->assertNull(Billing::parseAmountCents('free'));
+        $this->assertNull(Billing::parseAmountCents('12.345'));
+    }
+
+    public function testSampleLedgerCsvHeadersMatchTheImporter(): void
+    {
+        $path = __DIR__ . '/../../../sample_data/fall_semester/ledger_entries.csv';
+        $this->assertFileExists($path);
+        $parsed = CsvImport::parseCsv((string)file_get_contents($path), ',');
+        $this->assertSame(array_values(LedgerEntriesCsvImport::targetFields()), $parsed['headers']);
+        // 10 confirmed students x 3 charges, plus 3 payments.
+        $this->assertCount(33, $parsed['rows']);
+    }
+
     public function testTimeAndDateParsing(): void
     {
         $this->assertSame('09:00:00', LocationDatesCsvImport::parseTime('9:00 am'));

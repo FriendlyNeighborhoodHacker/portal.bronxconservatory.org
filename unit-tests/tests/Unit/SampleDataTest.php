@@ -3,6 +3,10 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
+// reservation_cell_presentation(): the grid's colour rule, so this test can
+// assert what an admin actually sees after the sample files are loaded.
+require_once __DIR__ . '/../../../www/admin/schedule_grid.php';
+
 /**
  * Walks the sample_data/ CSVs through the real importers in the order
  * sample_data/README.md prescribes: general/ once, then a semester's three
@@ -55,8 +59,7 @@ final class SampleDataTest extends TestCase
         $this->assertCount(6, HoldBlockManagement::holdBlockReservationsForSemester($fall));
         $this->assertCount(7, HoldBlockManagement::holdBlockReservationsForSemester($spring));
 
-        // Fall's schedule arrives by CSV: every student gets exactly one slot,
-        // and loading it bills nobody.
+        // Fall's schedule arrives by CSV: every student gets exactly one slot.
         $fallReservations = ReservationManagement::reservationsForSemester($fall);
         $this->assertCount(14, $fallReservations);
         $this->assertCount(14, array_unique(array_column($fallReservations, 'student_user_id')));
@@ -64,7 +67,38 @@ final class SampleDataTest extends TestCase
             ['confirmed' => 10, 'pending_confirmation' => 2, 'pending_reach_out' => 2], // ksorted
             $this->countByStatus($fallReservations)
         );
-        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+
+        // Money arrives only from the ledger file — the schedule import bills
+        // nobody — and lands on exactly the ten confirmed students.
+        $this->assertSame(33, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+        $balances = Billing::semesterBalancesByStudent(
+            $fall, array_map('intval', array_column($fallReservations, 'student_user_id'))
+        );
+        $charged = array_filter($balances, fn(array $b) => $b['semester_debit_cents'] > 0);
+        $this->assertCount(10, $charged);
+        foreach ($charged as $balance) {
+            $this->assertSame(47500, $balance['semester_debit_cents']); // 35 + 15 + 425
+        }
+
+        // What the grid actually colours: paid, half-paid, owing, and the
+        // pending students who were never charged.
+        $byStudent = [];
+        foreach ($fallReservations as $reservation) {
+            $studentId = (int)$reservation['student_user_id'];
+            $byStudent[trim($reservation['student_first_name'] . ' ' . $reservation['student_last_name'])] =
+                reservation_cell_presentation($reservation, $balances[$studentId] ?? null)['class'];
+        }
+        $this->assertSame('res-paid', $byStudent['Lucia Ramos']);
+        $this->assertSame('res-paid', $byStudent['Marco Ramos']);
+        $this->assertSame('res-balance-half', $byStudent['Devon Brown']);
+        $this->assertSame('res-balance-full', $byStudent['Naomi Osei']);
+        $this->assertSame('res-pending', $byStudent['Fatima Al-Sayed']);
+        $this->assertSame('res-reach-out', $byStudent['Amara Diallo']);
+        $this->assertSame(
+            ['res-balance-full' => 7, 'res-balance-half' => 1, 'res-paid' => 2,
+             'res-pending' => 2, 'res-reach-out' => 2],
+            $this->countValues($byStudent)
+        );
 
         // Spring's schedule arrives the other way: carried forward from fall,
         // all pending reach out, nothing materialized.
@@ -74,7 +108,11 @@ final class SampleDataTest extends TestCase
         );
         $springReservations = ReservationManagement::reservationsForSemester($spring);
         $this->assertSame(['pending_reach_out' => 14], $this->countByStatus($springReservations));
-        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+        // Fall's ledger is the only ledger: carrying forward charges nobody.
+        $this->assertSame(33, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+        $this->assertSame(0, (int)pdo()->query(
+            "SELECT COUNT(*) FROM ledger_entries WHERE semester_id = $spring"
+        )->fetchColumn());
         $ids = implode(',', array_map('intval', array_column($springReservations, 'id')));
         $this->assertSame(0, (int)pdo()->query(
             "SELECT COUNT(*) FROM lessons WHERE semester_lesson_reservation_id IN ($ids)"
@@ -84,7 +122,13 @@ final class SampleDataTest extends TestCase
     /** @return array<string,int> status => count, in status-name order */
     private function countByStatus(array $reservations): array
     {
-        $counts = array_count_values(array_column($reservations, 'status'));
+        return $this->countValues(array_column($reservations, 'status'));
+    }
+
+    /** @return array<string,int> value => count, in value order */
+    private function countValues(array $values): array
+    {
+        $counts = array_count_values($values);
         ksort($counts);
         return $counts;
     }
@@ -97,6 +141,9 @@ final class SampleDataTest extends TestCase
         $this->import($dir . '/hold_blocks.csv', HoldBlocksCsvImport::class, $context);
         if (is_file($this->root . '/' . $dir . '/semester_location_reservations.csv')) {
             $this->import($dir . '/semester_location_reservations.csv', SemesterReservationsCsvImport::class, $context);
+        }
+        if (is_file($this->root . '/' . $dir . '/ledger_entries.csv')) {
+            $this->import($dir . '/ledger_entries.csv', LedgerEntriesCsvImport::class, $context);
         }
     }
 
