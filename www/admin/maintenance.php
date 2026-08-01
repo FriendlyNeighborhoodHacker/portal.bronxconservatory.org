@@ -7,16 +7,25 @@ require_once __DIR__ . '/../lib/MigrationRunner.php';
 Application::init();
 require_developer();
 
-$pendingMigrations = count(MigrationRunner::pendingFilenames());
+// Migrations are only usable where MIGRATIONS_DIR points at this deployment's
+// db_migrations directory; elsewhere the card is shown inert with a hint.
+$migrationsConfigured = MigrationRunner::isConfigured();
+$pendingMigrations = $migrationsConfigured ? count(MigrationRunner::pendingFilenames()) : 0;
 
 $tools = [
     [
-        'path' => '/admin/migrations.php',
+        'path' => $migrationsConfigured ? '/admin/migrations.php' : null,
         'label' => 'Database Migrations',
-        'blurb' => 'Apply pending schema migrations from db_migrations/.',
-        'note' => $pendingMigrations > 0
-            ? $pendingMigrations . ' pending'
-            : 'Up to date',
+        'blurb' => 'Apply pending schema migrations from the db_migrations directory.',
+        'note' => $migrationsConfigured
+            ? ($pendingMigrations > 0 ? $pendingMigrations . ' pending' : 'Up to date')
+            : 'Not enabled here — set MIGRATIONS_DIR in config.local.php',
+    ],
+    [
+        'path' => '/admin/l/index.php',
+        'label' => 'Server Logs',
+        'blurb' => 'Tail the deploy, Apache, and PHP log files on this server.',
+        'note' => null,
     ],
     [
         'path' => '/admin/activity_log.php',
@@ -43,7 +52,13 @@ header_html('Maintenance');
 <div class="card-grid">
   <?php foreach ($tools as $tool): ?>
   <div class="card">
-    <h3 style="margin:0 0 4px 0;"><a href="<?=h($tool['path'])?>"><?=h($tool['label'])?></a></h3>
+    <h3 style="margin:0 0 4px 0;">
+      <?php if ($tool['path'] !== null): ?>
+        <a href="<?=h($tool['path'])?>"><?=h($tool['label'])?></a>
+      <?php else: ?>
+        <?=h($tool['label'])?>
+      <?php endif; ?>
+    </h3>
     <div class="card-sub" style="margin:0;"><?=h($tool['blurb'])?></div>
     <?php if ($tool['note'] !== null): ?>
       <div class="small" style="margin-top:8px;"><?=h($tool['note'])?></div>

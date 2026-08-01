@@ -115,6 +115,7 @@ class ApplicationUI {
             '/admin/maintenance.php',
             '/admin/migrations',
             '/admin/activity_log.php', '/admin/email_log.php',
+            '/admin/l/',
             '/admin/import/',
             '/admin/setup/',
         ];
@@ -136,7 +137,8 @@ class ApplicationUI {
         if (is_developer()) {
             $items[] = ['path' => '/admin/maintenance.php', 'label' => 'Maintenance',
                 'prefixes' => ['/admin/maintenance.php', '/admin/migrations',
-                               '/admin/activity_log.php', '/admin/email_log.php']];
+                               '/admin/activity_log.php', '/admin/email_log.php',
+                               '/admin/l/']];
         }
         return $items;
     }

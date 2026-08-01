@@ -41,3 +41,25 @@ define('GIT_WEBHOOK_SECRET', '');
 // below are what the file uses when these are not defined).
 // define('DEPLOY_SCRIPT', '/home/lillydebate/deploy_scripts/portal.bronxconservatory.org.sh');
 // define('DEPLOY_LOG',    '/home/lillydebate/deploy_scripts/logs/portal.bronxconservatory.org.webhook.log');
+
+// ===== Database migrations (Admin > Maintenance > Database Migrations) =====
+// Absolute path to this deployment's db_migrations directory. It lives OUTSIDE
+// the web root (top level of the repository), so the path is per-machine.
+// Admin > Migrations is DISABLED unless this is defined and non-empty — there
+// is no fallback, so no machine can apply migrations from an unexpected place.
+// Production example:
+// define('MIGRATIONS_DIR', '/home/lillydebate/deploy_scripts/portal.bronxconservatory.org.deploy/db_migrations');
+// Local checkout (config.local.php lives in www/, so the repo root is one up):
+define('MIGRATIONS_DIR', dirname(__DIR__) . '/db_migrations');
+
+// ===== Server logs (Admin > Maintenance > Server Logs) =====
+// Per-machine overrides for the server log files developers can tail in the
+// browser (slug => absolute path). Only listed slugs are overridden; the rest
+// keep the defaults built into www/lib/LogViewer.php (under /home/lillydebate).
+// Known slugs: deploy-webhook, apache-access, apache-error, php-error.
+// Example:
+// define('ADMIN_LOG_FILES', [
+//     'deploy-webhook' => '/home/lillydebate/deploy_scripts/logs/portal.bronxconservatory.org.webhook.log',
+//     'apache-access'  => '/home/lillydebate/logs/portal.bronxconservatory.org/http/access.log',
+//     'apache-error'   => '/home/lillydebate/logs/portal.bronxconservatory.org/http/error.log',
+// ]);
