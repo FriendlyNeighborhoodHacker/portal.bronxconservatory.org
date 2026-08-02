@@ -769,4 +769,90 @@ final class LessonManagementTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         LessonManagement::deleteAdHocLesson($this->ctx, $lessonIds[0]);
     }
+
+    // ===== How long one lesson runs =====
+
+    public function testDurationChangeAffectsOnlyThatWeek(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+
+        LessonManagement::setLessonDuration($this->ctx, $lessonIds[0], 60);
+
+        $this->assertSame(60, (int)LessonManagement::getLesson($lessonIds[0])['duration_minutes']);
+        $this->assertSame(30, (int)LessonManagement::getLesson($lessonIds[1])['duration_minutes'],
+            'the other weeks keep the standing length');
+        // A week that no longer matches its booking is flagged as moved.
+        $this->assertTrue(LessonManagement::isTimeMoved(LessonManagement::getLesson($lessonIds[0])));
+    }
+
+    public function testLengtheningIsRefusedWhenItRunsIntoTheNextLesson(): void
+    {
+        [$teacher, , $semesterId, $locationId, , $lessonIds] = $this->makeConfirmed();
+        // The same teacher has somebody else half an hour later.
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+            'student_user_id' => fx_student('Otto', 'Other'), 'day_of_week' => 6,
+            'start_time' => '10:30', 'duration_minutes' => 30, 'status' => 'confirmed',
+        ]);
+
+        try {
+            LessonManagement::setLessonDuration($this->ctx, $lessonIds[0], 60);
+            $this->fail('Expected the overlap to be refused');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('already booked for this teacher', $e->getMessage());
+        }
+        $this->assertSame(30, (int)LessonManagement::getLesson($lessonIds[0])['duration_minutes']);
+    }
+
+    public function testDurationIsCheckedAgainstWhoeverIsActuallyTeaching(): void
+    {
+        // A substitute's own diary is what matters once they have the week.
+        [$teacher, , $semesterId, $locationId, , $lessonIds] = $this->makeConfirmed();
+        $sub = fx_teacher('Sue', 'Substitute');
+        SemesterManagement::setLocationTeachers($this->ctx, $semesterId, [[$locationId, $teacher], [$locationId, $sub]]);
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $sub, 'location_id' => $locationId,
+            'student_user_id' => fx_student('Otto', 'Other'), 'day_of_week' => 6,
+            'start_time' => '10:30', 'duration_minutes' => 30, 'status' => 'confirmed',
+        ]);
+        // Sue is free at 10:00, so she can take the lesson...
+        LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], $sub);
+
+        // ...but she cannot stretch it into her own 10:30.
+        $this->expectException(InvalidArgumentException::class);
+        LessonManagement::setLessonDuration($this->ctx, $lessonIds[0], 60);
+    }
+
+    public function testDurationRejectsSillyValuesAndNonAdmins(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        foreach ([0, -30, 241] as $bad) {
+            try {
+                LessonManagement::setLessonDuration($this->ctx, $lessonIds[0], $bad);
+                $this->fail("Expected $bad to be refused");
+            } catch (InvalidArgumentException $e) {
+                $this->assertNotSame('', $e->getMessage());
+            }
+        }
+        $this->assertSame(30, (int)LessonManagement::getLesson($lessonIds[0])['duration_minutes']);
+
+        $this->expectException(RuntimeException::class);
+        LessonManagement::setLessonDuration(new UserContext(fx_user('Nel', 'Nobody'), false), $lessonIds[0], 60);
+    }
+
+    public function testAnUnchangedDurationIsAccepted(): void
+    {
+        // Saving the modal without touching the length must not trip the
+        // conflict check against the lesson's own neighbours.
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        LessonManagement::setLessonDuration($this->ctx, $lessonIds[0], 30);
+        $this->assertSame(30, (int)LessonManagement::getLesson($lessonIds[0])['duration_minutes']);
+    }
+
+    public function testTheOfferedLengthsAreTheSameForLessonsAndHolds(): void
+    {
+        $this->assertSame([30, 60, 90, 120], ReservationManagement::DURATION_OPTIONS);
+        $this->assertSame(HoldBlockManagement::DURATION_OPTIONS, ReservationManagement::DURATION_OPTIONS);
+        $this->assertNotContains(45, ReservationManagement::DURATION_OPTIONS);
+    }
 }
