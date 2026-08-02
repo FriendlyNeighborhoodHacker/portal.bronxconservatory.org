@@ -197,6 +197,7 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson, 
             'data-lesson-id' => $lesson['id'],
             'data-student-name' => $studentName,
             'data-attended' => $attendedValue,
+            'data-substitute-id' => (int)($lesson['substitute_teacher_user_id'] ?? 0) ?: '',
             'data-substitute-name' => $substituteName,
             'data-duration' => $duration,
             'data-note' => $notesByLesson[(int)$lesson['id']] ?? '',
@@ -248,7 +249,7 @@ header_html('Calendar Week', ['wide' => true]);
   teacher makes them the substitute for that week.</p>
 <?php endif; ?>
 
-<?php LessonUIManager::renderModal(); ?>
+<?php LessonUIManager::renderModal($semesterId); ?>
 <?php HoldBlockUIManager::renderModal(); ?>
 <?php render_schedule_edit_mode([
     'endpoint' => '/admin/lesson_move.php',

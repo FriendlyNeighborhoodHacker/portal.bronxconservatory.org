@@ -17,7 +17,7 @@ require_once __DIR__ . '/../config.php';
 //   occurrenceConflict()     one materialized moment (the real calendar)
 //
 // The weekly check alone is not enough: a single week can be moved by hand
-// (LessonManagement::rescheduleWithinDay), so a slot that looks free at the
+// (LessonManagement::moveLesson), so a slot that looks free at the
 // weekly level can still be taken on a particular date. Callers creating or
 // moving a weekly reservation therefore also run occurrenceConflict() over
 // every future date the reservation would occupy — see

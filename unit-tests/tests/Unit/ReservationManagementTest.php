@@ -197,7 +197,7 @@ final class ReservationManagementTest extends TestCase
         $lessons = $this->lessonRows($reservationId);
 
         // Week 2 was rescheduled by hand to 14:00.
-        LessonManagement::rescheduleWithinDay($this->ctx, (int)$lessons[1]['id'], '14:00');
+        LessonManagement::moveLesson($this->ctx, (int)$lessons[1]['id'], '2030-09-14 14:00');
 
         ReservationManagement::updateReservation($this->ctx, $reservationId, ['start_time' => '11:00']);
 
@@ -278,10 +278,10 @@ final class ReservationManagementTest extends TestCase
         [$existingId] = $this->makeReservation($setup, 'confirmed');
 
         // Week 2 of the existing reservation is moved by hand to 11:00.
-        LessonManagement::rescheduleWithinDay(
+        LessonManagement::moveLesson(
             $this->ctx,
             (int)$this->lessonRows($existingId)[1]['id'],
-            '11:00'
+            '2030-09-14 11:00'
         );
 
         // 11:00 is free as a weekly slot, but not on Sep 14.

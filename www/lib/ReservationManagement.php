@@ -625,7 +625,7 @@ class ReservationManagement {
      * The reservation's future lessons that are still sitting at its standing
      * time — i.e. the ones a schedule-wide move should carry along. A lesson
      * at any other time was moved by hand
-     * (LessonManagement::rescheduleWithinDay) and is left alone.
+     * (LessonManagement::moveLesson) and is left alone.
      */
     private static function futureLessonsFollowingSchedule(int $reservationId, string $standingStartTime): array {
         $st = self::pdo()->prepare(

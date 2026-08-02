@@ -2,17 +2,35 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../partials.php';
-require_once __DIR__ . '/../partials_typeahead.php';
+require_once __DIR__ . '/SemesterManagement.php';
 
 /**
- * The admin lesson modal (weekly calendar): reschedule within the day (to a
- * slot not occupied by another of the teacher's lessons — options fetched
- * from lesson_slots.php), mark missed/attended, assign a substitute teacher,
- * and write a lesson note (auto-saves like the teacher dashboard).
+ * The admin lesson modal (weekly calendar): mark missed/attended, hand the
+ * week to a substitute, cancel the lesson, and write a lesson note
+ * (auto-saves like the teacher dashboard).
+ *
+ * Moving a lesson is not here — that is what Edit mode on the grid is for, and
+ * dragging says where it lands far better than a list of times could.
+ *
+ * The substitute is a dropdown of the teachers actually working this semester,
+ * grouped by where they work, rather than a free typeahead: it is the only way
+ * the person choosing can see who is even at the right building.
  */
 class LessonUIManager {
 
-    public static function renderModal(): void {
+    public static function renderModal(?int $semesterId = null): void {
+        // The teachers actually working this semester, each listed once with
+        // the locations they work. One entry per teacher on purpose: only the
+        // teacher is being chosen here, so listing somebody twice — once per
+        // building — would offer two options that do the very same thing.
+        $teachers = [];
+        foreach ($semesterId !== null ? SemesterManagement::locationTeachers($semesterId) : [] as $column) {
+            $teacherId = (int)$column['teacher_user_id'];
+            $teachers[$teacherId]['name'] = trim(($column['teacher_preferred_name'] ?: $column['teacher_first_name'])
+                . ' ' . $column['teacher_last_name']);
+            $teachers[$teacherId]['locations'][(string)$column['location_name']] = true;
+        }
+        uasort($teachers, fn(array $a, array $b) => strcmp($a['name'], $b['name']));
         ?>
         <div id="lessonModal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true">
           <div class="modal-content">
@@ -25,10 +43,6 @@ class LessonUIManager {
             <input type="hidden" id="lessonCsrf" value="<?=h(csrf_token())?>">
 
             <div class="stack">
-              <label>Time (same day)
-                <select id="lessonSlotSelect"><option value="">Loading times…</option></select>
-              </label>
-
               <label>Attendance
                 <select id="lessonAttendance">
                   <option value="">Not marked</option>
@@ -38,17 +52,26 @@ class LessonUIManager {
               </label>
 
               <label>Substitute teacher
-                <?php render_typeahead_field('lessonSub', 'substitute_teacher_user_id', '/admin/teacher_search.php', 'Type to pick a substitute...'); ?>
-                <span class="small" id="lessonSubCurrent"></span>
+                <select id="lessonSub">
+                  <option value="">No substitute — the usual teacher</option>
+                  <?php foreach ($teachers as $teacherId => $teacher): ?>
+                    <option value="<?=(int)$teacherId?>"><?=h($teacher['name']
+                        . ' — ' . implode(', ', array_keys($teacher['locations'])))?></option>
+                  <?php endforeach; ?>
+                </select>
               </label>
-              <label class="inline">
-                <input type="checkbox" id="lessonSubClear"> Remove the current substitute
-              </label>
+              <?php if (!$teachers): ?>
+                <span class="small">No teachers are assigned to locations this semester, so there is
+                nobody to offer as cover.</span>
+              <?php endif; ?>
 
               <label>Lesson note
                 <textarea id="lessonNote" rows="3" placeholder="Notes save automatically as you type."></textarea>
               </label>
               <span class="note-save-state" id="lessonNoteState"></span>
+
+              <p class="small">To move this lesson to another time or teacher, press
+              <strong>Edit</strong> above and drag it.</p>
 
               <div class="actions actions-split">
                 <button type="button" class="button danger" id="lessonCancelLesson">Cancel lesson</button>
@@ -65,6 +88,7 @@ class LessonUIManager {
         document.addEventListener('DOMContentLoaded', function () {
           var modal = document.getElementById('lessonModal');
           var errEl = document.getElementById('lessonErr');
+          var subSelect = document.getElementById('lessonSub');
           var noteTimer = null;
 
           function showError(message) {
@@ -83,6 +107,20 @@ class LessonUIManager {
               .then(function (r) { return r.json(); });
           }
 
+          // Whoever is covering it now has to be selectable even if they no
+          // longer hold a column this semester — otherwise the dropdown would
+          // quietly misreport the lesson as having no substitute.
+          function selectCurrentSubstitute(id, name) {
+            if (!id) { subSelect.value = ''; return; }
+            if (!subSelect.querySelector('option[value="' + id + '"]')) {
+              var opt = document.createElement('option');
+              opt.value = id;
+              opt.textContent = (name || 'Current substitute') + ' (not scheduled this semester)';
+              subSelect.appendChild(opt);
+            }
+            subSelect.value = id;
+          }
+
           // Open on any weekly-grid cell that carries a lesson id — except in
           // edit mode, where a click is the start of a drag.
           document.addEventListener('click', function (e) {
@@ -94,29 +132,9 @@ class LessonUIManager {
             document.getElementById('lessonModalTitle').textContent = cell.dataset.studentName || 'Lesson';
             document.getElementById('lessonModalContext').textContent = cell.dataset.context || '';
             document.getElementById('lessonAttendance').value = cell.dataset.attended || '';
-            document.getElementById('lessonSub_id').value = '';
-            document.getElementById('lessonSub_input').value = '';
-            document.getElementById('lessonSubClear').checked = false;
-            document.getElementById('lessonSubCurrent').textContent =
-              cell.dataset.substituteName ? 'Current substitute: ' + cell.dataset.substituteName : '';
+            selectCurrentSubstitute(cell.dataset.substituteId || '', cell.dataset.substituteName || '');
             document.getElementById('lessonNote').value = cell.dataset.note || '';
             document.getElementById('lessonNoteState').textContent = '';
-
-            var select = document.getElementById('lessonSlotSelect');
-            select.innerHTML = '<option value="">Loading times…</option>';
-            fetch('/admin/lesson_slots.php?lesson_id=' + encodeURIComponent(cell.dataset.lessonId), { credentials: 'same-origin' })
-              .then(function (r) { return r.json(); })
-              .then(function (json) {
-                select.innerHTML = '';
-                (json.items || []).forEach(function (it) {
-                  var opt = document.createElement('option');
-                  opt.value = it.value;
-                  opt.textContent = it.label + (it.current ? ' (current)' : '');
-                  if (it.current) opt.selected = true;
-                  select.appendChild(opt);
-                });
-              })
-              .catch(function () { select.innerHTML = '<option value="">Could not load times</option>'; });
 
             modal.classList.remove('hidden');
             modal.setAttribute('aria-hidden', 'false');
@@ -153,32 +171,17 @@ class LessonUIManager {
               .catch(function () { showError('Network error.'); });
           });
 
-          // Save applies time / attendance / substitute changes in sequence.
+          // Save applies attendance then the substitute. The substitute is sent
+          // every time, so choosing "No substitute" is how you take one off.
           document.getElementById('lessonSave').addEventListener('click', function () {
             errEl.classList.add('hidden');
-            var steps = [];
-            var slot = document.getElementById('lessonSlotSelect');
-            if (slot.value && !slot.options[slot.selectedIndex].textContent.includes('(current)')) {
-              steps.push(function () { return postJson('/admin/lesson_reschedule.php', { start_time: slot.value }); });
-            }
-            steps.push(function () {
-              return postJson('/admin/lesson_missed.php', { attended: document.getElementById('lessonAttendance').value });
-            });
-            var subId = document.getElementById('lessonSub_id').value;
-            if (document.getElementById('lessonSubClear').checked) {
-              steps.push(function () { return postJson('/admin/lesson_substitute.php', { substitute_teacher_user_id: '' }); });
-            } else if (subId) {
-              steps.push(function () { return postJson('/admin/lesson_substitute.php', { substitute_teacher_user_id: subId }); });
-            }
-
-            steps.reduce(function (chain, step) {
-              return chain.then(function (prev) {
-                if (prev && !prev.ok) throw new Error(prev.error || 'Something went wrong.');
-                return step();
-              });
-            }, Promise.resolve({ ok: true }))
-              .then(function (last) {
-                if (last && !last.ok) throw new Error(last.error || 'Something went wrong.');
+            postJson('/admin/lesson_missed.php', { attended: document.getElementById('lessonAttendance').value })
+              .then(function (json) {
+                if (json && !json.ok) throw new Error(json.error || 'Something went wrong.');
+                return postJson('/admin/lesson_substitute.php', { substitute_teacher_user_id: subSelect.value });
+              })
+              .then(function (json) {
+                if (json && !json.ok) throw new Error(json.error || 'Something went wrong.');
                 window.location.reload();
               })
               .catch(function (err) { showError(err.message); });

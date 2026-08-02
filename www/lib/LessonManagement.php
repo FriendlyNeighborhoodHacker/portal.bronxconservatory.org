@@ -8,8 +8,8 @@ require_once __DIR__ . '/ScheduleConflicts.php';
 
 // Lesson occurrences. Lessons are only ever created by
 // ReservationManagement::generateLessonsForReservation; this class reads
-// them and manages per-occurrence facts: reschedules within a day,
-// attendance ("missed" = attended 0), substitutes, and location overrides.
+// them and manages per-occurrence facts: moving one week, attendance
+// ("missed" = attended 0), substitutes, location overrides, and cancellation.
 //
 // The "effective teacher" of a lesson is the substitute when one is set,
 // otherwise the reservation's teacher. The "effective location" is the
@@ -205,32 +205,6 @@ class LessonManagement {
     // ── Mutations ──────────────────────────────────────────────────────────
 
     /**
-     * Move a lesson to another time on the SAME day. Throws if the new time
-     * conflicts with another lesson of the same effective teacher that day.
-     */
-    public static function rescheduleWithinDay(?UserContext $ctx, int $lessonId, string $newStartTime): void {
-        self::assertAdmin($ctx);
-        $lesson = self::requireLesson($lessonId);
-        $newStartTime = self::normalizeTime($newStartTime);
-        $date = date('Y-m-d', strtotime((string)$lesson['start_datetime']));
-        $newStart = $date . ' ' . $newStartTime;
-
-        // Conflict check against the effective teacher's other lessons AND
-        // hold blocks at that moment.
-        $conflict = ScheduleConflicts::occurrenceConflict(
-            (int)$lesson['effective_teacher_user_id'], $newStart, (int)$lesson['duration_minutes'],
-            ['lesson_id' => $lessonId]
-        );
-        if ($conflict !== null) {
-            throw new InvalidArgumentException($conflict);
-        }
-
-        self::pdo()->prepare('UPDATE lessons SET start_datetime=? WHERE id=?')
-            ->execute([$newStart, $lessonId]);
-        self::log($ctx, 'lesson.rescheduled', ['lesson_id' => $lessonId, 'start_datetime' => $newStart]);
-    }
-
-    /**
      * Move one lesson to another moment, and/or hand it to another teacher.
      *
      * This is the calendar's drag-and-drop, so a single gesture can change the
@@ -337,14 +311,30 @@ class LessonManagement {
         self::log($ctx, 'lesson.attendance_marked', ['lesson_id' => $lessonId, 'attended' => $value]);
     }
 
+    /**
+     * Hand one lesson to another teacher for that week, or pass null to give
+     * it back to the reservation's own teacher.
+     *
+     * A substitute who is already busy at that moment is refused: the whole
+     * point of naming a cover is that they can actually be there.
+     */
     public static function setSubstituteTeacher(?UserContext $ctx, int $lessonId, ?int $teacherUserId): void {
         self::assertAdmin($ctx);
-        self::requireLesson($lessonId);
+        $lesson = self::requireLesson($lessonId);
         if ($teacherUserId !== null) {
             $st = self::pdo()->prepare('SELECT 1 FROM teacher_profiles WHERE user_id=?');
             $st->execute([$teacherUserId]);
             if (!$st->fetchColumn()) {
                 throw new InvalidArgumentException('The substitute must be a teacher.');
+            }
+            $conflict = ScheduleConflicts::occurrenceConflict(
+                $teacherUserId,
+                (string)$lesson['start_datetime'],
+                (int)$lesson['duration_minutes'],
+                ['lesson_id' => $lessonId]
+            );
+            if ($conflict !== null) {
+                throw new InvalidArgumentException($conflict);
             }
         }
         self::pdo()->prepare('UPDATE lessons SET substitute_teacher_user_id=? WHERE id=?')
@@ -391,7 +381,7 @@ class LessonManagement {
     /**
      * Has this one occurrence drifted off the standing weekly slot — a
      * different time of day, or a different length, than its reservation?
-     * That is what rescheduleWithinDay leaves behind, and the calendars flag
+     * That is what moveLesson leaves behind, and the calendars flag
      * it so nobody turns up at the usual hour. Needs a row from a query that
      * carries reservation_start_time / reservation_duration_minutes.
      */
