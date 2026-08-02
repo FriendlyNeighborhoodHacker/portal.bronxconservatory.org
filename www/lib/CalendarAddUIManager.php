@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../partials_typeahead.php';
 require_once __DIR__ . '/HoldBlockManagement.php';
+require_once __DIR__ . '/ReservationManagement.php';
 
 /**
  * The weekly Calendar's add modal: clicking an empty cell books something on
@@ -60,9 +61,9 @@ class CalendarAddUIManager {
                 </label>
                 <label>Duration
                   <select id="calAddLessonDuration">
-                    <option value="30">30 minutes</option>
-                    <option value="45">45 minutes</option>
-                    <option value="60">60 minutes</option>
+                    <?php foreach (ReservationManagement::DURATION_OPTIONS as $minutes): ?>
+                      <option value="<?=(int)$minutes?>"><?=(int)$minutes?> minutes</option>
+                    <?php endforeach; ?>
                   </select>
                 </label>
                 <p class="small">A one-off lesson on this date only. It is not added to the weekly

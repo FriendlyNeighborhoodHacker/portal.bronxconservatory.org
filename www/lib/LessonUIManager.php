@@ -5,6 +5,7 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/SemesterManagement.php';
 require_once __DIR__ . '/StudentTeacherManagement.php';
 require_once __DIR__ . '/LocationManagement.php';
+require_once __DIR__ . '/ReservationManagement.php';
 
 /**
  * The admin lesson modal (weekly calendar): mark missed/attended, hand the
@@ -65,6 +66,15 @@ class LessonUIManager {
             <input type="hidden" id="lessonCsrf" value="<?=h(csrf_token())?>">
 
             <div class="stack">
+              <label>Length
+                <select id="lessonDuration">
+                  <?php foreach (ReservationManagement::DURATION_OPTIONS as $minutes): ?>
+                    <option value="<?=(int)$minutes?>"><?=(int)$minutes?> minutes</option>
+                  <?php endforeach; ?>
+                </select>
+              </label>
+              <span class="small">This week only — the standing booking keeps its own length.</span>
+
               <label>Attendance
                 <select id="lessonAttendance">
                   <option value="">Not marked</option>
@@ -133,6 +143,7 @@ class LessonUIManager {
           var errEl = document.getElementById('lessonErr');
           var subSelect = document.getElementById('lessonSub');
           var locationSelect = document.getElementById('lessonLocation');
+          var durationSelect = document.getElementById('lessonDuration');
           var noteTimer = null;
 
           function showError(message) {
@@ -165,6 +176,19 @@ class LessonUIManager {
             subSelect.value = id;
           }
 
+          // An older or imported lesson may run a length the dropdown does not
+          // offer. Show it as itself rather than silently rewriting it on save.
+          function selectCurrentDuration(minutes) {
+            if (!minutes) { return; }
+            if (!durationSelect.querySelector('option[value="' + minutes + '"]')) {
+              var opt = document.createElement('option');
+              opt.value = minutes;
+              opt.textContent = minutes + ' minutes (current)';
+              durationSelect.appendChild(opt);
+            }
+            durationSelect.value = minutes;
+          }
+
           // Same guard for the room: a location that has since been switched
           // off must still show as itself, or saving would quietly move the
           // lesson back to the reservation's usual one.
@@ -190,6 +214,7 @@ class LessonUIManager {
             document.getElementById('lessonModalTitle').textContent = cell.dataset.studentName || 'Lesson';
             document.getElementById('lessonModalContext').textContent = cell.dataset.context || '';
             document.getElementById('lessonAttendance').value = cell.dataset.attended || '';
+            selectCurrentDuration(cell.dataset.duration || '');
             selectCurrentSubstitute(cell.dataset.substituteId || '', cell.dataset.substituteName || '');
             selectCurrentLocation(cell.dataset.locationId || '', cell.dataset.locationName || '');
             document.getElementById('lessonNote').value = cell.dataset.note || '';
@@ -230,14 +255,18 @@ class LessonUIManager {
               .catch(function () { showError('Network error.'); });
           });
 
-          // Save applies attendance, then the substitute, then the location.
-          // Each is sent every time, so picking the empty option is how you
-          // take one off. The substitute goes first: if that teacher turns out
-          // to be busy the whole save stops there, rather than leaving the
-          // lesson at a location chosen for cover that did not happen.
+          // Save applies length, then attendance, then the substitute, then
+          // the location. Each is sent every time, so picking the empty option
+          // is how you take one off. Length and substitute go first because
+          // they are the two that can be refused: better to stop there than to
+          // leave the lesson somewhere chosen for a change that did not stick.
           document.getElementById('lessonSave').addEventListener('click', function () {
             errEl.classList.add('hidden');
-            postJson('/admin/lesson_missed.php', { attended: document.getElementById('lessonAttendance').value })
+            postJson('/admin/lesson_duration.php', { duration_minutes: durationSelect.value })
+              .then(function (json) {
+                if (json && !json.ok) throw new Error(json.error || 'Something went wrong.');
+                return postJson('/admin/lesson_missed.php', { attended: document.getElementById('lessonAttendance').value });
+              })
               .then(function (json) {
                 if (json && !json.ok) throw new Error(json.error || 'Something went wrong.');
                 return postJson('/admin/lesson_substitute.php', { substitute_teacher_user_id: subSelect.value });

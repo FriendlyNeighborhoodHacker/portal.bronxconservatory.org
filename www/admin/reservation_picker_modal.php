@@ -11,6 +11,7 @@
 // has before you choose.
 require_once __DIR__ . '/schedule_grid.php';
 require_once __DIR__ . '/../lib/ScheduleGridData.php';
+require_once __DIR__ . '/../lib/ReservationManagement.php';
 
 /** "SA 10:00 am · 45 min · Marisol Vega · Bronx Community College" */
 function reservation_pick_summary(array $column, int $day, string $startTime, int $duration): string {
@@ -36,7 +37,8 @@ function reservation_pick_column(array $columns, int $locationId, int $teacherUs
  * $grid is ScheduleGridData::semesterWeeklyGrid() output. $durations are the
  * lesson lengths the picker offers.
  */
-function render_reservation_picker_modal(int $semesterId, array $grid, array $durations = [30, 45, 60]): void {
+function render_reservation_picker_modal(int $semesterId, array $grid, ?array $durations = null): void {
+    $durations = $durations ?? ReservationManagement::DURATION_OPTIONS;
     $cellIndex = $grid['cellIndex'];
     $rows = schedule_row_slots($grid['days'], $grid['bounds']);
 

@@ -19,6 +19,13 @@ class ReservationManagement {
 
     public const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+    /**
+     * The lesson lengths the pickers offer, matching the hold block ones.
+     * Only the dropdowns are limited to these — an import or an older row may
+     * carry any length up to 240 minutes, and nothing here rewrites it.
+     */
+    public const DURATION_OPTIONS = [30, 60, 90, 120];
+
     private static function pdo(): PDO {
         return pdo();
     }

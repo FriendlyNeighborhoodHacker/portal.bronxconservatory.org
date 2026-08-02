@@ -281,7 +281,7 @@ function import_columns_help_html(array $flow): string {
                 ['Location Name', 'required', 'must match an active location for this semester'],
                 ['Day', 'required', 'weekday name, e.g. "Saturday" (or 0=Sunday … 6=Saturday)'],
                 ['Start Time', 'required', '10:00 am, 10:00 AM, or 10:00'],
-                ['Duration Minutes', 'optional', 'e.g. 30, 45, 60 — blank means 30'],
+                ['Duration Minutes', 'optional', 'e.g. 30, 60, 90 — blank means 30'],
                 ['Status', 'optional', 'pending reach out (default), pending confirmation, or confirmed'],
             ];
             $example = "Student Name,Teacher Name,Location Name,Day,Start Time,Duration Minutes,Status\n"

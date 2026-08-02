@@ -395,6 +395,41 @@ class LessonManagement {
     }
 
     /**
+     * Change how long one lesson runs, without touching its standing booking.
+     *
+     * Lengthening can run into whatever comes next, so the new span is checked
+     * against the effective teacher's other commitments before anything is
+     * written.
+     */
+    public static function setLessonDuration(?UserContext $ctx, int $lessonId, int $durationMinutes): void {
+        self::assertAdmin($ctx);
+        $lesson = self::requireLesson($lessonId);
+
+        if ($durationMinutes <= 0 || $durationMinutes > 240) {
+            throw new InvalidArgumentException('Lesson length looks wrong.');
+        }
+        if ($durationMinutes === (int)$lesson['duration_minutes']) {
+            return;
+        }
+
+        $conflict = ScheduleConflicts::occurrenceConflict(
+            (int)$lesson['effective_teacher_user_id'],
+            (string)$lesson['start_datetime'],
+            $durationMinutes,
+            ['lesson_id' => $lessonId]
+        );
+        if ($conflict !== null) {
+            throw new InvalidArgumentException($conflict);
+        }
+
+        self::pdo()->prepare('UPDATE lessons SET duration_minutes=? WHERE id=?')
+            ->execute([$durationMinutes, $lessonId]);
+        self::log($ctx, 'lesson.duration_changed', [
+            'lesson_id' => $lessonId, 'duration_minutes' => $durationMinutes,
+        ]);
+    }
+
+    /**
      * Call a lesson off. The row stays — the family and the teacher still need
      * to see that it was scheduled and then cancelled — but it drops off the
      * admin calendar and stops holding the teacher's slot, so the time can be
@@ -567,20 +602,6 @@ class LessonManagement {
             return;
         }
         throw new RuntimeException("Only the lesson's teacher or an admin may do that.");
-    }
-
-    private static function normalizeTime(string $time): string {
-        $time = trim($time);
-        if (!preg_match('/^\d{1,2}:\d{2}(:\d{2})?$/', $time)) {
-            throw new InvalidArgumentException('Time must look like "9:00" or "14:30".');
-        }
-        $parts = explode(':', $time);
-        $h = (int)$parts[0];
-        $m = (int)$parts[1];
-        if ($h > 23 || $m > 59) {
-            throw new InvalidArgumentException('Time is out of range.');
-        }
-        return sprintf('%02d:%02d:00', $h, $m);
     }
 
     private static function assertAdmin(?UserContext $ctx): void {

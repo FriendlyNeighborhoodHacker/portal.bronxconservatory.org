@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../partials_typeahead.php';
 require_once __DIR__ . '/HoldBlockManagement.php';
+require_once __DIR__ . '/ReservationManagement.php';
 
 /**
  * The Semester Schedule's cell modals and the delegated cell-click JS.
@@ -62,9 +63,9 @@ class ReservationUIManager {
                 <div class="grid-2">
                   <label>Duration
                     <select name="duration_minutes">
-                      <option value="30">30 minutes</option>
-                      <option value="45">45 minutes</option>
-                      <option value="60">60 minutes</option>
+                      <?php foreach (ReservationManagement::DURATION_OPTIONS as $minutes): ?>
+                        <option value="<?=(int)$minutes?>"><?=(int)$minutes?> minutes</option>
+                      <?php endforeach; ?>
                     </select>
                   </label>
                   <label>Status
@@ -128,6 +129,16 @@ class ReservationUIManager {
             <form id="resEditForm" class="stack">
               <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
               <input type="hidden" name="reservation_id" id="resEditId">
+              <label>Length
+                <select name="duration_minutes" id="resEditDuration">
+                  <?php foreach (ReservationManagement::DURATION_OPTIONS as $minutes): ?>
+                    <option value="<?=(int)$minutes?>"><?=(int)$minutes?> minutes</option>
+                  <?php endforeach; ?>
+                </select>
+              </label>
+              <p class="small">Changing the length moves every future week of this booking, and is
+              refused if it would run into something else.</p>
+
               <label>Status
                 <select name="status" id="resEditStatus">
                   <option value="pending_reach_out">Pending reach out</option>
@@ -238,6 +249,17 @@ class ReservationUIManager {
               document.getElementById('resEditContext').textContent = item.dataset.context || '';
               document.getElementById('resEditBalance').textContent = item.dataset.balanceText || '';
               document.getElementById('resEditStatus').value = item.dataset.status;
+              // An imported or older booking may run a length the dropdown does
+              // not offer; show it as itself rather than rewriting it on save.
+              var durationSelect = document.getElementById('resEditDuration');
+              var duration = item.dataset.duration || '';
+              if (duration && !durationSelect.querySelector('option[value="' + duration + '"]')) {
+                var opt = document.createElement('option');
+                opt.value = duration;
+                opt.textContent = duration + ' minutes (current)';
+                durationSelect.appendChild(opt);
+              }
+              durationSelect.value = duration;
               // Way out of the grid: everything else about this student
               // (parents, instruments, charges) lives on their own page.
               var studentLink = document.getElementById('resEditStudentLink');
