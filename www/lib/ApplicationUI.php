@@ -136,11 +136,11 @@ class ApplicationUI {
             ['path' => '/admin/leads.php', 'label' => 'Leads',
                 'prefixes' => ['/admin/lead', '/admin/incomplete_inquir']],
             ['path' => '/admin/announcements.php', 'label' => 'Announcements', 'prefixes' => ['/admin/announcement']],
-            ['path' => '/admin/email_templates.php', 'label' => 'Email Templates', 'prefixes' => ['/admin/email_template']],
-            ['path' => '/admin/locations.php', 'label' => 'Locations', 'prefixes' => ['/admin/location']],
             ['path' => '/admin/semesters.php', 'label' => 'Semesters', 'prefixes' => ['/admin/semester', '/admin/setup/', '/admin/import/']],
             ['path' => '/admin/users.php', 'label' => 'Users', 'prefixes' => ['/admin/user']],
+            ['path' => '/admin/locations.php', 'label' => 'Locations', 'prefixes' => ['/admin/location']],
             ['path' => '/admin/settings.php', 'label' => 'Settings', 'prefixes' => ['/admin/settings.php']],
+            ['path' => '/admin/email_templates.php', 'label' => 'Email Templates', 'prefixes' => ['/admin/email_template']],
         ];
         if (is_developer()) {
             $items[] = ['path' => '/admin/maintenance.php', 'label' => 'Maintenance',
