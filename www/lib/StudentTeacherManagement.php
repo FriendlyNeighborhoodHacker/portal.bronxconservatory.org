@@ -169,17 +169,23 @@ class StudentTeacherManagement {
 
         foreach (self::keywordTokens($keyword) as $i => $token) {
             $like = $token . '%';
-            $sql .= " AND (
-                u.first_name LIKE :t{$i} OR u.last_name LIKE :t{$i} OR u.preferred_name LIKE :t{$i}
-                OR u.cell_phone LIKE :t{$i} OR u.home_phone LIKE :t{$i} OR u.address_street_1 LIKE :t{$i}
+            $student = self::likeAnyClause(
+                ['u.first_name', 'u.last_name', 'u.preferred_name',
+                 'u.cell_phone', 'u.home_phone', 'u.address_street_1'],
+                $like, "s{$i}", $params
+            );
+            $parent = self::likeAnyClause(
+                ['pu.first_name', 'pu.last_name', 'pu.preferred_name',
+                 'pu.cell_phone', 'pu.home_phone', 'pu.address_street_1'],
+                $like, "p{$i}", $params
+            );
+            $sql .= " AND ({$student}
                 OR EXISTS (
                     SELECT 1 FROM parenthood phk
                     JOIN users pu ON pu.id = phk.parent_user_id
                     WHERE phk.child_user_id = u.id AND pu.is_deleted = 0
-                      AND (pu.first_name LIKE :t{$i} OR pu.last_name LIKE :t{$i} OR pu.preferred_name LIKE :t{$i}
-                           OR pu.cell_phone LIKE :t{$i} OR pu.home_phone LIKE :t{$i} OR pu.address_street_1 LIKE :t{$i})
+                      AND {$parent}
                 ))";
-            $params[":t{$i}"] = $like;
         }
 
         if ($teacherUserId !== null && $teacherUserId > 0) {
@@ -219,9 +225,11 @@ class StudentTeacherManagement {
         $params = [];
 
         foreach (self::keywordTokens($keyword) as $i => $token) {
-            $sql .= " AND (u.first_name LIKE :t{$i} OR u.last_name LIKE :t{$i} OR u.preferred_name LIKE :t{$i}
-                      OR u.cell_phone LIKE :t{$i} OR u.email LIKE :t{$i} OR u.address_street_1 LIKE :t{$i})";
-            $params[":t{$i}"] = $token . '%';
+            $sql .= ' AND ' . self::likeAnyClause(
+                ['u.first_name', 'u.last_name', 'u.preferred_name',
+                 'u.cell_phone', 'u.email', 'u.address_street_1'],
+                $token . '%', "t{$i}", $params
+            );
         }
 
         if ($instrumentId !== null && $instrumentId > 0) {
@@ -303,6 +311,22 @@ class StudentTeacherManagement {
     private static function keywordTokens(string $keyword): array {
         $tokens = preg_split('/\s+/', trim($keyword)) ?: [];
         return array_slice(array_values(array_filter($tokens, fn($t) => $t !== '')), 0, 5);
+    }
+
+    /**
+     * `(col1 LIKE :p_0 OR col2 LIKE :p_1 ...)` for one search value, appending
+     * the bindings to $params. Each column gets its own placeholder because we
+     * run with PDO::ATTR_EMULATE_PREPARES off, where reusing a named
+     * placeholder within a statement fails with "Invalid parameter number".
+     */
+    private static function likeAnyClause(array $columns, string $like, string $prefix, array &$params): string {
+        $parts = [];
+        foreach ($columns as $j => $col) {
+            $ph = ":{$prefix}_{$j}";
+            $parts[] = "{$col} LIKE {$ph}";
+            $params[$ph] = $like;
+        }
+        return '(' . implode(' OR ', $parts) . ')';
     }
 
     private static function orNull($v): ?string {
