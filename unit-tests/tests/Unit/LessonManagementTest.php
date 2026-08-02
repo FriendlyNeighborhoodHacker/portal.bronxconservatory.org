@@ -467,4 +467,128 @@ final class LessonManagementTest extends TestCase
         LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], $sub);
         $this->assertSame($sub, (int)LessonManagement::getLesson($lessonIds[0])['substitute_teacher_user_id']);
     }
+
+    public function testASubstituteNeedNotTeachThisSemester(): void
+    {
+        // Cover often comes from someone with no regular slot. Being off the
+        // semester's roster is not a reason to refuse them.
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        $spare = fx_teacher('Spare', 'Cover'); // never assigned to a location
+
+        LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], $spare);
+
+        $lesson = LessonManagement::getLesson($lessonIds[0]);
+        $this->assertSame($spare, (int)$lesson['substitute_teacher_user_id']);
+        $this->assertSame($spare, (int)$lesson['effective_teacher_user_id']);
+        // And the lesson still belongs to them on their own day view.
+        $this->assertCount(1, LessonManagement::lessonsForTeacherOnDate($spare, '2030-09-07'));
+    }
+
+    public function testAnOffRosterSubstituteIsStillCheckedForClashes(): void
+    {
+        // Relaxing "must teach this semester" must not relax "must be free".
+        [$teacher, , $semesterId, $locationId, , $lessonIds] = $this->makeConfirmed();
+        $spare = fx_teacher('Spare', 'Cover');
+
+        // The spare teacher picks up an earlier lesson at the same hour...
+        $otherReservation = ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+            'student_user_id' => fx_student('Otto', 'Other'), 'day_of_week' => 6,
+            'start_time' => '11:00', 'duration_minutes' => 30, 'status' => 'confirmed',
+        ]);
+        $st = pdo()->prepare('SELECT id FROM lessons WHERE semester_lesson_reservation_id=? ORDER BY start_datetime');
+        $st->execute([$otherReservation]);
+        $otherLessonId = (int)$st->fetchAll()[0]['id'];
+        LessonManagement::setSubstituteTeacher($this->ctx, $otherLessonId, $spare);
+
+        // ...so they cannot also cover a lesson that overlaps it.
+        LessonManagement::moveLesson($this->ctx, $lessonIds[0], '2030-09-07 11:00');
+        try {
+            LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], $spare);
+            $this->fail('Expected the clash to be refused');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('already booked for this teacher', $e->getMessage());
+        }
+        $this->assertNull(LessonManagement::getLesson($lessonIds[0])['substitute_teacher_user_id']);
+    }
+
+    public function testSomeoneWithNoTeacherProfileIsStillRefused(): void
+    {
+        // "Any teacher" still means a teacher.
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        $this->expectException(InvalidArgumentException::class);
+        LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], fx_user('Paul', 'Parent'));
+    }
+
+    // ===== Where one week is held =====
+
+    public function testLocationOverrideMovesOnlyThatWeek(): void
+    {
+        [, , $semesterId, $locationId, , $lessonIds] = $this->makeConfirmed();
+        $second = fx_second_location_id();
+
+        LessonManagement::setLocationOverride($this->ctx, $lessonIds[0], $second);
+
+        $moved = LessonManagement::getLesson($lessonIds[0]);
+        $this->assertSame($second, (int)$moved['location_id_override']);
+        $this->assertSame($second, (int)$moved['effective_location_id']);
+        // The reservation and every other week are untouched.
+        $this->assertSame($locationId, (int)$moved['location_id']);
+        $this->assertNull(LessonManagement::getLesson($lessonIds[1])['location_id_override']);
+        $this->assertSame($locationId, (int)LessonManagement::getLesson($lessonIds[1])['effective_location_id']);
+    }
+
+    public function testChoosingTheUsualLocationClearsTheOverride(): void
+    {
+        [, , , $locationId, , $lessonIds] = $this->makeConfirmed();
+        LessonManagement::setLocationOverride($this->ctx, $lessonIds[0], fx_second_location_id());
+
+        // Both the empty option and the reservation's own location mean
+        // "back to normal", and neither stores an override that says nothing.
+        LessonManagement::setLocationOverride($this->ctx, $lessonIds[0], $locationId);
+        $this->assertNull(LessonManagement::getLesson($lessonIds[0])['location_id_override']);
+
+        LessonManagement::setLocationOverride($this->ctx, $lessonIds[0], fx_second_location_id());
+        LessonManagement::setLocationOverride($this->ctx, $lessonIds[0], null);
+        $this->assertNull(LessonManagement::getLesson($lessonIds[0])['location_id_override']);
+    }
+
+    public function testLocationOverrideRejectsALocationThatDoesNotExist(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        $this->expectException(InvalidArgumentException::class);
+        LessonManagement::setLocationOverride($this->ctx, $lessonIds[0], 999999);
+    }
+
+    public function testLocationOverrideRequiresAnAdmin(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        $this->expectException(RuntimeException::class);
+        LessonManagement::setLocationOverride(
+            new UserContext(fx_user('Nel', 'Nobody'), false), $lessonIds[0], fx_second_location_id()
+        );
+    }
+
+    public function testASubstituteAndALocationAreIndependent(): void
+    {
+        // The complaint that prompted this: picking a substitute based at the
+        // other building must not decide where the family turns up.
+        [, , , $locationId, , $lessonIds] = $this->makeConfirmed();
+        $sub = fx_teacher('Sue', 'Substitute');
+
+        LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], $sub);
+        $this->assertSame($locationId, (int)LessonManagement::getLesson($lessonIds[0])['effective_location_id'],
+            'naming a substitute leaves the lesson where it was');
+
+        // Moving it is a separate, deliberate choice.
+        $second = fx_second_location_id();
+        LessonManagement::setLocationOverride($this->ctx, $lessonIds[0], $second);
+        $lesson = LessonManagement::getLesson($lessonIds[0]);
+        $this->assertSame($sub, (int)$lesson['substitute_teacher_user_id']);
+        $this->assertSame($second, (int)$lesson['effective_location_id']);
+
+        // And taking the substitute off does not drag the room back with it.
+        LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], null);
+        $this->assertSame($second, (int)LessonManagement::getLesson($lessonIds[0])['effective_location_id']);
+    }
 }

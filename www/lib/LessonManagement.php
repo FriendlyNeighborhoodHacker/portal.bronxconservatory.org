@@ -342,12 +342,31 @@ class LessonManagement {
         self::log($ctx, 'lesson.substitute_set', ['lesson_id' => $lessonId, 'substitute_teacher_user_id' => $teacherUserId]);
     }
 
+    /**
+     * Hold one week somewhere other than the reservation's usual room — most
+     * often because whoever is covering it works at the other building.
+     *
+     * Passing the reservation's own location (or null) clears the override
+     * rather than storing one that says nothing, so "this lesson was moved"
+     * always means what it looks like.
+     */
     public static function setLocationOverride(?UserContext $ctx, int $lessonId, ?int $locationId): void {
         self::assertAdmin($ctx);
-        self::requireLesson($lessonId);
+        $lesson = self::requireLesson($lessonId);
+
+        if ($locationId !== null && $locationId > 0) {
+            require_once __DIR__ . '/LocationManagement.php';
+            if (!LocationManagement::find($locationId)) {
+                throw new InvalidArgumentException('That location does not exist.');
+            }
+        }
+        $override = ($locationId === null || $locationId <= 0 || $locationId === (int)$lesson['location_id'])
+            ? null
+            : $locationId;
+
         self::pdo()->prepare('UPDATE lessons SET location_id_override=? WHERE id=?')
-            ->execute([$locationId, $lessonId]);
-        self::log($ctx, 'lesson.location_override_set', ['lesson_id' => $lessonId, 'location_id' => $locationId]);
+            ->execute([$override, $lessonId]);
+        self::log($ctx, 'lesson.location_override_set', ['lesson_id' => $lessonId, 'location_id' => $override]);
     }
 
     // ── Authorization ──────────────────────────────────────────────────────
