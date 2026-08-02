@@ -57,6 +57,12 @@ class ApplicationUI {
                 $adminItems[] = ['path' => '/admin/calendar.php', 'label' => 'Calendar',
                     'prefixes' => ['/admin/calendar', '/admin/lesson_']];
             }
+            // Leads sit in the top bar rather than the Admin submenu: the
+            // intake queue is worked every day, not configured once.
+            // Uncompleted forms are a view of the same queue, so they light up
+            // this tab rather than adding one of their own.
+            $adminItems[] = ['path' => '/admin/leads.php', 'label' => 'Leads',
+                'prefixes' => ['/admin/lead', '/admin/incomplete_inquir']];
             $adminItems[] = ['path' => '/admin/students.php', 'label' => 'Students',
                 'prefixes' => ['/admin/students', '/admin/student_', '/admin/parent_']];
             $adminItems[] = ['path' => '/admin/teachers.php', 'label' => 'Teachers',
@@ -108,8 +114,6 @@ class ApplicationUI {
     /** Script-name prefixes that count as "the Admin section" (subnav shown). */
     private static function adminSectionPrefixes(): array {
         return [
-            '/admin/leads.php', '/admin/lead.php', '/admin/lead_',
-            '/admin/incomplete_inquir',
             '/admin/email_template',
             '/admin/announcements.php', '/admin/announcement_',
             '/admin/locations.php', '/admin/location_',
@@ -132,10 +136,6 @@ class ApplicationUI {
      */
     private static function adminSubnavItems(): array {
         $items = [
-            // Uncompleted forms are a view of the same queue, so they light up
-            // the Leads tab rather than adding one of their own.
-            ['path' => '/admin/leads.php', 'label' => 'Leads',
-                'prefixes' => ['/admin/lead', '/admin/incomplete_inquir']],
             ['path' => '/admin/announcements.php', 'label' => 'Announcements', 'prefixes' => ['/admin/announcement']],
             ['path' => '/admin/semesters.php', 'label' => 'Semesters', 'prefixes' => ['/admin/semester', '/admin/setup/', '/admin/import/']],
             ['path' => '/admin/users.php', 'label' => 'Users', 'prefixes' => ['/admin/user']],
