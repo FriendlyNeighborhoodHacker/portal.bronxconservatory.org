@@ -6,7 +6,7 @@ declare(strict_types=1);
  * Server Logs pages (/admin/l/).
  *
  * Logs are identified by a fixed slug; the request never supplies a path.
- * Default paths assume the production layout under /home/lillydebate and can
+ * Default paths assume the production layout under /home/bronxconservatory and can
  * be overridden per machine with the ADMIN_LOG_FILES constant in
  * config.local.php (slug => absolute path).
  *
@@ -21,19 +21,19 @@ final class LogViewer
     private const DEFAULT_LOGS = [
         'deploy-webhook' => [
             'label' => 'Deploy Webhook',
-            'path'  => '/home/lillydebate/deploy_scripts/logs/portal.bronxconservatory.org.webhook.log',
+            'path'  => '/home/bronxconservatory/deploy_scripts/logs/portal.bronxconservatory.org.webhook.log',
         ],
         'apache-access' => [
             'label' => 'Apache Access',
-            'path'  => '/home/lillydebate/logs/portal.bronxconservatory.org/http/access.log',
+            'path'  => '/home/bronxconservatory/logs/portal.bronxconservatory.org/http/access.log',
         ],
         'apache-error' => [
             'label' => 'Apache Error',
-            'path'  => '/home/lillydebate/logs/portal.bronxconservatory.org/http/error.log',
+            'path'  => '/home/bronxconservatory/logs/portal.bronxconservatory.org/http/error.log',
         ],
         'php-error' => [
             'label' => 'PHP Error',
-            'path'  => '/home/lillydebate/logs/portal.bronxconservatory.org/php/error.log',
+            'path'  => '/home/bronxconservatory/logs/portal.bronxconservatory.org/php/error.log',
         ],
     ];
 
