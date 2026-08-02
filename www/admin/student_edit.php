@@ -10,6 +10,7 @@ require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../lib/InstrumentCatalog.php';
 require_once __DIR__ . '/../lib/ReservationManagement.php';
 require_once __DIR__ . '/../lib/LedgerUIManager.php';
+require_once __DIR__ . '/../lib/NotesManagement.php';
 Application::init();
 require_admin();
 
@@ -26,6 +27,9 @@ $studentInstruments = InstrumentCatalog::namesForStudent($userId);
 $semesterId = Application::adminSelectedSemesterId();
 $reservations = ReservationManagement::reservationsForStudent($userId, $semesterId);
 $returnTo = '/admin/student_edit.php?id=' . $userId;
+// What the teachers have written after lessons — read-only here; they are
+// logged from the teacher's own day view, where the lesson is in front of them.
+$lessonNotes = NotesManagement::recentLessonNotesForStudent($userId);
 
 $flash = $_SESSION['people_flash'] ?? null;
 $flashError = $_SESSION['people_flash_error'] ?? null;
@@ -114,6 +118,22 @@ header_html('Edit ' . $name);
   <?php endforeach; ?>
 </div>
 <?php endif; ?>
+
+<div class="card">
+  <h3>Lesson notes</h3>
+  <?php if (!$lessonNotes): ?>
+    <p class="small">No lesson notes yet. Teachers write these from their own day view after a lesson.</p>
+  <?php else: ?>
+    <?php foreach ($lessonNotes as $note): ?>
+      <div class="lesson-row" style="align-items:flex-start;">
+        <span class="lesson-row-time"><?=h(date('D, M j, Y', strtotime((string)$note['start_datetime'])))?></span>
+        <span><?=nl2br(h($note['body']))?></span>
+        <span class="small"><?=h(trim($note['teacher_first_name'] . ' ' . $note['teacher_last_name']))?></span>
+      </div>
+    <?php endforeach; ?>
+    <p class="small" style="margin-top:8px;">The ten most recent, newest first.</p>
+  <?php endif; ?>
+</div>
 
 <?php LedgerUIManager::renderSection($userId, $semesterId, $returnTo); ?>
 

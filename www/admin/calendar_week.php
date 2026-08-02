@@ -1,13 +1,12 @@
 <?php
 // Admin Calendar — weekly view: the Semester Schedule's column structure,
 // but with the real lessons of one week. Clicking a lesson opens the lesson
-// modal (reschedule / missed / substitute / note).
+// modal (length / missed / substitute / location / cancel).
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/schedule_grid.php';
 require_once __DIR__ . '/../lib/SemesterManagement.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
 require_once __DIR__ . '/../lib/HoldBlockManagement.php';
-require_once __DIR__ . '/../lib/NotesManagement.php';
 require_once __DIR__ . '/../lib/LessonUIManager.php';
 require_once __DIR__ . '/../lib/HoldBlockUIManager.php';
 require_once __DIR__ . '/../lib/CalendarAddUIManager.php';
@@ -35,16 +34,6 @@ $weekEnd = date('Y-m-d', strtotime('+6 days', $weekStartTs));
 // would suggest otherwise. The family and the teacher still see it on theirs.
 $lessons = LessonManagement::lessonsBetween($weekStart, $weekEnd, $semesterId, false);
 $holdBlocks = HoldBlockManagement::holdBlocksBetween($weekStart, $weekEnd, $semesterId);
-
-// Notes per lesson (for prefilling the modal's note box with MY note).
-$myUserId = (int)current_user()['id'];
-$notesByLesson = [];
-foreach ($lessons as $lesson) {
-    $note = NotesManagement::lessonNoteFor((int)$lesson['id'], $myUserId);
-    if ($note) {
-        $notesByLesson[(int)$lesson['id']] = (string)$note['body'];
-    }
-}
 
 // Days shown: any weekday this week having lessons, hold blocks, or
 // scheduled class dates.
@@ -116,7 +105,7 @@ foreach ($occupants as $occupant) {
 }
 $rows = schedule_row_slots($days, $bounds);
 
-$cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson, $weekStartTs) {
+$cellFn = function (array $column, array $row) use ($cellIndex, $weekStartTs) {
     $columnKey = $column['location_id'] . ':' . $column['teacher_user_id'];
     $slotKey = $columnKey . ':' . $row['day'] . ':' . $row['minutes'];
     $cellOccupants = $cellIndex[$slotKey] ?? [];
@@ -213,13 +202,13 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson, 
         $items .= schedule_cell_item_html($studentName, implode(' · ', $statusBits), [
             'data-lesson-id' => $lesson['id'],
             'data-student-name' => $studentName,
+            'data-student-id' => (int)$lesson['student_user_id'],
             'data-attended' => $attendedValue,
             'data-substitute-id' => (int)($lesson['substitute_teacher_user_id'] ?? 0) ?: '',
             'data-substitute-name' => $substituteName,
             'data-location-id' => (int)$lesson['effective_location_id'],
             'data-location-name' => (string)$lesson['location_name'],
             'data-duration' => $duration,
-            'data-note' => $notesByLesson[(int)$lesson['id']] ?? '',
             'data-context' => $context,
         ], $multi ? $soleClass : ($missed ? 'lesson-cancelled' : ''));
     }

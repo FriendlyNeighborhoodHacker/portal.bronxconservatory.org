@@ -8,9 +8,11 @@ require_once __DIR__ . '/LocationManagement.php';
 require_once __DIR__ . '/ReservationManagement.php';
 
 /**
- * The admin lesson modal (weekly calendar): mark missed/attended, hand the
- * week to a substitute, cancel the lesson, and write a lesson note
- * (auto-saves like the teacher dashboard).
+ * The admin lesson modal (weekly calendar): change the length, mark
+ * missed/attended, hand the week to a substitute, move it to another room, and
+ * cancel it. Anything about the student rather than this one lesson — the
+ * lesson notes above all — is a link away on their own page, which keeps this
+ * to the handful of things you would change while looking at a calendar.
  *
  * Moving a lesson is not here — that is what Edit mode on the grid is for, and
  * dragging says where it lands far better than a list of times could.
@@ -118,11 +120,10 @@ class LessonUIManager {
               </label>
               <span class="small">Changing this moves only this week, not the standing booking.</span>
 
-              <label>Lesson note
-                <textarea id="lessonNote" rows="3" placeholder="Notes save automatically as you type."></textarea>
-              </label>
-              <span class="note-save-state" id="lessonNoteState"></span>
-
+              <p class="small">
+                <a id="lessonStudentLink" href="#" target="_blank" rel="noopener"></a> —
+                lesson notes, parents and charges all live there.
+              </p>
               <p class="small">To move this lesson to another time or teacher, press
               <strong>Edit</strong> above and drag it.</p>
 
@@ -144,7 +145,6 @@ class LessonUIManager {
           var subSelect = document.getElementById('lessonSub');
           var locationSelect = document.getElementById('lessonLocation');
           var durationSelect = document.getElementById('lessonDuration');
-          var noteTimer = null;
 
           function showError(message) {
             errEl.textContent = message;
@@ -218,28 +218,14 @@ class LessonUIManager {
             selectCurrentDuration(cell.dataset.duration || '');
             selectCurrentSubstitute(cell.dataset.substituteId || '', cell.dataset.substituteName || '');
             selectCurrentLocation(cell.dataset.locationId || '', cell.dataset.locationName || '');
-            document.getElementById('lessonNote').value = cell.dataset.note || '';
-            document.getElementById('lessonNoteState').textContent = '';
+            // Way out of the modal: everything else about this student — the
+            // lesson notes included — lives on their own page.
+            var studentLink = document.getElementById('lessonStudentLink');
+            studentLink.textContent = 'Open ' + (cell.dataset.studentName || 'the student') + "'s page";
+            studentLink.href = '/admin/student_edit.php?id=' + encodeURIComponent(cell.dataset.studentId || '');
 
             modal.classList.remove('hidden');
             modal.setAttribute('aria-hidden', 'false');
-          });
-
-          // Notes auto-save while typing.
-          document.getElementById('lessonNote').addEventListener('input', function () {
-            clearTimeout(noteTimer);
-            var value = this.value;
-            document.getElementById('lessonNoteState').textContent = 'Saving…';
-            noteTimer = setTimeout(function () {
-              postJson('/admin/lesson_note_save.php', { body: value })
-                .then(function (json) {
-                  document.getElementById('lessonNoteState').textContent =
-                    json && json.ok ? 'Saved' : 'Could not save';
-                })
-                .catch(function () {
-                  document.getElementById('lessonNoteState').textContent = 'Could not save';
-                });
-            }, 600);
           });
 
           // Cancelling is its own action, not part of Save: it is the one
