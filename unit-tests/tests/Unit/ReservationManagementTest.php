@@ -185,8 +185,8 @@ final class ReservationManagementTest extends TestCase
         );
         $this->assertSame([45, 45, 45], array_map(fn($l) => (int)$l['duration_minutes'], $after));
 
-        $note = NotesManagement::lessonNoteFor((int)$before[0]['id'], $this->ctx->id);
-        $this->assertSame('Worked on scales.', $note['body']);
+        $notes = NotesManagement::lessonNotesForLesson((int)$before[0]['id']);
+        $this->assertSame('Worked on scales.', $notes[0]['body']);
         $this->assertSame(0, (int)$after[1]['attended']);
     }
 
