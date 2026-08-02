@@ -14,7 +14,7 @@ final class StripeCheckoutTest extends TestCase
             define('STRIPE_SECRET_KEY', 'sk_test_dummy');
         }
         $ctx = fx_admin_ctx();
-        $this->semesterId = SemesterManagement::createSemester($ctx, 'fall', 2030, '2030-09-01', '2030-12-31', [
+        $this->semesterId = SemesterManagement::createSemester($ctx, 'fall', 2027, '2027-09-01', '2027-12-31', [
             'registration_fee' => '35.00',
             'lesson_fee_30_minutes' => '420.00',
             'lesson_fee_60_minutes' => '840.00',
