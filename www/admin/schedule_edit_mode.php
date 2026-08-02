@@ -30,7 +30,9 @@ function schedule_edit_toggle_html(): string {
 function render_schedule_edit_mode(array $config): void {
     ?>
     <div class="edit-mode-bar hidden" id="scheduleEditBar">
-      <span><strong>Edit mode.</strong> Drag a <?=h($config['noun'])?> to an empty slot to move it.</span>
+      <span><strong>Edit mode.</strong> Drag a <?=h($config['noun'])?> to an empty slot to move it.
+        Press <strong>Done</strong> when you have finished.</span>
+      <span class="small hidden" id="scheduleEditSaved">Moved.</span>
       <span class="error small hidden" id="scheduleEditErr"></span>
     </div>
 
@@ -47,6 +49,13 @@ function render_schedule_edit_mode(array $config): void {
       var errEl = document.getElementById('scheduleEditErr');
       var csrf = <?=json_encode(csrf_token())?>;
       var dragged = null;
+      // A successful move reloads the page so the grid recomputes server-side.
+      // This flag carries edit mode across that reload, so you can move several
+      // things and stop when you say Done — rather than being dropped out after
+      // every single drag. It is one-shot on purpose: set just before the
+      // reload and cleared on the way back in, so edit mode never lingers when
+      // you leave the page and come back later.
+      var resumeKey = 'scheduleEditResume:' + location.pathname;
 
       if (!toggle) return;
 
@@ -68,6 +77,20 @@ function render_schedule_edit_mode(array $config): void {
           else { item.removeAttribute('draggable'); }
         });
       }
+
+      function reloadStayingInEditMode() {
+        try { sessionStorage.setItem(resumeKey, '1'); } catch (e) { /* private mode: just reload */ }
+        window.location.reload();
+      }
+
+      // Coming back from a move: pick edit mode up where it was left.
+      try {
+        if (sessionStorage.getItem(resumeKey)) {
+          sessionStorage.removeItem(resumeKey);
+          setEditMode(true);
+          document.getElementById('scheduleEditSaved').classList.remove('hidden');
+        }
+      } catch (e) { /* no sessionStorage: edit mode simply starts off */ }
 
       // 'reservationId' -> 'reservation-id', so the same config names both the
       // dataset key and the attribute selector.
@@ -104,6 +127,7 @@ function render_schedule_edit_mode(array $config): void {
         dragged = item;
         item.classList.add('dragging');
         clearError();
+        document.getElementById('scheduleEditSaved').classList.add('hidden');
         e.dataTransfer.effectAllowed = 'move';
         // Firefox will not start a drag without data on the transfer.
         e.dataTransfer.setData('text/plain', item.dataset[config.itemAttr]);
@@ -155,7 +179,7 @@ function render_schedule_edit_mode(array $config): void {
         fetch(config.endpoint, { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .then(function (json) {
-            if (json && json.ok) { window.location.reload(); }
+            if (json && json.ok) { reloadStayingInEditMode(); }
             else {
               item.classList.remove('saving');
               showError((json && json.error) || 'That move could not be made.');
