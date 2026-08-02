@@ -70,25 +70,33 @@ foreach ($days as $day) {
 }
 // Lessons and hold blocks share the grid: both are things occupying a
 // teacher's column at a moment in the week.
+//
+// Both _teacher_user_id and _location_id are the EFFECTIVE values — where the
+// lesson is actually happening and who is actually taking it. A week moved to
+// another room belongs in that room's column, not the one its standing
+// booking names.
 $occupants = [];
 foreach ($lessons as $lesson) {
     $lesson['kind'] = 'lesson';
     $lesson['_teacher_user_id'] = (int)$lesson['effective_teacher_user_id'];
+    $lesson['_location_id'] = (int)$lesson['effective_location_id'];
     $occupants[] = $lesson;
 }
 foreach ($holdBlocks as $hold) {
     $hold['kind'] = 'hold';
     $hold['_teacher_user_id'] = (int)$hold['teacher_user_id'];
+    $hold['_location_id'] = (int)$hold['location_id'];
     $occupants[] = $hold;
 }
 
-// Columns follow the EFFECTIVE teacher, so a lesson someone is substituting
-// shows up in their column — including when they have no column at that
+// Columns follow that same effective pair, so a lesson someone is
+// substituting — at whichever building it is being held in — shows up in
+// their column there, including when neither of them has a column at that
 // location this semester, which is exactly when it would otherwise vanish.
 $columns = SemesterManagement::locationTeachersIncluding(
     SemesterManagement::locationTeachers($semesterId),
     array_map(
-        fn(array $o): array => ['location_id' => (int)$o['location_id'], 'teacher_user_id' => $o['_teacher_user_id']],
+        fn(array $o): array => ['location_id' => $o['_location_id'], 'teacher_user_id' => $o['_teacher_user_id']],
         $occupants
     )
 );
@@ -103,7 +111,7 @@ foreach ($occupants as $occupant) {
     $slot = intdiv($minutes, 30) * 30;
     $bounds[$day][0] = min($bounds[$day][0] ?? $slot, $slot);
     $bounds[$day][1] = max($bounds[$day][1] ?? $slot, $slot);
-    $key = $occupant['location_id'] . ':' . $occupant['_teacher_user_id'] . ':' . $day . ':' . $slot;
+    $key = $occupant['_location_id'] . ':' . $occupant['_teacher_user_id'] . ':' . $day . ':' . $slot;
     $cellIndex[$key][] = $occupant;
 }
 $rows = schedule_row_slots($days, $bounds);
