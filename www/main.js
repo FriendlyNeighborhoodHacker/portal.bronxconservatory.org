@@ -1,5 +1,26 @@
 // BCM Portal application JavaScript
 
+// Which .cell-item a click on a schedule grid refers to.
+//
+// A cell is taller than what sits in it — a 60-minute lesson spans two rows,
+// and a short name leaves the rest of the box empty — so clicking the blank
+// part of an occupied cell used to do nothing at all. Anywhere in the cell now
+// counts as the thing in it.
+//
+// A cell holding more than one commitment is left alone: there the click has
+// to land on one of them, because guessing between two bookings would be
+// worse than doing nothing.
+function bcmCellItemFor(target) {
+  if (!target || !target.closest) return null;
+  var item = target.closest('.cell-item');
+  if (item) return item;
+  var cell = target.closest('td.grid-cell');
+  if (!cell) return null;
+  var items = cell.querySelectorAll('.cell-item');
+  return items.length === 1 ? items[0] : null;
+}
+
+
 // Top bar: avatar dropdown + mobile hamburger panel.
 function setupTopNav() {
   var avatarBtn = document.getElementById('avatarToggle');

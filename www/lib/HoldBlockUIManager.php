@@ -68,8 +68,9 @@ class HoldBlockUIManager {
 
           // Open on any weekly-grid cell that carries a hold block id.
           document.addEventListener('click', function (e) {
-            var cell = e.target.closest ? e.target.closest('[data-hold-block-id]') : null;
-            if (!cell || cell.closest('.modal')) return;
+            // Anywhere in an occupied cell counts as the block in it.
+            var cell = bcmCellItemFor(e.target);
+            if (!cell || !cell.dataset.holdBlockId || cell.closest('.modal')) return;
             errEl.classList.add('hidden');
             document.getElementById('holdBlockModalId').value = cell.dataset.holdBlockId;
             document.getElementById('holdBlockModalTitle').textContent = cell.dataset.holdTitle || 'Hold block';

@@ -242,7 +242,8 @@ class ReservationUIManager {
             // request to open anything.
             if (document.body.classList.contains('schedule-edit-mode')) return;
 
-            var item = e.target.closest('.cell-item');
+            // Anywhere in an occupied cell counts as the thing in it.
+            var item = bcmCellItemFor(e.target);
             if (item && item.dataset.reservationId) {
               document.getElementById('resEditId').value = item.dataset.reservationId;
               document.getElementById('resEditTitle').textContent = item.dataset.studentName || 'Reservation';

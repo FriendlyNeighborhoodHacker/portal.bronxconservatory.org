@@ -207,8 +207,9 @@ class LessonUIManager {
           // edit mode, where a click is the start of a drag.
           document.addEventListener('click', function (e) {
             if (document.body.classList.contains('schedule-edit-mode')) return;
-            var cell = e.target.closest ? e.target.closest('[data-lesson-id]') : null;
-            if (!cell || cell.closest('.modal')) return;
+            // Anywhere in an occupied cell counts as the lesson in it.
+            var cell = bcmCellItemFor(e.target);
+            if (!cell || !cell.dataset.lessonId || cell.closest('.modal')) return;
             errEl.classList.add('hidden');
             document.getElementById('lessonModalId').value = cell.dataset.lessonId;
             document.getElementById('lessonModalTitle').textContent = cell.dataset.studentName || 'Lesson';
