@@ -127,7 +127,6 @@ final class StudentTeacherManagementTest extends TestCase
 
     public function testParentLinkSearchOffersAnyoneExceptWhoIsAlreadyLinked(): void
     {
-        $ctx = fx_admin_ctx();
         $child = fx_student('Devon', 'Devlin');
         $linked = fx_parent_of($child, 'Denise', 'Devlin');
         $teacher = fx_teacher('Dora', 'Devlin');
@@ -142,6 +141,9 @@ final class StudentTeacherManagementTest extends TestCase
         $this->assertSame($linked, $ids('dev')[0]);
         $this->assertContains($teacher, $ids('dev'));   // a teacher can be a parent too
         $this->assertContains($stranger, $ids('dev'));
+        // Devon is somebody's child, so he is never offered as a parent —
+        // not even to a different family.
+        $this->assertNotContains($child, $ids('dev'));
 
         // For this child: the child themselves and their current parents drop out.
         $offered = $ids('dev', $child);
