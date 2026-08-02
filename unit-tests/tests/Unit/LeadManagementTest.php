@@ -5,16 +5,23 @@ use PHPUnit\Framework\TestCase;
 
 final class LeadManagementTest extends TestCase
 {
+    private int $semesterId;
+
     protected function setUp(): void
     {
         test_reset_all();
-        // Pin the public-form pricing (other test classes pin their own).
-        Settings::set('registration_cost', '35.00');
-        Settings::set('recital_fee', '10.00');
-        Settings::set('tuition_30', '420.00');
-        Settings::set('tuition_60', '840.00');
-        Settings::set('tuition_ensemble', '270.00');
-        Settings::set('installment_fee', '20.00');
+        // Create a semester with pinned pricing for all tests.
+        $ctx = fx_admin_ctx();
+        $this->semesterId = SemesterManagement::createSemester($ctx, 'fall', 2030, '2030-09-01', '2030-12-31', [
+            'registration_fee' => '35.00',
+            'lesson_fee_30_minutes' => '420.00',
+            'lesson_fee_60_minutes' => '840.00',
+            'guitar_ensemble_fee' => '270.00',
+            'recital_fee' => '10.00',
+            'installment_plan_fee' => '20.00',
+            'lessons_per_semester' => 15,
+        ]);
+        Settings::set('registration_semester_id', (string)$this->semesterId);
     }
 
     // ===== Fixtures =====
@@ -52,7 +59,7 @@ final class LeadManagementTest extends TestCase
     private function makeLead(?array $students = null, bool $installment = false): int
     {
         return LeadManagement::createLead(
-            null, null, $this->parent(),
+            null, $this->semesterId, $this->parent(),
             $students ?? [$this->student()],
             $this->scheduling(), $installment
         );
@@ -64,20 +71,21 @@ final class LeadManagementTest extends TestCase
 
     public function testQuoteSingle30MinuteStudentFullPay(): void
     {
-        $quote = LeadManagement::priceQuote([$this->student()], false);
+        $quote = LeadManagement::priceQuote($this->semesterId, [$this->student()], false);
         $this->assertSame(46500, $quote['total_cents']); // 35 + 420 + 10
         $this->assertSame(46500, $quote['due_now_cents']);
     }
 
     public function testQuoteSingle60MinuteStudent(): void
     {
-        $quote = LeadManagement::priceQuote([$this->student(['lesson_length_minutes' => 60])], false);
+        $quote = LeadManagement::priceQuote($this->semesterId, [$this->student(['lesson_length_minutes' => 60])], false);
         $this->assertSame(88500, $quote['total_cents']); // 35 + 840 + 10
     }
 
     public function testQuoteEnsembleAddsTuitionAndSecondRecitalBlock(): void
     {
         $quote = LeadManagement::priceQuote(
+            $this->semesterId,
             [$this->student(['instrument' => 'Guitar', 'guitar_ensemble' => 1])], false
         );
         // 35 + 420 + 10 + 270 + 10 (second lesson block)
@@ -87,6 +95,7 @@ final class LeadManagementTest extends TestCase
     public function testQuoteChargesRegistrationOncePerFamily(): void
     {
         $quote = LeadManagement::priceQuote(
+            $this->semesterId,
             [$this->student(), $this->student(['first_name' => 'Marco', 'instrument' => 'Violin'])],
             false
         );
@@ -101,7 +110,7 @@ final class LeadManagementTest extends TestCase
 
     public function testQuoteInstallmentDueNowIsFeesPlusHalfTuition(): void
     {
-        $quote = LeadManagement::priceQuote([$this->student()], true);
+        $quote = LeadManagement::priceQuote($this->semesterId, [$this->student()], true);
         // total = 35 + 420 + 10 + 20 = 485; due now = fees (35+10+20) + 420/2
         $this->assertSame(48500, $quote['total_cents']);
         $this->assertSame(6500 + 21000, $quote['due_now_cents']);
@@ -109,15 +118,19 @@ final class LeadManagementTest extends TestCase
 
     public function testQuoteInstallmentRoundsOddCentUp(): void
     {
-        $original = Settings::get('tuition_30');
-        try {
-            Settings::set('tuition_30', '420.01');
-            $quote = LeadManagement::priceQuote([$this->student()], true);
-            // half of 42001 rounds up to 21001
-            $this->assertSame(6500 + 21001, $quote['due_now_cents']);
-        } finally {
-            Settings::set('tuition_30', $original);
-        }
+        $ctx = fx_admin_ctx();
+        $altSemesterId = SemesterManagement::createSemester($ctx, 'spring', 2031, '2031-01-01', '2031-05-31', [
+            'registration_fee' => '35.00',
+            'lesson_fee_30_minutes' => '420.01',
+            'lesson_fee_60_minutes' => '840.02',
+            'guitar_ensemble_fee' => '270.00',
+            'recital_fee' => '10.00',
+            'installment_plan_fee' => '20.00',
+            'lessons_per_semester' => 15,
+        ]);
+        $quote = LeadManagement::priceQuote($altSemesterId, [$this->student()], true);
+        // half of 42001 rounds up to 21001
+        $this->assertSame(6500 + 21001, $quote['due_now_cents']);
     }
 
     // ===== createLead =====

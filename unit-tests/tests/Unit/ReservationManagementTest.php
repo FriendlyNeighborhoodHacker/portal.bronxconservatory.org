@@ -367,8 +367,6 @@ final class ReservationManagementTest extends TestCase
 
     public function testCarryForwardCopiesTheScheduleAsPendingReachOut(): void
     {
-        Settings::set('registration_cost', '50.00');
-        Settings::set('semester_lesson_cost', '300.00');
         $teacher = fx_teacher();
         $fall = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
         $student = fx_student('Lucia', 'Ramos');

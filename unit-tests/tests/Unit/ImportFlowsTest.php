@@ -490,8 +490,6 @@ final class ImportFlowsTest extends TestCase
 
     public function testScheduleImportCreatesReservationsAndLessonsWithoutCharging(): void
     {
-        Settings::set('registration_cost', '50.00');
-        Settings::set('semester_lesson_cost', '300.00');
         [$semesterId, $locationId, $vega, , $locationName] = $this->scheduleSetup();
         $lucia = fx_student('Lucia', 'Ramos');
 
