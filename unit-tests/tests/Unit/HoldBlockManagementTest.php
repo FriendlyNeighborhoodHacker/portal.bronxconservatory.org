@@ -473,4 +473,110 @@ final class HoldBlockManagementTest extends TestCase
         $other = HoldBlockManagement::holdBlocksBetweenForTeacher(fx_teacher('Otto', 'Other'), '2030-09-07', '2030-09-14');
         $this->assertSame([], $other);
     }
+
+    // ===== One-off holds, booked straight onto the calendar =====
+
+    public function testAdHocHoldStandsOnItsOwn(): void
+    {
+        $teacher = fx_teacher('Ada', 'Adhoc');
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
+
+        $blockId = HoldBlockManagement::createAdHocHoldBlock($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 13:00', 'duration_minutes' => 60,
+            'title' => 'Away for the afternoon',
+        ]);
+
+        $block = HoldBlockManagement::getBlock($blockId);
+        $this->assertTrue(HoldBlockManagement::isAdHoc($block));
+        $this->assertNull($block['semester_hold_block_reservation_id']);
+        $this->assertSame($semesterId, (int)$block['semester_id']);
+        $this->assertSame($teacher, (int)$block['teacher_user_id']);
+        $this->assertSame($locationId, (int)$block['location_id']);
+        $this->assertSame('Away for the afternoon', $block['effective_title']);
+        $this->assertSame('2030-09-10 13:00:00', $block['start_datetime']);
+        $this->assertSame(60, (int)$block['duration_minutes']);
+
+        // And it appears in the same lists a materialized block does.
+        $this->assertCount(1, HoldBlockManagement::holdBlocksBetween('2030-09-10', '2030-09-10', $semesterId));
+        $this->assertCount(1, HoldBlockManagement::holdBlocksBetweenForTeacher($teacher, '2030-09-10', '2030-09-10'));
+        $this->assertCount(1, HoldBlockManagement::holdBlocksForTeacherOnDate($teacher, '2030-09-10'));
+    }
+
+    public function testAdHocHoldBlocksTheTeachersTime(): void
+    {
+        $teacher = fx_teacher('Ada', 'Adhoc');
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
+        HoldBlockManagement::createAdHocHoldBlock($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 13:00', 'duration_minutes' => 60, 'title' => 'Away',
+        ]);
+
+        $this->assertNotNull(ScheduleConflicts::occurrenceConflict($teacher, '2030-09-10 13:30', 30));
+        $this->assertNull(ScheduleConflicts::occurrenceConflict($teacher, '2030-09-10 14:00', 30));
+
+        // A one-off lesson cannot be booked over it either.
+        try {
+            LessonManagement::createAdHocLesson($this->ctx, [
+                'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+                'student_user_id' => fx_student('Sol', 'Single'), 'location_id' => $locationId,
+                'start_datetime' => '2030-09-10 13:30', 'duration_minutes' => 30,
+            ]);
+            $this->fail('Expected the hold to block the lesson');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('hold block', $e->getMessage());
+        }
+    }
+
+    public function testAdHocHoldRejectsBadInput(): void
+    {
+        $teacher = fx_teacher('Ada', 'Adhoc');
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
+        $good = [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 13:00', 'duration_minutes' => 30, 'title' => 'Away',
+        ];
+        foreach ([
+            'no title' => ['title' => '  '],
+            'no teacher' => ['teacher_user_id' => 0],
+            'no semester' => ['semester_id' => 0],
+            'silly length' => ['duration_minutes' => 0],
+            'nonsense time' => ['start_datetime' => 'whenever'],
+        ] as $label => $override) {
+            try {
+                HoldBlockManagement::createAdHocHoldBlock($this->ctx, array_merge($good, $override));
+                $this->fail("Expected $label to be refused");
+            } catch (InvalidArgumentException $e) {
+                $this->assertNotSame('', $e->getMessage(), $label);
+            }
+        }
+        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM semester_hold_blocks')->fetchColumn());
+    }
+
+    public function testAdHocHoldCanBeRetitledAndDeleted(): void
+    {
+        $teacher = fx_teacher('Ada', 'Adhoc');
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
+        $blockId = HoldBlockManagement::createAdHocHoldBlock($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 13:00', 'duration_minutes' => 30, 'title' => 'Away',
+        ]);
+
+        HoldBlockManagement::setBlockTitleOverride($this->ctx, $blockId, 'Dentist');
+        $this->assertSame('Dentist', HoldBlockManagement::getBlock($blockId)['effective_title']);
+
+        HoldBlockManagement::deleteBlock($this->ctx, $blockId);
+        $this->assertNull(HoldBlockManagement::getBlock($blockId));
+    }
+
+    public function testAdHocHoldRequiresAnAdmin(): void
+    {
+        $teacher = fx_teacher('Ada', 'Adhoc');
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
+        $this->expectException(RuntimeException::class);
+        HoldBlockManagement::createAdHocHoldBlock(new UserContext(fx_user('Nel', 'Nobody'), false), [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 13:00', 'duration_minutes' => 30, 'title' => 'Away',
+        ]);
+    }
 }

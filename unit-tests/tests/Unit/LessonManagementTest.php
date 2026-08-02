@@ -591,4 +591,182 @@ final class LessonManagementTest extends TestCase
         LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], null);
         $this->assertSame($second, (int)LessonManagement::getLesson($lessonIds[0])['effective_location_id']);
     }
+
+    // ===== One-off lessons, booked straight onto the calendar =====
+
+    private function adHocSetup(): array
+    {
+        $teacher = fx_teacher('Ada', 'Adhoc');
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
+        return [$teacher, fx_student('Sol', 'Single'), $semesterId, $locationId];
+    }
+
+    public function testAdHocLessonStandsOnItsOwn(): void
+    {
+        [$teacher, $student, $semesterId, $locationId] = $this->adHocSetup();
+
+        $lessonId = LessonManagement::createAdHocLesson($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'student_user_id' => $student, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 15:00', 'duration_minutes' => 45,
+        ]);
+
+        $lesson = LessonManagement::getLesson($lessonId);
+        $this->assertTrue(LessonManagement::isAdHoc($lesson));
+        $this->assertNull($lesson['semester_lesson_reservation_id']);
+        // Everything a lesson normally inherits is readable anyway.
+        $this->assertSame($semesterId, (int)$lesson['semester_id']);
+        $this->assertSame($teacher, (int)$lesson['teacher_user_id']);
+        $this->assertSame($teacher, (int)$lesson['effective_teacher_user_id']);
+        $this->assertSame($student, (int)$lesson['student_user_id']);
+        $this->assertSame($locationId, (int)$lesson['effective_location_id']);
+        $this->assertSame('Sol', $lesson['student_first_name']);
+        $this->assertSame('Ada', $lesson['teacher_first_name']);
+        $this->assertSame('2030-09-10 15:00:00', $lesson['start_datetime']);
+        $this->assertSame(45, (int)$lesson['duration_minutes']);
+        // It has no standing slot, so it can never be "moved off" one.
+        $this->assertFalse(LessonManagement::isTimeMoved($lesson));
+    }
+
+    public function testAdHocLessonShowsUpEverywhereARealLessonWould(): void
+    {
+        [$teacher, $student, $semesterId, $locationId] = $this->adHocSetup();
+        LessonManagement::createAdHocLesson($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'student_user_id' => $student, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 15:00', 'duration_minutes' => 30,
+        ]);
+
+        $this->assertCount(1, LessonManagement::lessonsBetween('2030-09-10', '2030-09-10', $semesterId));
+        $this->assertCount(1, LessonManagement::lessonsForTeacherOnDate($teacher, '2030-09-10'));
+        $this->assertCount(1, LessonManagement::lessonsBetweenForTeacher($teacher, '2030-09-10', '2030-09-10'));
+        $this->assertCount(1, LessonManagement::lessonsForTeacherInSemesters($teacher, [$semesterId]));
+        $this->assertCount(1, LessonManagement::lessonsForStudentsInSemesters([$student], [$semesterId]));
+        $this->assertCount(1, LessonManagement::lessonsBetweenForStudents([$student], '2030-09-10', '2030-09-10'));
+        $this->assertCount(1, LessonManagement::upcomingLessonsForStudent($student, '2030-09-01'));
+        $this->assertSame('2030-09-10', LessonManagement::nextTeachingDateForTeacher($teacher, '2030-09-09'));
+    }
+
+    public function testAdHocLessonHoldsTheTeachersTime(): void
+    {
+        [$teacher, $student, $semesterId, $locationId] = $this->adHocSetup();
+        LessonManagement::createAdHocLesson($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'student_user_id' => $student, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 15:00', 'duration_minutes' => 60,
+        ]);
+
+        // A one-off is a real commitment: it blocks the moment like any other.
+        $this->assertNotNull(ScheduleConflicts::occurrenceConflict($teacher, '2030-09-10 15:30', 30));
+        $this->assertNull(ScheduleConflicts::occurrenceConflict($teacher, '2030-09-10 16:00', 30));
+
+        // ...including against a second one-off.
+        try {
+            LessonManagement::createAdHocLesson($this->ctx, [
+                'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+                'student_user_id' => fx_student('Two', 'Second'), 'location_id' => $locationId,
+                'start_datetime' => '2030-09-10 15:30', 'duration_minutes' => 30,
+            ]);
+            $this->fail('Expected the clash to be refused');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('already booked for this teacher', $e->getMessage());
+        }
+    }
+
+    public function testAdHocLessonIsRefusedOverAStandingLesson(): void
+    {
+        [$teacher, , , $locationId, , ] = $this->makeConfirmed();
+        $semesterId = (int)LessonManagement::getLesson(
+            (int)pdo()->query('SELECT id FROM lessons LIMIT 1')->fetchColumn()
+        )['semester_id'];
+
+        $this->expectException(InvalidArgumentException::class);
+        LessonManagement::createAdHocLesson($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'student_user_id' => fx_student('Sol', 'Single'), 'location_id' => $locationId,
+            'start_datetime' => '2030-09-07 10:00', 'duration_minutes' => 30,
+        ]);
+    }
+
+    public function testAdHocLessonRejectsBadInput(): void
+    {
+        [$teacher, $student, $semesterId, $locationId] = $this->adHocSetup();
+        $good = [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'student_user_id' => $student, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 15:00', 'duration_minutes' => 30,
+        ];
+        $cases = [
+            'no student' => ['student_user_id' => 0],
+            'no semester' => ['semester_id' => 0],
+            'no location' => ['location_id' => 0],
+            'not a teacher' => ['teacher_user_id' => fx_user('Norm', 'Nonteacher')],
+            'silly length' => ['duration_minutes' => 0],
+            'nonsense time' => ['start_datetime' => 'whenever'],
+        ];
+        foreach ($cases as $label => $override) {
+            try {
+                LessonManagement::createAdHocLesson($this->ctx, array_merge($good, $override));
+                $this->fail("Expected $label to be refused");
+            } catch (InvalidArgumentException $e) {
+                $this->assertNotSame('', $e->getMessage(), $label);
+            }
+        }
+        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM lessons')->fetchColumn());
+    }
+
+    public function testAdHocLessonRequiresAnAdmin(): void
+    {
+        [$teacher, $student, $semesterId, $locationId] = $this->adHocSetup();
+        $this->expectException(RuntimeException::class);
+        LessonManagement::createAdHocLesson(new UserContext(fx_user('Nel', 'Nobody'), false), [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'student_user_id' => $student, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 15:00', 'duration_minutes' => 30,
+        ]);
+    }
+
+    public function testMovingAnAdHocLessonRetargetsItRatherThanSubstituting(): void
+    {
+        [$teacher, $student, $semesterId, $locationId] = $this->adHocSetup();
+        $other = fx_teacher('Bea', 'Other');
+        $lessonId = LessonManagement::createAdHocLesson($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'student_user_id' => $student, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 15:00', 'duration_minutes' => 30,
+        ]);
+
+        LessonManagement::moveLesson($this->ctx, $lessonId, '2030-09-11 09:30', $other, $locationId);
+
+        $lesson = LessonManagement::getLesson($lessonId);
+        $this->assertSame('2030-09-11 09:30:00', $lesson['start_datetime']);
+        $this->assertSame($other, (int)$lesson['teacher_user_id'], 'it simply becomes their lesson');
+        $this->assertNull($lesson['substitute_teacher_user_id'], 'there is no standing teacher to substitute for');
+    }
+
+    public function testAdHocLessonCanBeCancelledOrDeleted(): void
+    {
+        [$teacher, $student, $semesterId, $locationId] = $this->adHocSetup();
+        $fields = [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'student_user_id' => $student, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 15:00', 'duration_minutes' => 30,
+        ];
+
+        $first = LessonManagement::createAdHocLesson($this->ctx, $fields);
+        LessonManagement::cancelLesson($this->ctx, $first);
+        $this->assertTrue(LessonManagement::isCancelled(LessonManagement::getLesson($first)));
+        // Cancelled, so its time is free again for a replacement.
+        $second = LessonManagement::createAdHocLesson($this->ctx, $fields);
+
+        LessonManagement::deleteAdHocLesson($this->ctx, $second);
+        $this->assertNull(LessonManagement::getLesson($second));
+    }
+
+    public function testALessonFromAWeeklyBookingIsNeverDeletedOutright(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        $this->expectException(InvalidArgumentException::class);
+        LessonManagement::deleteAdHocLesson($this->ctx, $lessonIds[0]);
+    }
 }
