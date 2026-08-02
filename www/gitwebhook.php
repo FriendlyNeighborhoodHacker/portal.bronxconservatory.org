@@ -18,9 +18,9 @@ $secret = GIT_WEBHOOK_SECRET;
 
 // Per-machine paths; override in config.local.php.
 $deployScript = defined('DEPLOY_SCRIPT') ? DEPLOY_SCRIPT
-    : '/home/lillydebate/deploy_scripts/portal.bronxconservatory.org.sh';
+    : '/home/bronxconservatory/deploy/portal.bronxconservatory.org.sh';
 $logFile = defined('DEPLOY_LOG') ? DEPLOY_LOG
-    : '/home/lillydebate/deploy_scripts/logs/portal.bronxconservatory.org.webhook.log';
+    : '/home/bronxconservatory/deploy/logs/portal.bronxconservatory.org.webhook.log';
 
 $payload = file_get_contents('php://input');
 $signature = $_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? '';
