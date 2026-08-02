@@ -1,15 +1,5 @@
 /* BCM Portal styles */
 
-/* Brand fonts (docs/app_spec.md "Design Notes > Fonts"): IBM Plex Serif for
-   titles and anything asking the user to do something, Cambria for body
-   text. IBM Plex Serif is open source and loaded from Google Fonts; Cambria
-   ships with Windows and Microsoft Office, so the stack falls back to
-   Georgia — metrically similar and present nearly everywhere — for everyone
-   else. @import keeps this to one line covering every page shell (the
-   signed-in one, the minimal public one, and the auth pages, which all load
-   this stylesheet). */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,300;0,400;0,600;1,300;1,600&display=swap');
-
 /* Core palette (docs/app_spec.md "Design Notes > Colors"): warm, not
    institutional — friendly, modern, uncluttered.
      blue   #0062DC  buttons, links, accents
@@ -57,10 +47,11 @@
   /* Semester-wide date list: the left rule that marks each date's status */
   --sem-date-active-line: #2e9e63;   /* a class day — green */
   --sem-date-inactive-line: #7c4dbd; /* a break or holiday — purple */
-  /* Titles and anything asking the user to do something use the display
-     face; everything else uses the body face. */
-  --font-display: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;
-  --font-body: Cambria, Georgia, 'Times New Roman', serif;
+  /* The Design Notes no longer name a face, so both roles use the system
+     stack — nothing to download, and it looks native on every device. The
+     display/body split stays so titles can diverge again later. */
+  --font-display: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --topbar-height: 56px;
 }
 
@@ -77,18 +68,17 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  /* Serif body copy wants a little more size and leading than sans to read
-     comfortably at arm's length on a phone. */
   font-size: 16px;
-  line-height: 1.6;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Titles and anything asking the user to do something use the display font,
-   in its Light weight — airy rather than shouty. */
+/* Titles and anything asking the user to do something use the display font.
+   Semibold: the Light weight the serif carried reads as washed-out in a
+   system sans. */
 h1, h2, h3, h4, .page-title {
   font-family: var(--font-display);
-  font-weight: 300;
+  font-weight: 600;
   color: var(--color-navy);
   letter-spacing: -0.01em;
   line-height: 1.25;
