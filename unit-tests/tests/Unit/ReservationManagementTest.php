@@ -166,7 +166,7 @@ final class ReservationManagementTest extends TestCase
 
         // A note on week 1 and a "missed" mark on week 2 — the things the old
         // delete-and-regenerate path silently destroyed.
-        NotesManagement::saveLessonNote($this->ctx, (int)$before[0]['id'], 'Worked on scales.');
+        NotesManagement::addLessonNote($this->ctx, (int)$before[0]['id'], 'Worked on scales.');
         LessonManagement::markAttendance($this->ctx, (int)$before[1]['id'], false);
 
         ReservationManagement::updateReservation($this->ctx, $reservationId, [
