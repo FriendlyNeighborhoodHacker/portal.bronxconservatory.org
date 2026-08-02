@@ -1,30 +1,14 @@
 /* BCM Portal styles */
 
-/* Brand fonts (docs/app_spec.md "Design Notes > Fonts"). The licensed .woff2
-   files are not in the repository — drop them into /fonts/ (see
-   fonts/README.md) and these rules pick them up automatically. Until then
-   the fallback stacks render, so nothing breaks. */
-@font-face {
-  font-family: 'BD Megalona';
-  src: url('/fonts/BDMegalona-ExtraLight.woff2') format('woff2');
-  font-weight: 200;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'BD Megalona';
-  src: url('/fonts/BDMegalona-ExtraLightItalic.woff2') format('woff2');
-  font-weight: 200;
-  font-style: italic;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'BB Noname Pro';
-  src: url('/fonts/BBNonamePro-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
+/* Brand fonts (docs/app_spec.md "Design Notes > Fonts"): IBM Plex Serif for
+   titles and anything asking the user to do something, Cambria for body
+   text. IBM Plex Serif is open source and loaded from Google Fonts; Cambria
+   ships with Windows and Microsoft Office, so the stack falls back to
+   Georgia — metrically similar and present nearly everywhere — for everyone
+   else. @import keeps this to one line covering every page shell (the
+   signed-in one, the minimal public one, and the auth pages, which all load
+   this stylesheet). */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,300;0,400;0,600;1,300;1,600&display=swap');
 
 /* Core palette (docs/app_spec.md "Design Notes > Colors"): warm, not
    institutional — friendly, modern, uncluttered.
@@ -75,8 +59,8 @@
   --sem-date-inactive-line: #7c4dbd; /* a break or holiday — purple */
   /* Titles and anything asking the user to do something use the display
      face; everything else uses the body face. */
-  --font-display: 'BD Megalona', 'Didot', 'Playfair Display', Georgia, serif;
-  --font-body: 'BB Noname Pro', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-display: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;
+  --font-body: Cambria, Georgia, 'Times New Roman', serif;
   --topbar-height: 56px;
 }
 
@@ -93,16 +77,18 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  font-size: 15.5px;
-  line-height: 1.55;
+  /* Serif body copy wants a little more size and leading than sans to read
+     comfortably at arm's length on a phone. */
+  font-size: 16px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
 
 /* Titles and anything asking the user to do something use the display font,
-   in its Extra Light weight — airy rather than shouty. */
+   in its Light weight — airy rather than shouty. */
 h1, h2, h3, h4, .page-title {
   font-family: var(--font-display);
-  font-weight: 200;
+  font-weight: 300;
   color: var(--color-navy);
   letter-spacing: -0.01em;
   line-height: 1.25;
@@ -116,14 +102,14 @@ h3 { font-size: 1.15rem; }
    italic in the display font so they are easy to pick out. */
 .prompt-em {
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 600;
   font-style: italic;
 }
 
 /* A whole line of instruction — the question a screen is asking. */
 .prompt {
   font-family: var(--font-display);
-  font-weight: 200;
+  font-weight: 300;
   font-size: 1.15rem;
   color: var(--color-navy);
   margin: 0 0 10px;
