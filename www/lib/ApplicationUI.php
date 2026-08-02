@@ -108,6 +108,8 @@ class ApplicationUI {
     private static function adminSectionPrefixes(): array {
         return [
             '/admin/leads.php', '/admin/lead.php', '/admin/lead_',
+            '/admin/incomplete_inquir',
+            '/admin/email_template',
             '/admin/announcements.php', '/admin/announcement_',
             '/admin/locations.php', '/admin/location_',
             '/admin/semesters.php', '/admin/semester/',
@@ -129,8 +131,12 @@ class ApplicationUI {
      */
     private static function adminSubnavItems(): array {
         $items = [
-            ['path' => '/admin/leads.php', 'label' => 'Leads', 'prefixes' => ['/admin/lead']],
+            // Uncompleted forms are a view of the same queue, so they light up
+            // the Leads tab rather than adding one of their own.
+            ['path' => '/admin/leads.php', 'label' => 'Leads',
+                'prefixes' => ['/admin/lead', '/admin/incomplete_inquir']],
             ['path' => '/admin/announcements.php', 'label' => 'Announcements', 'prefixes' => ['/admin/announcement']],
+            ['path' => '/admin/email_templates.php', 'label' => 'Email Templates', 'prefixes' => ['/admin/email_template']],
             ['path' => '/admin/locations.php', 'label' => 'Locations', 'prefixes' => ['/admin/location']],
             ['path' => '/admin/semesters.php', 'label' => 'Semesters', 'prefixes' => ['/admin/semester', '/admin/setup/', '/admin/import/']],
             ['path' => '/admin/users.php', 'label' => 'Users', 'prefixes' => ['/admin/user']],

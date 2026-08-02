@@ -1,7 +1,9 @@
 <?php
-// Logged-out landing page: the two doors into the portal — Register (the
-// public wizard) and Login. Signed-in visitors go straight to their
-// dashboard via index.php's router.
+// Logged-out landing page: the doors into the portal — Register (the public
+// wizard), Login, and the lower-commitment Request Information flow. Not the
+// site's front door any more (index.php sends signed-out visitors to login);
+// this is the page the organization hands out. Signed-in visitors go straight
+// to their dashboard via index.php's router.
 require_once __DIR__ . '/partials.php';
 Application::init();
 
@@ -21,6 +23,9 @@ ApplicationUI::minimalHeaderHtml('Welcome');
     <a class="btn-cta" href="/register/">Register</a>
     <a class="btn-outline" href="/login.php">Login</a>
   </div>
+
+  <p class="small" style="margin-top:18px;">Not ready to register?
+    <a href="/inquiry/">Request more information about our programs</a>.</p>
 
   <p class="small" style="margin-top:28px;">Questions? Call us at
     <a href="tel:+17188417415"><?=h(Settings::contactPhone())?></a> or email

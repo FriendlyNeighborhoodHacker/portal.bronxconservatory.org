@@ -95,6 +95,35 @@ class Settings {
         return (int)$value;
     }
 
+    /**
+     * The Semester choices on the public information-request form. Stored as a
+     * JSON array of labels, but a hand-edited newline-separated list is
+     * accepted too so a stray edit in the database cannot empty the form.
+     * Never returns an empty list — a radio group with no options would make
+     * page 4 unsubmittable.
+     */
+    public static function inquirySemesterOptions(): array {
+        $raw = trim(self::get('inquiry_semester_options', ''));
+        $options = [];
+        if ($raw !== '') {
+            $decoded = json_decode($raw, true);
+            $candidates = is_array($decoded) ? $decoded : preg_split('/\R/', $raw);
+            foreach ($candidates as $option) {
+                $option = trim((string)$option);
+                if ($option !== '') {
+                    $options[] = $option;
+                }
+            }
+        }
+        return $options ?: ['Upcoming Semester'];
+    }
+
+    // Where the information-request staff notification goes. An empty value
+    // means "do not send" rather than an error.
+    public static function inquiryNotificationEmail(): string {
+        return trim(self::get('inquiry_notification_email', ''));
+    }
+
     private static function dollarsToCents(string $dollars): int {
         $dollars = trim(str_replace(['$', ','], '', $dollars));
         if ($dollars === '' || !is_numeric($dollars)) {

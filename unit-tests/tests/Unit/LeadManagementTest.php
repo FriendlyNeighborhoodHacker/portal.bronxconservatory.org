@@ -366,4 +366,362 @@ final class LeadManagementTest extends TestCase
         }
         $this->assertNotSame('converted', LeadManagement::findLead($leadId)['status']);
     }
+
+    // ===== Queue: filters and paging =====
+
+    public function testListLeadsFiltersByStatusesAndPages(): void
+    {
+        $ctx = fx_admin_ctx();
+        $ids = [];
+        foreach (LeadManagement::STATUSES as $status) {
+            $id = $this->makeLead();
+            LeadManagement::updateStatus($ctx, $id, $status);
+            $ids[$status] = $id;
+        }
+
+        $active = LeadManagement::listLeads(['statuses' => LeadManagement::ACTIVE_STATUSES], 25, 0);
+        $this->assertSame(3, LeadManagement::countLeads(['statuses' => LeadManagement::ACTIVE_STATUSES]));
+        $activeIds = array_map('intval', array_column($active, 'id'));
+        sort($activeIds);
+        $expected = [$ids['new'], $ids['contacted'], $ids['scheduled']];
+        sort($expected);
+        $this->assertSame($expected, $activeIds);
+        $this->assertNotContains($ids['converted'], $activeIds);
+        $this->assertNotContains($ids['declined'], $activeIds);
+
+        // Newest first, and the window actually moves.
+        $this->assertSame(5, LeadManagement::countLeads());
+        $firstPage = LeadManagement::listLeads([], 2, 0);
+        $secondPage = LeadManagement::listLeads([], 2, 2);
+        $this->assertCount(2, $firstPage);
+        $this->assertCount(2, $secondPage);
+        $this->assertSame((int)$ids['declined'], (int)$firstPage[0]['id']); // created last
+        $this->assertNotSame((int)$firstPage[0]['id'], (int)$secondPage[0]['id']);
+    }
+
+    public function testListLeadsRejectsUnknownFilterValues(): void
+    {
+        $this->makeLead();
+        // A hand-edited query string can only widen the view, never error.
+        $this->assertSame(1, LeadManagement::countLeads(['statuses' => ['nonsense'], 'source' => 'nope']));
+    }
+
+    public function testListLeadsAttachesStudentsForEveryRow(): void
+    {
+        $twoStudents = $this->makeLead([
+            $this->student(['first_name' => 'Lucia']),
+            $this->student(['first_name' => 'Marco', 'instrument' => 'Violin']),
+        ]);
+        $oneStudent = $this->makeLead([$this->student(['first_name' => 'Sol'])]);
+
+        $byId = [];
+        foreach (LeadManagement::listLeads() as $lead) {
+            $byId[(int)$lead['id']] = $lead['students'];
+        }
+        $this->assertCount(2, $byId[$twoStudents]);
+        $this->assertCount(1, $byId[$oneStudent]);
+        $this->assertSame('Sol', $byId[$oneStudent][0]['first_name']);
+        $this->assertSame(['Lucia', 'Marco'], array_column($byId[$twoStudents], 'first_name'));
+    }
+
+    public function testStatusCountsCoversEveryStatusAndNarrowsBySource(): void
+    {
+        $ctx = fx_admin_ctx();
+        $registration = $this->makeLead();
+        LeadManagement::updateStatus($ctx, $registration, 'contacted');
+        $this->makeInquiryLead();
+
+        $all = LeadManagement::statusCounts();
+        $this->assertSame(array_keys(array_fill_keys(LeadManagement::STATUSES, 0)), array_keys($all));
+        $this->assertSame(1, $all['new']);
+        $this->assertSame(1, $all['contacted']);
+        $this->assertSame(0, $all['declined']);
+
+        $this->assertSame(0, LeadManagement::statusCounts(['source' => 'inquiry'])['contacted']);
+        $this->assertSame(1, LeadManagement::statusCounts(['source' => 'inquiry'])['new']);
+        $this->assertSame(1, LeadManagement::statusCounts(['source' => 'registration'])['contacted']);
+    }
+
+    // ===== Notes =====
+
+    public function testAddLeadNoteRecordsAuthorAndAppends(): void
+    {
+        $ctx = fx_admin_ctx();
+        $leadId = $this->makeLead();
+
+        LeadManagement::addLeadNote($ctx, $leadId, 'Called, left a voicemail.');
+        LeadManagement::addLeadNote($ctx, $leadId, 'Called back — wants Saturdays.');
+
+        $notes = LeadManagement::notesForLead($leadId);
+        $this->assertCount(2, $notes, 'notes append, they never replace each other');
+        $this->assertSame('Called, left a voicemail.', $notes[0]['body']);
+        $this->assertSame('Called back — wants Saturdays.', $notes[1]['body']);
+        $this->assertSame($ctx->id, (int)$notes[0]['created_by_user_id']);
+        $this->assertNotSame('', trim((string)$notes[0]['author_first_name']));
+    }
+
+    public function testAddLeadNoteChangesStatusInTheSameSave(): void
+    {
+        $ctx = fx_admin_ctx();
+        $leadId = $this->makeLead();
+
+        LeadManagement::addLeadNote($ctx, $leadId, 'Booked them in.', 'scheduled');
+
+        $this->assertSame('scheduled', LeadManagement::findLead($leadId)['status']);
+        $notes = LeadManagement::notesForLead($leadId);
+        $this->assertSame('scheduled', $notes[0]['status_after']);
+    }
+
+    public function testAddLeadNoteLeavesStatusAfterNullWhenNothingChanged(): void
+    {
+        $ctx = fx_admin_ctx();
+        $leadId = $this->makeLead();
+
+        // Resubmitting the current status is not a change worth recording.
+        LeadManagement::addLeadNote($ctx, $leadId, 'Still thinking about it.', 'new');
+
+        $this->assertNull(LeadManagement::notesForLead($leadId)[0]['status_after']);
+    }
+
+    public function testAddLeadNoteAllowsStatusOnlyEntry(): void
+    {
+        $ctx = fx_admin_ctx();
+        $leadId = $this->makeLead();
+
+        LeadManagement::addLeadNote($ctx, $leadId, '   ', 'declined');
+
+        $notes = LeadManagement::notesForLead($leadId);
+        $this->assertCount(1, $notes);
+        $this->assertSame('', $notes[0]['body']);
+        $this->assertSame('declined', $notes[0]['status_after']);
+    }
+
+    public function testAddLeadNoteRejectsEmptyNoteWithNoStatusChange(): void
+    {
+        $ctx = fx_admin_ctx();
+        $leadId = $this->makeLead();
+
+        $this->expectException(InvalidArgumentException::class);
+        LeadManagement::addLeadNote($ctx, $leadId, '  ', 'new');
+    }
+
+    public function testAddLeadNoteRequiresAdmin(): void
+    {
+        $leadId = $this->makeLead();
+        $this->expectException(RuntimeException::class);
+        LeadManagement::addLeadNote(new UserContext(fx_user('Nel', 'Nobody'), false), $leadId, 'sneaky');
+    }
+
+    public function testNotesForLeadKeepsAuthorlessMigratedNotes(): void
+    {
+        $leadId = $this->makeLead();
+        // What the migration writes for an old leads.admin_notes blob.
+        pdo()->prepare('INSERT INTO lead_notes (lead_id, created_by_user_id, body) VALUES (?, NULL, ?)')
+            ->execute([$leadId, 'Imported from the old notes field.']);
+
+        $notes = LeadManagement::notesForLead($leadId);
+        $this->assertCount(1, $notes);
+        $this->assertNull($notes[0]['created_by_user_id']);
+        $this->assertNull($notes[0]['author_first_name']);
+    }
+
+    // ===== Information-request leads =====
+
+    private function inquiryDraft(array $overrides = []): array
+    {
+        return $overrides + [
+            'first_name' => 'Maria', 'last_name' => 'Delgado',
+            'email' => 'Maria.Delgado@Example.com', 'phone' => '718-555-0142',
+            'newsletter_opt_in' => 1, 'sms_consent' => 0,
+            'address_country' => 'United States', 'address_street_1' => '1234 Grand Concourse',
+            'address_city' => 'Bronx', 'address_state' => 'NY', 'address_zip' => '10456',
+        ];
+    }
+
+    private function inquiryStudent(array $overrides = []): array
+    {
+        return $overrides + [
+            'first_name' => 'Luis', 'last_name' => 'Delgado', 'age' => 9,
+            'enrollment_status' => 'new',
+            'instruments_of_interest' => ['Piano', 'Violin'],
+            'instruments_other' => '',
+        ];
+    }
+
+    private function makeInquiryLead(): int
+    {
+        return LeadManagement::createInquiryLead(null, $this->inquiryDraft(), $this->inquiryStudent());
+    }
+
+    public function testCreateInquiryLeadStoresWhatTheFormAsked(): void
+    {
+        $leadId = $this->makeInquiryLead();
+        $lead = LeadManagement::findLead($leadId);
+
+        $this->assertSame('inquiry', $lead['source']);
+        $this->assertNull($lead['semester_id']);
+        $this->assertSame(0, (int)$lead['amount_quoted_cents']);
+        $this->assertSame(0, (int)$lead['amount_due_now_cents']);
+        $this->assertSame('maria.delgado@example.com', $lead['email'], 'email is normalised');
+        $this->assertSame(1, (int)$lead['newsletter_opt_in']);
+        $this->assertSame('United States', $lead['address_country']);
+
+        $student = LeadManagement::studentsForLead($leadId)[0];
+        $this->assertSame(9, (int)$student['age']);
+        $this->assertSame('new', $student['enrollment_status']);
+        $this->assertNull($student['instrument'], 'an inquiry has decided no instrument yet');
+        $this->assertNull($student['lesson_length_minutes']);
+        $this->assertSame(['Piano', 'Violin'], json_decode($student['instruments_of_interest'], true));
+    }
+
+    public function testCreateInquiryLeadDropsInstrumentsOutsideTheVocabulary(): void
+    {
+        $leadId = LeadManagement::createInquiryLead(
+            null,
+            $this->inquiryDraft(),
+            $this->inquiryStudent(['instruments_of_interest' => ['Piano', 'Kazoo']])
+        );
+        $student = LeadManagement::studentsForLead($leadId)[0];
+        $this->assertSame(['Piano'], json_decode($student['instruments_of_interest'], true));
+    }
+
+    public function testReplaceInquiryStudentEditsRatherThanForks(): void
+    {
+        $leadId = $this->makeInquiryLead();
+        LeadManagement::replaceInquiryStudent(null, $leadId, $this->inquiryStudent([
+            'first_name' => 'Luisa', 'age' => 11, 'instruments_of_interest' => ['Cello'],
+        ]));
+
+        $students = LeadManagement::studentsForLead($leadId);
+        $this->assertCount(1, $students, 'going back and continuing must not create a second student');
+        $this->assertSame('Luisa', $students[0]['first_name']);
+        $this->assertSame(11, (int)$students[0]['age']);
+    }
+
+    public function testUpdateInquiryDetailsRoundTripsEveryAnswer(): void
+    {
+        $leadId = $this->makeInquiryLead();
+        LeadManagement::updateInquiryDetails(null, $leadId, [
+            'semester_label' => 'Fall 2026',
+            'owned_instruments' => ['Piano', 'Percussion', 'Trombone'], // last one is not offered
+            'owned_instruments_other' => 'A very old ukulele',
+            'music_background' => 'Two years of recorder.',
+            'theory_program_interest' => 'need_info',
+            'theory_knowledge' => 'beginner',
+            'referral_source' => 'Word of Mouth',
+            'comments' => 'Saturday mornings?',
+        ]);
+
+        $lead = LeadManagement::findLead($leadId);
+        $this->assertSame('Fall 2026', $lead['semester_label']);
+        $this->assertSame(['Piano', 'Percussion'], json_decode($lead['owned_instruments'], true));
+        $this->assertSame('A very old ukulele', $lead['owned_instruments_other']);
+        $this->assertSame('need_info', $lead['theory_program_interest']);
+        $this->assertSame('beginner', $lead['theory_knowledge']);
+        $this->assertSame('Word of Mouth', $lead['referral_source']);
+        $this->assertSame('Saturday mornings?', $lead['inquiry_comments']);
+    }
+
+    public function testUpdateInquiryDetailsIgnoresUnknownVocabularyValues(): void
+    {
+        $leadId = $this->makeInquiryLead();
+        LeadManagement::updateInquiryDetails(null, $leadId, [
+            'theory_program_interest' => 'maybe',
+            'theory_knowledge' => 'expert',
+        ]);
+        $lead = LeadManagement::findLead($leadId);
+        $this->assertNull($lead['theory_program_interest']);
+        $this->assertNull($lead['theory_knowledge']);
+    }
+
+    public function testInstrumentResolutionForInquiryVocabulary(): void
+    {
+        $this->assertSame(
+            (int)InstrumentCatalog::findByName('Double Bass')['id'],
+            LeadManagement::instrumentIdForInterest('Bass')
+        );
+        $this->assertSame(
+            (int)InstrumentCatalog::findByName('Guitar')['id'],
+            LeadManagement::instrumentIdForInterest('Guitar Ensemble')
+        );
+        $this->assertNull(LeadManagement::instrumentIdForInterest('Other'));
+        $this->assertNull(LeadManagement::instrumentIdForChoice(''), 'an empty choice never hits the catalog');
+    }
+
+    public function testDefaultInstrumentPrefersTheChosenOneThenTheFirstInterest(): void
+    {
+        $pianoId = (int)InstrumentCatalog::findByName('Piano')['id'];
+        $celloId = (int)InstrumentCatalog::findByName('Cello')['id'];
+
+        $this->assertSame($pianoId, LeadManagement::defaultInstrumentIdForLeadStudent(['instrument' => 'Piano']));
+        $this->assertSame($celloId, LeadManagement::defaultInstrumentIdForLeadStudent([
+            'instrument' => null,
+            'instruments_of_interest' => json_encode(['Other', 'Cello', 'Piano']),
+        ]));
+        $this->assertNull(LeadManagement::defaultInstrumentIdForLeadStudent([
+            'instrument' => null, 'instruments_of_interest' => json_encode(['Other']),
+        ]));
+    }
+
+    public function testConvertInquiryLeadWithNoInstrumentOrLessonLength(): void
+    {
+        [$ctx] = $this->convertSetup();
+        $leadId = $this->makeInquiryLead();
+        $lsId = (int)LeadManagement::studentsForLead($leadId)[0]['id'];
+
+        $result = LeadManagement::convertLead($ctx, $leadId, []);
+
+        $this->assertGreaterThan(0, $result['parent_user_id']);
+        $studentId = $result['student_user_ids'][$lsId];
+        $this->assertTrue(StudentTeacherManagement::isParentOf($result['parent_user_id'], $studentId));
+        // The first interest that maps to a real instrument comes across.
+        $this->assertSame(['Piano'], InstrumentCatalog::namesForStudent($studentId));
+        $this->assertSame([], $result['reservation_ids']);
+        $this->assertFalse($result['payment_recorded']);
+        $this->assertSame('converted', LeadManagement::findLead($leadId)['status']);
+    }
+
+    public function testConvertUsesTheStudentsLessonLengthWhenNoDurationGiven(): void
+    {
+        [$ctx, $teacher, $semesterId, $locationId, $dayOfWeek] = $this->convertSetup();
+        $leadId = LeadManagement::createLead(
+            null, $semesterId, $this->parent(),
+            [$this->student(['lesson_length_minutes' => 60])],
+            [], false
+        );
+        $lsId = (int)LeadManagement::studentsForLead($leadId)[0]['id'];
+
+        $result = LeadManagement::convertLead($ctx, $leadId, [
+            'students' => [$lsId => [
+                'reservation' => [
+                    'teacher_user_id' => $teacher, 'location_id' => $locationId,
+                    'day_of_week' => $dayOfWeek, 'start_time' => '10:00',
+                    'duration_minutes' => 0, // an empty duration field posts as "0"
+                ],
+            ]],
+        ]);
+
+        $reservation = ReservationManagement::findReservation($result['reservation_ids'][0]);
+        $this->assertSame(60, (int)$reservation['duration_minutes'], 'never silently books 30 minutes');
+    }
+
+    public function testConvertInquiryLeadFallsBackToThirtyMinutes(): void
+    {
+        [$ctx, $teacher, $semesterId, $locationId, $dayOfWeek] = $this->convertSetup();
+        $leadId = $this->makeInquiryLead();
+        $lsId = (int)LeadManagement::studentsForLead($leadId)[0]['id'];
+
+        $result = LeadManagement::convertLead($ctx, $leadId, [
+            'students' => [$lsId => [
+                'reservation' => [
+                    'teacher_user_id' => $teacher, 'location_id' => $locationId,
+                    'day_of_week' => $dayOfWeek, 'start_time' => '10:00',
+                    'semester_id' => $semesterId,
+                ],
+            ]],
+        ]);
+
+        $reservation = ReservationManagement::findReservation($result['reservation_ids'][0]);
+        $this->assertSame(30, (int)$reservation['duration_minutes']);
+    }
 }

@@ -2,13 +2,15 @@
 // Home: routes each user to the dashboard for their primary role.
 // Roles derive from profile rows (Application::rolesForUser); a user holding
 // several roles lands on the highest-priority one and reaches the others
-// through the sidebar. Logged-out visitors get the public landing page
-// (Register / Login) instead of being bounced straight to login.
+// through the sidebar. Logged-out visitors get the login page — almost
+// everyone arriving here is a family checking their schedule or their balance.
+// The public doors (Register, Request Information) are linked from there and
+// from /welcome.php, which the organization hands out.
 require_once __DIR__ . '/partials.php';
 Application::init();
 
 if (!current_user()) {
-    header('Location: /welcome.php');
+    header('Location: /login.php');
     exit;
 }
 

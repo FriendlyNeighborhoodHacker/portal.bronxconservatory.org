@@ -425,3 +425,47 @@ function send_lead_registration_email(array $lead, array $students, array $quote
     trim($lead['parent_first_name'] . ' ' . $lead['parent_last_name'])
   );
 }
+
+/**
+ * The two emails a completed information request sends. Both are rendered from
+ * admin-editable templates (Admin > Email Templates), so staff can reword them
+ * without a deploy. Each returns false rather than throwing when the template
+ * row is missing or the recipient is unset — the lead is already saved, and
+ * losing it over an email would be the worse outcome.
+ */
+function send_inquiry_confirmation_email(array $lead, array $leadStudent): bool {
+  require_once __DIR__ . '/lib/EmailTemplateManagement.php';
+
+  $to = trim((string)($lead['email'] ?? ''));
+  if ($to === '') return false;
+
+  $rendered = EmailTemplateManagement::render(
+    EmailTemplateManagement::KEY_INQUIRY_FAMILY,
+    EmailTemplateManagement::inquiryVariables($lead, $leadStudent)
+  );
+  if ($rendered === null) return false;
+
+  return send_email(
+    $to,
+    $rendered['subject'],
+    $rendered['body_html'],
+    trim(($lead['parent_first_name'] ?? '') . ' ' . ($lead['parent_last_name'] ?? ''))
+  );
+}
+
+// Reply-To is the family's own address, so staff can answer straight from the
+// notification instead of copying the address out of the portal.
+function send_inquiry_staff_notification_email(array $lead, array $leadStudent): bool {
+  require_once __DIR__ . '/lib/EmailTemplateManagement.php';
+
+  $to = Settings::inquiryNotificationEmail();
+  if ($to === '') return false;
+
+  $rendered = EmailTemplateManagement::render(
+    EmailTemplateManagement::KEY_INQUIRY_STAFF,
+    EmailTemplateManagement::inquiryVariables($lead, $leadStudent)
+  );
+  if ($rendered === null) return false;
+
+  return send_email($to, $rendered['subject'], $rendered['body_html'], '', null, trim((string)($lead['email'] ?? '')));
+}

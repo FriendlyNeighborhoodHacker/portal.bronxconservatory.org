@@ -1466,3 +1466,25 @@ label .label-prose {
 .choice-indent {
   padding-left: 22px;
 }
+
+/* ===== Slot picker (lead conversion) =====
+   The semester schedule shown inside a modal so an admin can see a teacher's
+   week before choosing a time. Free cells invite a click; busy ones are
+   visible but deliberately inert — seeing what is already there is the point. */
+.modal-content.wide {
+  max-width: min(1200px, 96vw);
+}
+
+.grid-cell.pickable {
+  cursor: pointer;
+}
+
+.grid-cell.pickable:hover {
+  background: var(--res-paid-bg);
+}
+
+.grid-cell.res-busy {
+  background: var(--res-hold-bg);
+  color: var(--color-text-muted);
+  cursor: default;
+}

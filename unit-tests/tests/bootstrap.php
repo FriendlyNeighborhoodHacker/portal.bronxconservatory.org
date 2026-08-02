@@ -32,6 +32,9 @@ require_once __DIR__ . '/../../www/lib/SemesterReservationsCsvImport.php';
 require_once __DIR__ . '/../../www/lib/LedgerEntriesCsvImport.php';
 require_once __DIR__ . '/../../www/lib/StripeCheckout.php';
 require_once __DIR__ . '/../../www/lib/LeadManagement.php';
+require_once __DIR__ . '/../../www/lib/InquiryManagement.php';
+require_once __DIR__ . '/../../www/lib/EmailTemplateManagement.php';
+require_once __DIR__ . '/../../www/lib/ScheduleGridData.php';
 require_once __DIR__ . '/../../www/lib/MigrationRunner.php';
 require_once __DIR__ . '/../../www/lib/ActivityLog.php';
 
@@ -70,7 +73,7 @@ function test_reset_all(): void {
     $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
     foreach ([
         'activity_log', 'emails_sent', 'stripe_webhook_events',
-        'lead_students', 'leads',
+        'lead_notes', 'lead_students', 'leads', 'incomplete_inquiries',
         'ledger_entries', 'lesson_notes', 'lesson_resources', 'lessons',
         'semester_hold_blocks', 'semester_hold_block_reservations',
         'semester_lesson_reservations', 'semester_location_teachers',

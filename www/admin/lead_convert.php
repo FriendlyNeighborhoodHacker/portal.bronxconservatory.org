@@ -4,11 +4,16 @@
 // judgment calls — real instrument per student, optional date of birth,
 // optional reservation placement, and where the Stripe payment lands.
 // Commits via lead_convert_eval.php -> LeadManagement::convertLead.
+//
+// Placement is picked off the semester schedule rather than typed, so the
+// admin sees the teacher's existing week before choosing and cannot book a
+// slot that is already taken.
 require_once __DIR__ . '/lead_ui.php';
+require_once __DIR__ . '/reservation_picker_modal.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
 require_once __DIR__ . '/../lib/InstrumentCatalog.php';
 require_once __DIR__ . '/../lib/SemesterManagement.php';
-require_once __DIR__ . '/../lib/ReservationManagement.php';
+require_once __DIR__ . '/../lib/ScheduleGridData.php';
 Application::init();
 require_admin();
 
@@ -27,15 +32,10 @@ $existingParent = UserManagement::findByEmailAnyState((string)$lead['email']);
 // semester so conversion still works if the lead predates a semester).
 $semesterId = !empty($lead['semester_id']) ? (int)$lead['semester_id'] : Application::adminSelectedSemesterId();
 $semester = $semesterId ? SemesterManagement::find($semesterId) : null;
-$columns = $semester ? SemesterManagement::locationTeachers((int)$semester['id']) : [];
 
-// Location -> teachers map for the placement selects.
-$locationTeachers = [];
-foreach ($columns as $column) {
-    $locationTeachers[(int)$column['location_id']]['name'] = (string)$column['location_name'];
-    $locationTeachers[(int)$column['location_id']]['teachers'][(int)$column['teacher_user_id']] =
-        (string)$column['teacher_first_name'] . ' ' . (string)$column['teacher_last_name'];
-}
+// The same weekly grid the Semester Schedule draws, reused as a slot picker.
+$grid = $semester ? ScheduleGridData::semesterWeeklyGrid((int)$semester['id']) : null;
+$canPlace = $grid && $grid['columns'];
 
 $flashError = $_SESSION['lead_flash_error'] ?? null;
 unset($_SESSION['lead_flash_error']);
@@ -102,13 +102,15 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
     <?php
       $lsId = (int)$student['id'];
       $alreadyConverted = !empty($student['converted_student_user_id']);
-      $defaultInstrumentId = LeadManagement::instrumentIdForChoice((string)$student['instrument']);
+      $defaultInstrumentId = LeadManagement::defaultInstrumentIdForLeadStudent($student);
       $oldRow = (array)($old['students'][$lsId] ?? []);
       $isCelloBass = $student['instrument'] === 'Cello/Bass';
+      // An inquiry lead student has no lesson length yet; 30 is the house default.
+      $defaultDuration = (int)($student['lesson_length_minutes'] ?? 0) ?: 30;
     ?>
     <fieldset class="card stack">
       <legend style="font-weight:700;"><?=h($student['first_name'] . ' ' . $student['last_name'])?>
-        <span class="small">(asked for <?=h($student['instrument'])?>, <?=(int)$student['lesson_length_minutes']?> min<?=!empty($student['guitar_ensemble']) ? ' + Ensemble' : ''?>)</span></legend>
+        <span class="small">(<?=h(lead_student_wants($student))?>)</span></legend>
       <?php if ($alreadyConverted): ?>
         <p class="small">Already converted — nothing more to choose here.</p>
       <?php else: ?>
@@ -127,40 +129,40 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
         </label>
       </div>
 
-      <?php if ($semester && $locationTeachers): ?>
-      <div class="grid-3">
-        <label>Place a reservation (optional) — location
-          <select name="students[<?=$lsId?>][res_location_id]">
-            <option value="">— skip placement —</option>
-            <?php foreach ($locationTeachers as $locationId => $info): ?>
-            <option value="<?=$locationId?>"<?=(int)($oldRow['res_location_id'] ?? 0) === $locationId ? ' selected' : ''?>><?=h($info['name'])?></option>
-            <?php endforeach; ?>
-          </select>
-        </label>
-        <label>Teacher
-          <select name="students[<?=$lsId?>][res_teacher_user_id]">
-            <option value="">—</option>
-            <?php foreach ($locationTeachers as $locationId => $info): ?>
-              <?php foreach ($info['teachers'] as $teacherId => $teacherName): ?>
-              <option value="<?=$teacherId?>"<?=(int)($oldRow['res_teacher_user_id'] ?? 0) === $teacherId ? ' selected' : ''?>><?=h($teacherName . ' @ ' . $info['name'])?></option>
-              <?php endforeach; ?>
-            <?php endforeach; ?>
-          </select>
-        </label>
-        <label>Day
-          <select name="students[<?=$lsId?>][res_day]">
-            <?php foreach (ReservationManagement::DAY_LABELS as $dayNum => $dayLabel): ?>
-            <option value="<?=$dayNum?>"<?=(int)($oldRow['res_day'] ?? 6) === $dayNum ? ' selected' : ''?>><?=h($dayLabel)?></option>
-            <?php endforeach; ?>
-          </select>
-        </label>
-        <label>Time
-          <input type="time" name="students[<?=$lsId?>][res_start_time]" step="300" value="<?=h($oldRow['res_start_time'] ?? '')?>">
-        </label>
-        <label>Minutes
-          <input type="number" name="students[<?=$lsId?>][res_duration]" min="15" step="15"
-            value="<?=h($oldRow['res_duration'] ?? (int)$student['lesson_length_minutes'])?>">
-        </label>
+      <?php if ($canPlace): ?>
+      <?php
+        // Repopulate the pick after a failed submit — the form must never
+        // make an admin choose the same slot twice.
+        $pickedColumn = !empty($oldRow['res_teacher_user_id']) && !empty($oldRow['res_location_id'])
+            ? reservation_pick_column($grid['columns'], (int)$oldRow['res_location_id'], (int)$oldRow['res_teacher_user_id'])
+            : null;
+        $pickedSummary = ($pickedColumn && !empty($oldRow['res_start_time']))
+            ? reservation_pick_summary(
+                $pickedColumn,
+                (int)($oldRow['res_day'] ?? 0),
+                (string)$oldRow['res_start_time'],
+                (int)($oldRow['res_duration'] ?? 0) ?: $defaultDuration
+            )
+            : '';
+      ?>
+      <input type="hidden" id="pick<?=$lsId?>_loc" name="students[<?=$lsId?>][res_location_id]" value="<?=h($oldRow['res_location_id'] ?? '')?>">
+      <input type="hidden" id="pick<?=$lsId?>_teacher" name="students[<?=$lsId?>][res_teacher_user_id]" value="<?=h($oldRow['res_teacher_user_id'] ?? '')?>">
+      <input type="hidden" id="pick<?=$lsId?>_day" name="students[<?=$lsId?>][res_day]" value="<?=h($oldRow['res_day'] ?? '')?>">
+      <input type="hidden" id="pick<?=$lsId?>_time" name="students[<?=$lsId?>][res_start_time]" value="<?=h($oldRow['res_start_time'] ?? '')?>">
+      <input type="hidden" id="pick<?=$lsId?>_dur" name="students[<?=$lsId?>][res_duration]" value="<?=h($oldRow['res_duration'] ?? '')?>">
+
+      <div>
+        <p class="small" style="margin-bottom:6px;">Reservation:
+          <strong id="pick<?=$lsId?>_summary"><?=h($pickedSummary !== ''
+              ? $pickedSummary
+              : 'not placed — convert now and place them from the Schedule later')?></strong>
+          <a href="#" data-pick-clear data-lead-student-id="<?=$lsId?>" id="pick<?=$lsId?>_clear"
+             class="small<?=$pickedSummary !== '' ? '' : ' hidden'?>">Clear</a>
+        </p>
+        <button type="button" class="button" data-pick-slot
+                data-lead-student-id="<?=$lsId?>"
+                data-student-name="<?=h($student['first_name'] . ' ' . $student['last_name'])?>"
+                data-default-duration="<?=$defaultDuration?>">Choose a time…</button>
       </div>
       <p class="small">Placed reservations start as <strong>pending reach out</strong> —
         no lessons are generated and nothing is charged until you confirm them on the
@@ -190,5 +192,7 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
     <a class="button" href="/admin/lead.php?id=<?=$leadId?>">Cancel</a>
   </div>
 </form>
+
+<?php if ($canPlace) { render_reservation_picker_modal((int)$semester['id'], $grid); } ?>
 
 <?php footer_html(); ?>

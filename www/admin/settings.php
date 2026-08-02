@@ -84,6 +84,16 @@ $SETTINGS_DEF = [
     'hint'  => 'The semester the public Register form signs families up for. "Registration closed" hides the form.',
     'type'  => 'semester',
   ],
+  'inquiry_semester_options' => [
+    'label' => 'Request Information: term choices',
+    'hint'  => 'One term per line. These are the Semester choices on the public Request Information form — free text, not semesters in the system.',
+    'type'  => 'lines',
+  ],
+  'inquiry_notification_email' => [
+    'label' => 'Request Information: notify',
+    'hint'  => 'Where staff notifications from the public Request Information form are sent. Leave empty to send none.',
+    'type'  => 'text',
+  ],
 ];
 
 // Handle save
@@ -145,6 +155,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
       } elseif ($typ === 'checkbox') {
         Settings::set($key, !empty($_POST['s'][$key]) ? '1' : '0');
+      } elseif ($typ === 'lines') {
+        // Edited as one option per line, stored as a JSON array.
+        $lines = preg_split('/\R/', (string)($_POST['s'][$key] ?? '')) ?: [];
+        $lines = array_values(array_filter(array_map('trim', $lines), fn($l) => $l !== ''));
+        Settings::set($key, json_encode($lines));
       } else {
         // Handle regular settings
         $val = $_POST['s'][$key] ?? '';
@@ -187,6 +202,14 @@ header_html('Manage Settings');
         <?php $typ = $meta['type'] ?? 'text'; ?>
         <?php if ($typ === 'textarea'): ?>
           <textarea name="s[<?=h($key)?>]" rows="4"><?=h($current[$key])?></textarea>
+        <?php elseif ($typ === 'lines'): ?>
+          <?php
+            // Stored as JSON; shown one per line, which is what an admin
+            // actually wants to edit.
+            $lines = json_decode($current[$key], true);
+            $lines = is_array($lines) ? $lines : array_filter(array_map('trim', preg_split('/\R/', $current[$key]) ?: []));
+          ?>
+          <textarea name="s[<?=h($key)?>]" rows="4"><?=h(implode("\n", $lines))?></textarea>
         <?php elseif ($typ === 'timezone'): ?>
           <?php $zones = DateTimeZone::listIdentifiers(); ?>
           <select name="s[<?=h($key)?>]">

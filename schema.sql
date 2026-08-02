@@ -73,6 +73,9 @@ CREATE TABLE settings (
 -- tuition_30 / tuition_60 / tuition_ensemble / installment_fee exist only
 -- for that quote. registration_semester_id is the semester the public
 -- registration wizard is open for ('' = registration closed).
+-- inquiry_semester_options are the Semester choices on the public information
+-- request form (a JSON array of labels — these are free text, not semesters
+-- rows), and inquiry_notification_email is where its staff notification goes.
 INSERT INTO settings (key_name, value) VALUES
   ('site_title', 'BCM Portal'),
   ('announcement', ''),
@@ -88,7 +91,9 @@ INSERT INTO settings (key_name, value) VALUES
   ('tuition_ensemble', '270.00'),
   ('installment_fee', '20.00'),
   ('semester_weeks', '15'),
-  ('registration_semester_id', '')
+  ('registration_semester_id', ''),
+  ('inquiry_semester_options', '["Fall 2026","Spring 2027","Summer 2027"]'),
+  ('inquiry_notification_email', 'info@bronxconservatory.org')
 ON DUPLICATE KEY UPDATE value=VALUES(value);
 
 -- ===== Schema migrations tracking =====
@@ -532,29 +537,47 @@ CREATE TABLE stripe_webhook_events (
   processed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- ===== Registration leads =====
--- A public registration-wizard submission. Deliberately NOT live data: no
--- users/student_profiles/reservations are touched until an admin converts
--- the lead (Admin > Leads). Payment (if any) is held on the lead until
--- conversion moves it to a student's ledger via Billing::recordStripePayment.
+-- ===== Leads =====
+-- A submission from one of the two public forms: the registration wizard
+-- (source='registration', which quotes and may take payment) or the
+-- information request (source='inquiry', which asks about interest and never
+-- quotes). Deliberately NOT live data: no users/student_profiles/reservations
+-- are touched until an admin converts the lead (Admin > Leads). Payment (if
+-- any) is held on the lead until conversion moves it to a student's ledger via
+-- Billing::recordStripePayment.
+--
+-- The address columns are nullable because an inquiry can be abandoned or come
+-- from outside the US; the registration wizard enforces its own address rules
+-- in register/family_eval.php.
 CREATE TABLE leads (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  semester_id INT DEFAULT NULL COMMENT 'The semester registration was open for at submit time',
+  semester_id INT DEFAULT NULL COMMENT 'The semester registration was open for at submit time; always NULL for inquiries',
   status ENUM('new','contacted','scheduled','converted','declined') NOT NULL DEFAULT 'new',
+  source ENUM('registration','inquiry') NOT NULL DEFAULT 'registration' COMMENT 'Which public form produced this lead',
   parent_first_name VARCHAR(100) NOT NULL,
   parent_last_name VARCHAR(100) NOT NULL,
   email VARCHAR(255) NOT NULL,
   phone VARCHAR(30) NOT NULL,
   sms_consent TINYINT(1) NOT NULL DEFAULT 0,
-  address_street_1 VARCHAR(255) NOT NULL,
+  newsletter_opt_in TINYINT(1) NOT NULL DEFAULT 0,
+  address_country VARCHAR(100) DEFAULT 'United States',
+  address_street_1 VARCHAR(255) DEFAULT NULL,
   address_street_2 VARCHAR(255) DEFAULT NULL,
-  address_city VARCHAR(100) NOT NULL,
-  address_state VARCHAR(50) NOT NULL,
-  address_zip VARCHAR(20) NOT NULL,
+  address_city VARCHAR(100) DEFAULT NULL,
+  address_state VARCHAR(100) DEFAULT NULL COMMENT 'US state code, or a free-text province',
+  address_zip VARCHAR(20) DEFAULT NULL,
   location_preference VARCHAR(200) DEFAULT NULL,
   preferred_days VARCHAR(200) DEFAULT NULL COMMENT 'JSON array of day names',
   availability_blocks VARCHAR(200) DEFAULT NULL COMMENT 'JSON array of 9-11,11-1,1-3,3-5,5-7',
   scheduling_notes TEXT DEFAULT NULL,
+  semester_label VARCHAR(100) DEFAULT NULL COMMENT 'Inquiry only: an option from Settings inquiry_semester_options, not a semesters row',
+  owned_instruments VARCHAR(255) DEFAULT NULL COMMENT 'Inquiry only: JSON array of LeadManagement::OWNED_INSTRUMENT_CHOICES',
+  owned_instruments_other VARCHAR(200) DEFAULT NULL,
+  music_background TEXT DEFAULT NULL COMMENT 'Inquiry only: level and length of prior study',
+  theory_program_interest ENUM('yes','no','need_info') DEFAULT NULL,
+  theory_knowledge ENUM('none','beginner','intermediate','advanced') DEFAULT NULL COMMENT 'Same vocabulary as student_profiles.experience_level',
+  referral_source VARCHAR(100) DEFAULT NULL COMMENT 'How they heard about us; validated in PHP so options can change without DDL',
+  inquiry_comments TEXT DEFAULT NULL COMMENT 'Inquiry only: questions or concerns (scheduling_notes is the registration equivalent)',
   policies_agreed_at DATETIME DEFAULT NULL,
   installment_plan TINYINT(1) NOT NULL DEFAULT 0,
   quote_json LONGTEXT DEFAULT NULL COMMENT 'Itemized quote lines as computed at submit',
@@ -564,7 +587,6 @@ CREATE TABLE leads (
   stripe_checkout_session_id VARCHAR(255) DEFAULT NULL UNIQUE,
   stripe_payment_intent_id VARCHAR(255) DEFAULT NULL,
   paid_at DATETIME DEFAULT NULL,
-  admin_notes TEXT DEFAULT NULL,
   converted_parent_user_id INT DEFAULT NULL,
   converted_at DATETIME DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -575,19 +597,27 @@ CREATE TABLE leads (
 
 CREATE INDEX idx_leads_status ON leads(status, created_at);
 CREATE INDEX idx_leads_email ON leads(email);
+CREATE INDEX idx_leads_source ON leads(source, created_at);
 
--- The students named on a lead. instrument holds the wizard's choice as
--- entered (incl. "Cello/Bass"); the real instruments-table mapping is picked
--- by the admin at convert time. converted_student_user_id makes conversion
--- idempotent: already-converted rows are skipped on re-entry.
+-- The students named on a lead. A registration lead fills instrument (the
+-- wizard's choice as entered, incl. "Cello/Bass") and lesson_length_minutes;
+-- an inquiry lead fills age, enrollment_status and instruments_of_interest
+-- instead, and leaves both of those NULL — nothing has been decided yet. The
+-- real instruments-table mapping is picked by the admin at convert time.
+-- converted_student_user_id makes conversion idempotent: already-converted
+-- rows are skipped on re-entry.
 CREATE TABLE lead_students (
   id INT AUTO_INCREMENT PRIMARY KEY,
   lead_id INT NOT NULL,
   first_name VARCHAR(100) NOT NULL,
   last_name VARCHAR(100) NOT NULL,
-  class_of YEAR DEFAULT NULL COMMENT 'Graduation year, optional — copied to student_profiles.class_of on convert',
-  instrument VARCHAR(50) NOT NULL COMMENT 'As chosen: Voice/Piano/Violin/Viola/Guitar/Cello-Bass',
-  lesson_length_minutes INT NOT NULL DEFAULT 30 COMMENT '30 or 60',
+  class_of YEAR DEFAULT NULL COMMENT 'Registration: graduation year — copied to student_profiles.class_of on convert',
+  age TINYINT UNSIGNED DEFAULT NULL COMMENT 'Inquiry: age as given. Not derived from or to class_of',
+  enrollment_status ENUM('new','continuing') DEFAULT NULL COMMENT 'Inquiry: new or continuing student',
+  instrument VARCHAR(50) DEFAULT NULL COMMENT 'Registration only: Voice/Piano/Violin/Viola/Guitar/Cello-Bass',
+  instruments_of_interest VARCHAR(255) DEFAULT NULL COMMENT 'Inquiry only: JSON array of LeadManagement::INQUIRY_INSTRUMENT_INTERESTS',
+  instruments_other VARCHAR(200) DEFAULT NULL,
+  lesson_length_minutes INT DEFAULT NULL COMMENT 'Registration only: 30 or 60. NULL on inquiry leads',
   guitar_ensemble TINYINT(1) NOT NULL DEFAULT 0,
   shirt_size VARCHAR(10) DEFAULT NULL COMMENT 'Optional — copied to users.shirt_size on convert',
   converted_student_user_id INT DEFAULT NULL,
@@ -597,6 +627,95 @@ CREATE TABLE lead_students (
 ) ENGINE=InnoDB;
 
 CREATE INDEX idx_ls_lead ON lead_students(lead_id);
+
+-- An admin's internal notes on a lead: append-only, so who said what and when
+-- is never lost and two admins working the same lead cannot clobber each
+-- other. status_after records a status change made in the same save, keeping
+-- the history and the lead in agreement. created_by_user_id is NULL for notes
+-- carried over from the old single leads.admin_notes column.
+CREATE TABLE lead_notes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  lead_id INT NOT NULL,
+  created_by_user_id INT DEFAULT NULL COMMENT 'NULL for notes migrated from leads.admin_notes',
+  body TEXT NOT NULL COMMENT 'May be empty when the entry only records a status change',
+  status_after ENUM('new','contacted','scheduled','converted','declined') DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_lead_note_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+  CONSTRAINT fk_lead_note_author FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_lead_notes_lead ON lead_notes(lead_id, created_at);
+
+-- ===== Uncompleted information-request forms =====
+-- Page 1 of the public /inquiry/ flow writes a row here so staff can reach out
+-- to a visitor who drops off; page 2 updates it. Page 3 promotes it into a real
+-- lead (leads + lead_students) and DELETES this row, so a row here always means
+-- "this family never told us about a student." Peer to leads in the admin
+-- (Admin > Leads > Uncompleted Forms); never converted directly.
+CREATE TABLE incomplete_inquiries (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  first_name VARCHAR(100) NOT NULL,
+  last_name VARCHAR(100) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  phone VARCHAR(30) NOT NULL,
+  newsletter_opt_in TINYINT(1) NOT NULL DEFAULT 0,
+  sms_consent TINYINT(1) NOT NULL DEFAULT 0,
+  address_country VARCHAR(100) DEFAULT NULL,
+  address_street_1 VARCHAR(255) DEFAULT NULL,
+  address_street_2 VARCHAR(255) DEFAULT NULL,
+  address_city VARCHAR(100) DEFAULT NULL,
+  address_state VARCHAR(100) DEFAULT NULL COMMENT 'US state code, or a free-text province',
+  address_zip VARCHAR(20) DEFAULT NULL,
+  last_step_completed TINYINT NOT NULL DEFAULT 1 COMMENT '1 = contact only, 2 = address too',
+  admin_notes TEXT DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_ii_created ON incomplete_inquiries(created_at);
+CREATE INDEX idx_ii_email ON incomplete_inquiries(email);
+
+-- ===== Admin-editable email templates =====
+-- Transactional emails whose wording staff can change without a deploy
+-- (Admin > Email Templates). The code owns template_key, name and
+-- available_variables — they describe what the calling code actually passes —
+-- while the admin owns subject and body_html. Rendering escapes every
+-- substituted value (EmailTemplateManagement::render), so a template can never
+-- be made to emit injected markup, and an unknown {{placeholder}} renders
+-- empty rather than leaking to a family.
+CREATE TABLE email_templates (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  template_key VARCHAR(100) NOT NULL UNIQUE,
+  name VARCHAR(150) NOT NULL,
+  description VARCHAR(500) DEFAULT NULL COMMENT 'When this email is sent, shown to the admin',
+  subject VARCHAR(255) NOT NULL,
+  body_html LONGTEXT NOT NULL,
+  available_variables VARCHAR(1000) DEFAULT NULL COMMENT 'JSON array of {{variable}} names the code supplies',
+  updated_by_user_id INT DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_et_updated_by FOREIGN KEY (updated_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- The shipped wording. Migrations INSERT IGNORE these, so an edited copy is
+-- never overwritten by re-running a migration.
+INSERT INTO email_templates (template_key, name, description, subject, body_html, available_variables) VALUES
+(
+  'inquiry_family_confirmation',
+  'Information request — family confirmation',
+  'Sent to the family when they finish the public Request Information form.',
+  'Thank you for your interest in the Bronx Conservatory of Music',
+  '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#0D1B2A;">\n<p>Hello {{parent_first_name}},</p>\n<p>Thank you for asking about lessons for {{student_first_name}}. We have your request and a member of our team will be in touch soon to talk through instruments, teachers, and times.</p>\n<p>If you would like to reach us first, call <strong>{{contact_phone}}</strong> or reply to this email.</p>\n<h3 style="margin-bottom:4px;">What you told us</h3>\n<ul style="margin-top:0;">\n<li>Student: {{student_first_name}} {{student_last_name}}, age {{student_age}} ({{enrollment_status}})</li>\n<li>Instruments of interest: {{instruments_of_interest}}</li>\n<li>Term: {{semester_label}}</li>\n<li>Music theory: {{theory_knowledge}} (free theory program: {{theory_program_interest}})</li>\n<li>Prior study: {{music_background}}</li>\n<li>Questions or concerns: {{comments}}</li>\n</ul>\n<p>We look forward to making music with you.</p>\n<p>— The Bronx Conservatory of Music</p>\n</div>',
+  '["parent_first_name","parent_last_name","parent_email","parent_phone","student_first_name","student_last_name","student_age","enrollment_status","instruments_of_interest","semester_label","owned_instruments","music_background","theory_program_interest","theory_knowledge","referral_source","comments","mailing_address","newsletter_opt_in","sms_consent","contact_phone","site_title","lead_admin_url"]'
+),
+(
+  'inquiry_staff_notification',
+  'Information request — staff notification',
+  'Sent to the staff notification address (Admin > Settings) on every completed Request Information form.',
+  'New information request — {{parent_first_name}} {{parent_last_name}}',
+  '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#0D1B2A;">\n<p>Someone finished the Request Information form.</p>\n<table cellpadding="0" cellspacing="0">\n<tr><td style="padding:2px 12px 2px 0;"><strong>Parent</strong></td><td>{{parent_first_name}} {{parent_last_name}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Email</strong></td><td>{{parent_email}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Phone</strong></td><td>{{parent_phone}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Address</strong></td><td>{{mailing_address}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Student</strong></td><td>{{student_first_name}} {{student_last_name}}, age {{student_age}} ({{enrollment_status}})</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Interested in</strong></td><td>{{instruments_of_interest}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Term</strong></td><td>{{semester_label}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Owns</strong></td><td>{{owned_instruments}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Prior study</strong></td><td>{{music_background}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Theory program</strong></td><td>{{theory_program_interest}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Theory level</strong></td><td>{{theory_knowledge}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Heard about us</strong></td><td>{{referral_source}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Newsletter</strong></td><td>{{newsletter_opt_in}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Texts OK</strong></td><td>{{sms_consent}}</td></tr>\n<tr><td style="padding:2px 12px 2px 0;"><strong>Comments</strong></td><td>{{comments}}</td></tr>\n</table>\n<p><a href="{{lead_admin_url}}">Open this lead in the portal</a></p>\n</div>',
+  '["parent_first_name","parent_last_name","parent_email","parent_phone","student_first_name","student_last_name","student_age","enrollment_status","instruments_of_interest","semester_label","owned_instruments","music_background","theory_program_interest","theory_knowledge","referral_source","comments","mailing_address","newsletter_opt_in","sms_consent","contact_phone","site_title","lead_admin_url"]'
+);
 
 INSERT INTO users (first_name,last_name,email,password_hash,is_admin,is_developer,email_verified_at)
 VALUES ('Brian','Rosenthal','brian.rosenthal@gmail.com','$2y$12$2IMMsNZ3pwUpTPmcXKQFr.P2grgudYlZZ/m2Y4jTxV1tjGDI9bX7.',1,1,NOW());

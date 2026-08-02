@@ -1,6 +1,6 @@
 <?php
-// Lead detail: everything the family entered, payment state, status +
-// internal notes, and the door into the Convert flow.
+// Lead detail: everything the family entered, payment state, the internal note
+// history, and the door into the Convert flow.
 require_once __DIR__ . '/lead_ui.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
 require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
@@ -14,23 +14,26 @@ if (!$lead) {
     die('Lead not found');
 }
 $students = LeadManagement::studentsForLead($leadId);
+$notes = LeadManagement::notesForLead($leadId);
 $quoteLines = json_decode((string)$lead['quote_json'], true) ?: [];
 $days = json_decode((string)($lead['preferred_days'] ?? '[]'), true) ?: [];
 $blocks = json_decode((string)($lead['availability_blocks'] ?? '[]'), true) ?: [];
 $converted = $lead['status'] === 'converted' || !empty($lead['converted_parent_user_id']);
 $convertedParent = !empty($lead['converted_parent_user_id'])
     ? UserManagement::findById((int)$lead['converted_parent_user_id']) : null;
+$isInquiry = lead_is_inquiry($lead);
 
 $flash = $_SESSION['lead_flash'] ?? null;
 $flashError = $_SESSION['lead_flash_error'] ?? null;
-unset($_SESSION['lead_flash'], $_SESSION['lead_flash_error']);
+$noteOld = $_SESSION['lead_note_old'] ?? '';
+unset($_SESSION['lead_flash'], $_SESSION['lead_flash_error'], $_SESSION['lead_note_old']);
 
 header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' — lead');
 ?>
 
 <div class="page-head">
   <h2><?=h($lead['parent_first_name'] . ' ' . $lead['parent_last_name'])?> family
-    <?=lead_status_html($lead['status'])?> <?=lead_paid_badge_html($lead)?></h2>
+    <?=lead_status_html($lead['status'])?> <?=lead_source_html($lead)?> <?=lead_paid_badge_html($lead)?></h2>
   <div style="display:flex;gap:10px;align-items:center;">
     <a class="button" href="/admin/leads.php">Back to Leads</a>
     <?php if (!$converted): ?>
@@ -68,15 +71,37 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
     <h3>Parent / Guardian</h3>
     <p class="small">
       <?=h($lead['phone'])?><?=!empty($lead['sms_consent']) ? ' (SMS ok)' : ' (no SMS consent)'?><br>
-      <?=h($lead['email'])?><br>
-      <?=h(trim($lead['address_street_1'] . ' ' . ($lead['address_street_2'] ?? '')))?><br>
-      <?=h($lead['address_city'] . ', ' . $lead['address_state'] . ' ' . $lead['address_zip'])?>
+      <?=h($lead['email'])?><?=!empty($lead['newsletter_opt_in']) ? ' (newsletter)' : ''?><br>
+      <?=h(lead_address_line($lead))?>
     </p>
     <p class="small">Submitted <?=h(date('M j, Y g:i A', strtotime($lead['created_at'])))?>
-      for <strong><?=h(lead_semester_label($lead))?></strong><br>
-      Policies agreed: <?=!empty($lead['policies_agreed_at']) ? h(date('M j, Y g:i A', strtotime($lead['policies_agreed_at']))) : '✗'?></p>
+      <?php if ($isInquiry): ?>
+        <?=trim((string)($lead['semester_label'] ?? '')) !== '' ? 'for <strong>' . h($lead['semester_label']) . '</strong>' : ''?>
+      <?php else: ?>
+        for <strong><?=h(lead_semester_label($lead))?></strong><br>
+        Policies agreed: <?=!empty($lead['policies_agreed_at']) ? h(date('M j, Y g:i A', strtotime($lead['policies_agreed_at']))) : '✗'?>
+      <?php endif; ?>
+    </p>
   </div>
 
+  <?php if ($isInquiry): ?>
+  <div class="card">
+    <h3>Inquiry details</h3>
+    <p class="small">
+      Term: <strong><?=h($lead['semester_label'] ?: '—')?></strong><br>
+      Owns: <?=h(lead_json_list($lead['owned_instruments'] ?? null, $lead['owned_instruments_other'] ?? null) ?: '—')?><br>
+      Theory program: <?=h(LeadManagement::THEORY_INTEREST_LABELS[(string)($lead['theory_program_interest'] ?? '')] ?? '—')?><br>
+      Theory level: <?=h(LeadManagement::THEORY_KNOWLEDGE_LABELS[(string)($lead['theory_knowledge'] ?? '')] ?? '—')?><br>
+      Heard about us: <?=h($lead['referral_source'] ?: '—')?>
+    </p>
+    <?php if (trim((string)($lead['music_background'] ?? '')) !== ''): ?>
+      <p class="small"><strong>Prior study:</strong> <?=nl2br(h($lead['music_background']))?></p>
+    <?php endif; ?>
+    <?php if (trim((string)($lead['inquiry_comments'] ?? '')) !== ''): ?>
+      <p class="small"><strong>Comments:</strong> <?=nl2br(h($lead['inquiry_comments']))?></p>
+    <?php endif; ?>
+  </div>
+  <?php else: ?>
   <div class="card">
     <h3>Scheduling preferences</h3>
     <p class="small">
@@ -89,7 +114,9 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
       <p class="small"><strong>Notes:</strong> <?=nl2br(h($lead['scheduling_notes']))?></p>
     <?php endif; ?>
   </div>
+  <?php endif; ?>
 
+  <?php if (!$isInquiry): ?>
   <div class="card">
     <h3>Payment</h3>
     <p class="small">
@@ -98,7 +125,7 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
       <?php if ((int)$lead['amount_paid_cents'] > 0): ?>
         Paid: <strong><?=h(lead_dollars((int)$lead['amount_paid_cents']))?></strong>
         on <?=h(date('M j, Y', strtotime($lead['paid_at'])))?><br>
-        <span style="word-break:break-all;">Session: <?=h($lead['stripe_checkout_session_id'])?></span>
+        <span style="word-break:break-all;">Ref: <?=h(LeadManagement::paymentReference($lead))?></span>
       <?php else: ?>
         Paid: nothing yet — arrange by phone or during conversion.
       <?php endif; ?>
@@ -112,21 +139,38 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
       </tbody>
     </table>
   </div>
+  <?php endif; ?>
 </div>
 
 <h3>Students</h3>
 <div class="card">
   <table class="list">
-    <thead><tr><th>Name</th><th>Class of</th><th>Instrument</th><th>Lesson</th><th>Guitar Ensemble</th><th>Shirt</th><th>Converted</th></tr></thead>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <?php if ($isInquiry): ?>
+          <th>Age</th><th>New or continuing</th><th>Instruments of interest</th>
+        <?php else: ?>
+          <th>Class of</th><th>Instrument</th><th>Lesson</th><th>Guitar Ensemble</th><th>Shirt</th>
+        <?php endif; ?>
+        <th>Converted</th>
+      </tr>
+    </thead>
     <tbody>
       <?php foreach ($students as $student): ?>
       <tr>
         <td><?=h($student['first_name'] . ' ' . $student['last_name'])?></td>
-        <td><?=h($student['class_of'] ?: '—')?></td>
-        <td><?=h($student['instrument'])?></td>
-        <td><?=(int)$student['lesson_length_minutes']?> min</td>
-        <td><?=!empty($student['guitar_ensemble']) ? 'Yes' : '—'?></td>
-        <td><?=h($student['shirt_size'] ?: '—')?></td>
+        <?php if ($isInquiry): ?>
+          <td><?=h($student['age'] ?: '—')?></td>
+          <td><?=h(LeadManagement::ENROLLMENT_STATUSES[(string)($student['enrollment_status'] ?? '')] ?? '—')?></td>
+          <td><?=h(lead_json_list($student['instruments_of_interest'] ?? null, $student['instruments_other'] ?? null) ?: '—')?></td>
+        <?php else: ?>
+          <td><?=h($student['class_of'] ?: '—')?></td>
+          <td><?=h($student['instrument'] ?: '—')?></td>
+          <td><?=!empty($student['lesson_length_minutes']) ? (int)$student['lesson_length_minutes'] . ' min' : '—'?></td>
+          <td><?=!empty($student['guitar_ensemble']) ? 'Yes' : '—'?></td>
+          <td><?=h($student['shirt_size'] ?: '—')?></td>
+        <?php endif; ?>
         <td class="small"><?=!empty($student['converted_student_user_id'])
             ? '<a href="/admin/student_edit.php?id=' . (int)$student['converted_student_user_id'] . '">view student</a>'
             : '—'?></td>
@@ -136,11 +180,14 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
   </table>
 </div>
 
-<h3>Status &amp; internal notes</h3>
+<h3>Add a note</h3>
 <div class="card">
-  <form method="post" action="/admin/lead_update_eval.php" class="stack">
+  <form method="post" action="/admin/lead_note_add_eval.php" class="stack">
     <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
     <input type="hidden" name="lead_id" value="<?=$leadId?>">
+    <label>Note (admins only)
+      <textarea name="note_body" rows="4" placeholder="Called 8/3 — wants Saturday morning at BCC…"><?=h($noteOld)?></textarea>
+    </label>
     <div class="grid-2">
       <label>Status
         <select name="status">
@@ -150,13 +197,38 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
         </select>
       </label>
     </div>
-    <label>Internal notes (admins only)
-      <textarea name="admin_notes" rows="4" placeholder="Called 8/3 — wants Saturday morning at BCC…"><?=h($lead['admin_notes'] ?? '')?></textarea>
-    </label>
+    <p class="small">Notes are kept, never replaced — leave the status alone if nothing has changed.</p>
     <div class="actions">
-      <button type="submit" class="button primary">Save</button>
+      <button type="submit" class="button primary">Add Note</button>
     </div>
   </form>
+</div>
+
+<h3>History</h3>
+<div class="card stack">
+  <?php if (!$notes): ?>
+    <p class="small">No notes yet.</p>
+  <?php else: ?>
+    <?php foreach ($notes as $note): ?>
+      <?php
+        $author = trim(($note['author_first_name'] ?? '') . ' ' . ($note['author_last_name'] ?? ''));
+        $body = trim((string)$note['body']);
+      ?>
+      <div>
+        <p class="small" style="margin-bottom:2px;">
+          <strong><?=h(date('M j, Y g:i A', strtotime((string)$note['created_at'])))?></strong>
+          · <?=h($author !== '' ? $author : 'Imported')?>
+          <?=!empty($note['status_after']) ? '· ' . lead_status_html((string)$note['status_after']) : ''?>
+        </p>
+        <?php if ($body !== ''): ?>
+          <p class="small" style="margin-top:0;"><?=nl2br(h($body))?></p>
+        <?php elseif (!empty($note['status_after'])): ?>
+          <p class="small" style="margin-top:0;">Marked
+            <strong><?=h(LeadManagement::STATUS_LABELS[(string)$note['status_after']] ?? $note['status_after'])?></strong>.</p>
+        <?php endif; ?>
+      </div>
+    <?php endforeach; ?>
+  <?php endif; ?>
 </div>
 
 <?php footer_html(); ?>

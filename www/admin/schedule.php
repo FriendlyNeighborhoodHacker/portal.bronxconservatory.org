@@ -10,6 +10,7 @@ require_once __DIR__ . '/../lib/SemesterManagement.php';
 require_once __DIR__ . '/../lib/ReservationManagement.php';
 require_once __DIR__ . '/../lib/HoldBlockManagement.php';
 require_once __DIR__ . '/../lib/ReservationUIManager.php';
+require_once __DIR__ . '/../lib/ScheduleGridData.php';
 require_once __DIR__ . '/../lib/Billing.php';
 Application::init();
 require_admin();
@@ -20,81 +21,24 @@ if ($semesterId === null) {
     exit;
 }
 $semester = SemesterManagement::find($semesterId);
-$grid = ReservationManagement::gridDataForSemester($semesterId);
+
+// The weekly spine — the same one the lead-conversion slot picker draws from.
+$grid = ScheduleGridData::semesterWeeklyGrid($semesterId);
 $columns = $grid['columns'];
-$reservations = $grid['reservations'];
 $balances = $grid['balances'];
-
-// Both kinds of cell occupy the same weekly slot, so they share the row
-// spine and the cell index; 'kind' tells $cellFn how to render each one.
-$occupants = [];
-foreach ($reservations as $r) {
-    $r['kind'] = 'lesson';
-    $occupants[] = $r;
-}
-foreach (HoldBlockManagement::holdBlockReservationsForSemester($semesterId) as $hold) {
-    $hold['kind'] = 'hold';
-    $occupants[] = $hold;
-}
-
-// Row spine: Saturday 9:00–4:30 by default; other days appear (and the time
-// range widens) when the semester's dates or its occupants call for them.
-$days = [];
-foreach (SemesterManagement::locationDates($semesterId) as $dateRow) {
-    $days[(int)date('w', strtotime((string)$dateRow['date']))] = true;
-}
-foreach ($occupants as $occupant) {
-    $days[(int)$occupant['day_of_week']] = true;
-}
-if (!$days) {
-    $days = [6 => true];
-}
-$days = array_keys($days);
-sort($days);
-
-$defaultBounds = [9 * 60, 16 * 60 + 30];
-$bounds = [];
-foreach ($days as $day) {
-    $bounds[$day] = $defaultBounds;
-}
-foreach ($occupants as $occupant) {
-    [$h, $m] = array_map('intval', explode(':', (string)$occupant['start_time']));
-    $minutes = $h * 60 + $m;
-    $day = (int)$occupant['day_of_week'];
-    $slot = intdiv($minutes, 30) * 30; // snap to the half-hour row it lives in
-    $bounds[$day][0] = min($bounds[$day][0], $slot);
-    $bounds[$day][1] = max($bounds[$day][1], $slot);
-}
-$rows = schedule_row_slots($days, $bounds);
-
-// Occupants that don't sit exactly on a 30-minute slot (e.g. 10:15) are
-// keyed to their snapped row so they still render. Each key holds a LIST:
-// conflicting bookings are prevented, but if one ever slips through, the
-// cell shows every commitment rather than silently hiding one.
-$cellIndex = [];
-foreach ($occupants as $occupant) {
-    [$h, $m] = array_map('intval', explode(':', (string)$occupant['start_time']));
-    $slotMinutes = intdiv($h * 60 + $m, 30) * 30;
-    $key = $occupant['location_id'] . ':' . $occupant['teacher_user_id'] . ':' . $occupant['day_of_week'] . ':' . $slotMinutes;
-    $cellIndex[$key][] = $occupant;
-}
+$cellIndex = $grid['cellIndex'];
+$rows = schedule_row_slots($grid['days'], $grid['bounds']);
 
 $cellFn = function (array $column, array $row) use ($cellIndex, $balances) {
     $columnKey = $column['location_id'] . ':' . $column['teacher_user_id'];
-    $key = $columnKey . ':' . $row['day'] . ':' . $row['minutes'];
-    $cellOccupants = $cellIndex[$key] ?? [];
+    $cellOccupants = ScheduleGridData::occupantsAt($cellIndex, $column, $row);
 
     $teacherLabel = ($column['teacher_preferred_name'] ?: $column['teacher_first_name'])
         . ' ' . $column['teacher_last_name'];
 
     if (!$cellOccupants) {
-        // Covered by an earlier rowspan? Look back through prior slots.
-        for ($back = 30; $back <= 210; $back += 30) {
-            foreach ($cellIndex[$columnKey . ':' . $row['day'] . ':' . ($row['minutes'] - $back)] ?? [] as $prior) {
-                if ((int)ceil((int)$prior['duration_minutes'] / 30) * 30 > $back) {
-                    return ['skip' => true];
-                }
-            }
+        if (ScheduleGridData::coveredByEarlierOccupant($cellIndex, $columnKey, (int)$row['day'], (int)$row['minutes'])) {
+            return ['skip' => true];
         }
         $context = schedule_day_prefix($row['day']) . ' ' . date('g:i a', mktime(intdiv($row['minutes'], 60), $row['minutes'] % 60))
             . ' · ' . $teacherLabel
