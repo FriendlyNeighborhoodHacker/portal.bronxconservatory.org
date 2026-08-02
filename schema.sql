@@ -381,6 +381,8 @@ CREATE TABLE lessons (
   location_id_override INT DEFAULT NULL,
   substitute_teacher_user_id INT DEFAULT NULL COMMENT 'Teacher override: who actually taught',
   attended TINYINT(1) DEFAULT NULL COMMENT 'NULL=unmarked, 1=attended, 0=missed',
+  cancelled_at DATETIME DEFAULT NULL COMMENT 'Called off: hidden from the admin calendar, still shown to the family and teacher, and no longer holds the slot',
+  cancelled_by_user_id INT DEFAULT NULL,
   created_by_user_id INT DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -388,6 +390,7 @@ CREATE TABLE lessons (
   CONSTRAINT fk_l_reservation FOREIGN KEY (semester_lesson_reservation_id) REFERENCES semester_lesson_reservations(id) ON DELETE CASCADE,
   CONSTRAINT fk_l_loc_override FOREIGN KEY (location_id_override) REFERENCES locations(id) ON DELETE SET NULL,
   CONSTRAINT fk_l_sub_teacher FOREIGN KEY (substitute_teacher_user_id) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_l_cancelled_by FOREIGN KEY (cancelled_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT fk_l_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 

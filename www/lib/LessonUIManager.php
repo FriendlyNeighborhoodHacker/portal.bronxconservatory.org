@@ -51,8 +51,9 @@ class LessonUIManager {
               <span class="note-save-state" id="lessonNoteState"></span>
 
               <div class="actions actions-split">
+                <button type="button" class="button danger" id="lessonCancelLesson">Cancel lesson</button>
                 <span class="actions-right">
-                  <button type="button" class="button" data-modal-close>Cancel</button>
+                  <button type="button" class="button" data-modal-close>Close</button>
                   <button type="button" class="button primary" id="lessonSave">Save</button>
                 </span>
               </div>
@@ -82,8 +83,10 @@ class LessonUIManager {
               .then(function (r) { return r.json(); });
           }
 
-          // Open on any weekly-grid cell that carries a lesson id.
+          // Open on any weekly-grid cell that carries a lesson id — except in
+          // edit mode, where a click is the start of a drag.
           document.addEventListener('click', function (e) {
+            if (document.body.classList.contains('schedule-edit-mode')) return;
             var cell = e.target.closest ? e.target.closest('[data-lesson-id]') : null;
             if (!cell || cell.closest('.modal')) return;
             errEl.classList.add('hidden');
@@ -134,6 +137,20 @@ class LessonUIManager {
                   document.getElementById('lessonNoteState').textContent = 'Could not save';
                 });
             }, 600);
+          });
+
+          // Cancelling is its own action, not part of Save: it is the one
+          // thing here that cannot be undone from this screen.
+          document.getElementById('lessonCancelLesson').addEventListener('click', function () {
+            if (!confirm('Cancel this lesson? It disappears from this calendar and frees the slot. '
+                       + 'The family and the teacher still see it, marked cancelled.')) return;
+            errEl.classList.add('hidden');
+            postJson('/admin/lesson_cancel.php', {})
+              .then(function (json) {
+                if (json && json.ok) { window.location.reload(); }
+                else { showError((json && json.error) || 'Could not cancel this lesson.'); }
+              })
+              .catch(function () { showError('Network error.'); });
           });
 
           // Save applies time / attendance / substitute changes in sequence.

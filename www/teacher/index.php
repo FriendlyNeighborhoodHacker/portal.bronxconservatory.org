@@ -51,17 +51,21 @@ header_html("Today's Lessons");
   <?php
     $note = NotesManagement::lessonNoteFor((int)$lesson['id'], (int)$me['id']);
     $missed = $lesson['attended'] !== null && (int)$lesson['attended'] === 0;
+    // Still listed when cancelled — you planned your day around it.
+    $cancelled = LessonManagement::isCancelled($lesson);
+    $struck = $cancelled || $missed;
   ?>
   <div class="card" style="margin-bottom:12px;">
     <div class="lesson-row" style="border-bottom:0;">
-      <span class="lesson-row-time<?=$missed ? ' lesson-cancelled' : ''?>">
+      <span class="lesson-row-time<?=$struck ? ' lesson-cancelled' : ''?>">
         <?=h(date('g:i A', strtotime($lesson['start_datetime'])))?>
       </span>
-      <span class="<?=$missed ? 'lesson-cancelled' : ''?>">
+      <span class="<?=$struck ? 'lesson-cancelled' : ''?>">
         <strong><a href="/teacher/lesson.php?id=<?=(int)$lesson['id']?>"><?=h(trim(($lesson['student_preferred_name'] ?: $lesson['student_first_name']) . ' ' . $lesson['student_last_name']))?></a></strong>
         <span class="small">Lesson #<?=(int)$lesson['lesson_number']?></span>
       </span>
       <span><?=h($lesson['location_name'])?></span>
+      <?php if ($cancelled): ?><span class="badge">Cancelled</span><?php endif; ?>
       <?php if (!empty($lesson['substitute_teacher_user_id'])): ?>
         <span class="small">covered by <?=h(trim(($lesson['substitute_first_name'] ?? '') . ' ' . ($lesson['substitute_last_name'] ?? '')))?></span>
       <?php endif; ?>

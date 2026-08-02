@@ -35,7 +35,7 @@ foreach (SemesterManagement::locationDates((int)$block['semester_id'], (int)$blo
 // Busy intervals for the same teacher that day: their lessons, plus their
 // other hold blocks.
 $busy = [];
-foreach (LessonManagement::lessonsForTeacherOnDate($teacherUserId, $date) as $lesson) {
+foreach (LessonManagement::lessonsForTeacherOnDate($teacherUserId, $date, false) as $lesson) {
     $ts = strtotime((string)$lesson['start_datetime']);
     $start = (int)date('G', $ts) * 60 + (int)date('i', $ts);
     $busy[] = [$start, $start + (int)$lesson['duration_minutes']];

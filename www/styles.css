@@ -28,6 +28,7 @@
   --res-balance-half-bg: #e9dcf7;  /* confirmed, half semester due — purple pastel */
   --res-balance-custom-bg: #1e3a5f;/* confirmed, custom balance — dark blue */
   --res-hold-bg: #e4e6ea;          /* hold block (lunch, errand) — neutral grey */
+  --res-substitute-bg: #fde4cc;    /* someone else is covering this week — pastel orange */
   /* Semester-wide date list: the left rule that marks each date's status */
   --sem-date-active-line: #2e9e63;   /* a class day — green */
   --sem-date-inactive-line: #7c4dbd; /* a break or holiday — purple */
@@ -1487,4 +1488,54 @@ label .label-prose {
   background: var(--res-hold-bg);
   color: var(--color-text-muted);
   cursor: default;
+}
+
+
+/* ===== Schedule edit mode =====
+   Off by default, so reading the schedule can never move anybody's lesson.
+   Turned on, the boxes pick up a grab cursor and the empty cells light up as
+   you drag over them. */
+.edit-mode-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--res-balance-full-bg);
+}
+
+.schedule-edit-mode .cell-item[draggable="true"] {
+  cursor: grab;
+}
+
+.schedule-edit-mode .cell-item.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+/* Held while the server decides, so a refused move never looks like it worked. */
+.schedule-edit-mode .cell-item.saving {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.grid-cell.drop-target {
+  outline: 2px dashed var(--color-primary, #4A7FC1);
+  outline-offset: -2px;
+  background: var(--res-paid-bg);
+}
+
+/* A week somebody else is covering. */
+.grid-cell.res-substitute,
+.cell-item.res-substitute {
+  background: var(--res-substitute-bg);
+}
+
+/* A cancelled lesson on a family's or teacher's list: still there, plainly off. */
+.sem-date-cancelled .sem-date-head strong,
+.sem-date-cancelled .sem-date-time {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
 }

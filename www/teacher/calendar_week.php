@@ -61,6 +61,9 @@ header_html('My Week');
   <?php else: ?>
   <?php
     $missed = $entry['attended'] !== null && (int)$entry['attended'] === 0;
+    // A cancelled lesson stays on this list: you planned your day around it,
+    // so you are told it is off rather than finding it quietly gone.
+    $cancelled = LessonManagement::isCancelled($entry);
     // A week that was moved off the standing slot, and whose lesson this
     // really is — this list includes weeks you are covering for someone.
     $notes = array_filter([
@@ -68,12 +71,13 @@ header_html('My Week');
         LessonManagement::substituteNote($entry),
     ]);
   ?>
-  <div class="lesson-row<?=$missed ? ' lesson-cancelled' : ''?>">
+  <div class="lesson-row<?=$cancelled || $missed ? ' lesson-cancelled' : ''?>">
     <span class="lesson-row-time"><?=lesson_time_html($entry['start_datetime'], (int)$entry['duration_minutes'])?></span>
     <span><a href="/teacher/lesson.php?id=<?=(int)$entry['id']?>">
       <strong><?=h(trim(($entry['student_preferred_name'] ?: $entry['student_first_name']) . ' ' . $entry['student_last_name']))?></strong></a></span>
     <span><?=h($entry['location_name'])?></span>
-    <?php if ($missed): ?><span class="small">missed</span><?php endif; ?>
+    <?php if ($cancelled): ?><span class="badge">Cancelled</span><?php endif; ?>
+    <?php if (!$cancelled && $missed): ?><span class="small">missed</span><?php endif; ?>
     <?php if ($notes): ?><span class="small"><?=h(implode(' · ', $notes))?></span><?php endif; ?>
   </div>
   <?php endif; ?>

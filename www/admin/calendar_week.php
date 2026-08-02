@@ -10,6 +10,7 @@ require_once __DIR__ . '/../lib/HoldBlockManagement.php';
 require_once __DIR__ . '/../lib/NotesManagement.php';
 require_once __DIR__ . '/../lib/LessonUIManager.php';
 require_once __DIR__ . '/../lib/HoldBlockUIManager.php';
+require_once __DIR__ . '/schedule_edit_mode.php';
 Application::init();
 require_admin();
 
@@ -29,7 +30,9 @@ $weekStartTs = strtotime('-' . date('w', $anchorTs) . ' days', $anchorTs); // Su
 $weekStart = date('Y-m-d', $weekStartTs);
 $weekEnd = date('Y-m-d', strtotime('+6 days', $weekStartTs));
 
-$lessons = LessonManagement::lessonsBetween($weekStart, $weekEnd, $semesterId);
+// Cancelled lessons are left out: the slot is free again, and showing it here
+// would suggest otherwise. The family and the teacher still see it on theirs.
+$lessons = LessonManagement::lessonsBetween($weekStart, $weekEnd, $semesterId, false);
 $holdBlocks = HoldBlockManagement::holdBlocksBetween($weekStart, $weekEnd, $semesterId);
 
 // Notes per lesson (for prefilling the modal's note box with MY note).
@@ -104,9 +107,10 @@ foreach ($occupants as $occupant) {
 }
 $rows = schedule_row_slots($days, $bounds);
 
-$cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson) {
+$cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson, $weekStartTs) {
     $columnKey = $column['location_id'] . ':' . $column['teacher_user_id'];
-    $cellOccupants = $cellIndex[$columnKey . ':' . $row['day'] . ':' . $row['minutes']] ?? [];
+    $slotKey = $columnKey . ':' . $row['day'] . ':' . $row['minutes'];
+    $cellOccupants = $cellIndex[$slotKey] ?? [];
     if (!$cellOccupants) {
         for ($back = 30; $back <= 210; $back += 30) {
             foreach ($cellIndex[$columnKey . ':' . $row['day'] . ':' . ($row['minutes'] - $back)] ?? [] as $prior) {
@@ -115,7 +119,20 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson) 
                 }
             }
         }
-        return ['html' => '', 'class' => '', 'attrs' => []];
+        // Empty cells carry the real date as well as the slot, because a drag
+        // here moves one dated lesson, not a weekly pattern.
+        return [
+            'html' => '',
+            'class' => '',
+            'attrs' => [
+                'data-slot-free' => '1',
+                'data-slot-key' => $slotKey,
+                'data-location-id' => $column['location_id'],
+                'data-teacher-id' => $column['teacher_user_id'],
+                'data-date' => date('Y-m-d', strtotime('+' . (int)$row['day'] . ' days', $weekStartTs)),
+                'data-time' => substr($row['time'], 0, 5),
+            ],
+        ];
     }
 
     $multi = count($cellOccupants) > 1;
@@ -170,13 +187,18 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson) 
             . ($timeMoved ? ' · Time moved from ' . date('g:i a', strtotime((string)$lesson['reservation_start_time'])) : '')
             . ($substituteName !== '' ? ' · ' . LessonManagement::substituteNote($lesson) : '');
         $contexts[] = $context;
-        $soleClass = $missed ? 'res-reach-out' : 'res-paid';
+        // A covered week reads as its own thing: pastel orange says "this is
+        // not the usual teacher" at a glance, without opening anything.
+        $soleClass = $substituteName !== ''
+            ? 'res-substitute'
+            : ($missed ? 'res-reach-out' : 'res-paid');
 
         $items .= schedule_cell_item_html($studentName, implode(' · ', $statusBits), [
             'data-lesson-id' => $lesson['id'],
             'data-student-name' => $studentName,
             'data-attended' => $attendedValue,
             'data-substitute-name' => $substituteName,
+            'data-duration' => $duration,
             'data-note' => $notesByLesson[(int)$lesson['id']] ?? '',
             'data-context' => $context,
         ], $multi ? $soleClass : ($missed ? 'lesson-cancelled' : ''));
@@ -206,6 +228,7 @@ header_html('Calendar Week', ['wide' => true]);
   <span class="actions">
     <a class="button" href="/admin/calendar_week.php?date=<?=h($prevWeek)?>">&larr; Previous</a>
     <a class="button" href="/admin/calendar_week.php?date=<?=h($nextWeek)?>">Next &rarr;</a>
+    <?=schedule_edit_toggle_html()?>
   </span>
 </div>
 
@@ -213,12 +236,31 @@ header_html('Calendar Week', ['wide' => true]);
   <div class="card"><p>Nothing scheduled this week.</p></div>
 <?php else: ?>
   <?=schedule_grid_html($columns, $rows, $cellFn)?>
-  <p class="small" style="margin-top:10px;">Click a lesson to reschedule it within the day,
-  mark it missed, assign a substitute, or add a note. Click a grey hold block to change
-  just that week.</p>
+  <div class="grid-legend" style="margin-top:10px;">
+    <span><span class="swatch" style="background:var(--res-paid-bg);"></span>Scheduled</span>
+    <span><span class="swatch" style="background:var(--res-substitute-bg);"></span>Substitute teacher</span>
+    <span><span class="swatch" style="background:#fff;"></span><em class="small">Missed</em></span>
+    <span><span class="swatch" style="background:var(--res-hold-bg);"></span>Hold block</span>
+  </div>
+  <p class="small" style="margin-top:10px;">Click a lesson to reschedule it, mark it missed,
+  assign a substitute, cancel it, or add a note. Click a grey hold block to change just that
+  week. Press <strong>Edit</strong> to drag a lesson to another time — dropping it on another
+  teacher makes them the substitute for that week.</p>
 <?php endif; ?>
 
 <?php LessonUIManager::renderModal(); ?>
 <?php HoldBlockUIManager::renderModal(); ?>
+<?php render_schedule_edit_mode([
+    'endpoint' => '/admin/lesson_move.php',
+    'item_attr' => 'lessonId',
+    'id_field' => 'lesson_id',
+    'fields' => [
+        'location_id' => 'locationId',
+        'teacher_user_id' => 'teacherId',
+        'date' => 'date',
+        'start_time' => 'time',
+    ],
+    'noun' => 'lesson',
+]); ?>
 
 <?php footer_html(); ?>

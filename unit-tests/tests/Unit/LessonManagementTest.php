@@ -176,4 +176,241 @@ final class LessonManagementTest extends TestCase
         $between = LessonManagement::lessonsBetweenForStudents([$student], '2030-09-01', '2030-09-30');
         $this->assertCount(3, $between);
     }
+
+    // ===== Cancelling a lesson =====
+
+    public function testCancelMarksTheLessonWithoutRemovingIt(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[0]);
+
+        $lesson = LessonManagement::getLesson($lessonIds[0]);
+        $this->assertNotNull($lesson, 'cancelling is not deleting');
+        $this->assertTrue(LessonManagement::isCancelled($lesson));
+        $this->assertNotNull($lesson['cancelled_at']);
+        $this->assertSame($this->ctx->id, (int)$lesson['cancelled_by_user_id']);
+    }
+
+    public function testCancelIsIdempotent(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[0]);
+        $first = LessonManagement::getLesson($lessonIds[0])['cancelled_at'];
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[0]);
+
+        $this->assertSame($first, LessonManagement::getLesson($lessonIds[0])['cancelled_at']);
+    }
+
+    public function testCancelRequiresAnAdmin(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        $this->expectException(RuntimeException::class);
+        LessonManagement::cancelLesson(new UserContext(fx_user('Nel', 'Nobody'), false), $lessonIds[0]);
+    }
+
+    public function testACancelledLessonStopsHoldingItsSlot(): void
+    {
+        [$teacher, , , , , $lessonIds] = $this->makeConfirmed();
+        $lesson = LessonManagement::getLesson($lessonIds[0]);
+        $moment = (string)$lesson['start_datetime'];
+
+        // While it stands, the moment is taken.
+        $this->assertNotNull(ScheduleConflicts::occurrenceConflict($teacher, $moment, 30));
+
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[0]);
+
+        // Cancelled, the time is free again — that is the point of cancelling.
+        $this->assertNull(ScheduleConflicts::occurrenceConflict($teacher, $moment, 30));
+    }
+
+    public function testTheFamilyAndTeacherStillSeeACancelledLessonButTheAdminCalendarDoesNot(): void
+    {
+        [$teacher, $student, , , , $lessonIds] = $this->makeConfirmed();
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[0]);
+
+        // Admin calendar: gone.
+        $adminWeek = LessonManagement::lessonsBetween('2030-09-07', '2030-09-07', null, false);
+        $this->assertSame([], $adminWeek);
+
+        // Everyone whose plans it was: still there.
+        $this->assertCount(1, LessonManagement::lessonsBetween('2030-09-07', '2030-09-07'));
+        $this->assertCount(1, LessonManagement::lessonsBetweenForStudents([$student], '2030-09-07', '2030-09-07'));
+        $this->assertCount(1, LessonManagement::lessonsForTeacherOnDate($teacher, '2030-09-07'));
+        $this->assertCount(3, LessonManagement::upcomingLessonsForStudent($student, '2030-09-01'));
+
+        // But not to anything asking whether the teacher is free.
+        $this->assertCount(0, LessonManagement::lessonsForTeacherOnDate($teacher, '2030-09-07', false));
+    }
+
+    public function testAnotherLessonCanBeMovedIntoACancelledSlot(): void
+    {
+        // Cancelling frees that MOMENT, not the standing weekly slot — the
+        // reservation still owns 10:00 every week. What the freed moment buys
+        // is room to move a real lesson into it.
+        [$teacher, , $semesterId, $locationId, , $lessonIds] = $this->makeConfirmed();
+        $other = fx_student('Otto', 'Other');
+        $otherReservation = ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+            'student_user_id' => $other, 'day_of_week' => 6, 'start_time' => '11:00',
+            'duration_minutes' => 30, 'status' => 'confirmed',
+        ]);
+        $st = pdo()->prepare('SELECT id FROM lessons WHERE semester_lesson_reservation_id=? ORDER BY start_datetime');
+        $st->execute([$otherReservation]);
+        $otherLessonId = (int)$st->fetchAll()[0]['id'];
+
+        // Blocked while the 10:00 lesson stands...
+        try {
+            LessonManagement::moveLesson($this->ctx, $otherLessonId, '2030-09-07 10:00');
+            $this->fail('Expected the occupied moment to be refused');
+        } catch (InvalidArgumentException $e) {
+            $this->assertNotSame('', $e->getMessage());
+        }
+
+        // ...and allowed once it is cancelled.
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[0]);
+        LessonManagement::moveLesson($this->ctx, $otherLessonId, '2030-09-07 10:00');
+        $this->assertSame('2030-09-07 10:00:00', LessonManagement::getLesson($otherLessonId)['start_datetime']);
+    }
+
+    public function testACancelledLessonCannotBeMoved(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[0]);
+
+        $this->expectException(InvalidArgumentException::class);
+        LessonManagement::moveLesson($this->ctx, $lessonIds[0], '2030-09-07 13:00');
+    }
+
+    // ===== Moving a lesson (calendar drag-and-drop) =====
+
+    public function testMoveChangesTheTimeOfThatOccurrenceOnly(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+
+        LessonManagement::moveLesson($this->ctx, $lessonIds[0], '2030-09-07 13:30');
+
+        $moved = LessonManagement::getLesson($lessonIds[0]);
+        $this->assertSame('2030-09-07 13:30:00', $moved['start_datetime']);
+        $this->assertTrue(LessonManagement::isTimeMoved($moved));
+        // The following weeks stay on the standing slot.
+        $this->assertSame('2030-09-14 10:00:00', LessonManagement::getLesson($lessonIds[1])['start_datetime']);
+    }
+
+    public function testMoveCanCrossToAnotherDay(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+
+        LessonManagement::moveLesson($this->ctx, $lessonIds[0], '2030-09-08 11:00');
+
+        $this->assertSame('2030-09-08 11:00:00', LessonManagement::getLesson($lessonIds[0])['start_datetime']);
+    }
+
+    public function testMoveOntoAnotherTeacherSetsThemAsTheSubstitute(): void
+    {
+        [$teacher, , , , , $lessonIds] = $this->makeConfirmed();
+        $sub = fx_teacher('Sue', 'Substitute');
+
+        LessonManagement::moveLesson($this->ctx, $lessonIds[0], '2030-09-07 13:00', $sub);
+
+        $lesson = LessonManagement::getLesson($lessonIds[0]);
+        $this->assertSame($sub, (int)$lesson['substitute_teacher_user_id']);
+        $this->assertSame($sub, (int)$lesson['effective_teacher_user_id']);
+        // The standing reservation is untouched: this is one week, not a change
+        // of teacher.
+        $this->assertSame($teacher, (int)$lesson['teacher_user_id']);
+    }
+
+    public function testMovingBackOntoTheOwnTeacherClearsTheSubstitute(): void
+    {
+        [$teacher, , , , , $lessonIds] = $this->makeConfirmed();
+        $sub = fx_teacher('Sue', 'Substitute');
+        LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], $sub);
+
+        LessonManagement::moveLesson($this->ctx, $lessonIds[0], '2030-09-07 13:00', $teacher);
+
+        $this->assertNull(LessonManagement::getLesson($lessonIds[0])['substitute_teacher_user_id']);
+    }
+
+    public function testMoveRefusesASubstituteWhoIsAlreadyBooked(): void
+    {
+        [$teacher, , $semesterId, $locationId, , $lessonIds] = $this->makeConfirmed();
+
+        // A second teacher with their own confirmed lesson at 11:00.
+        $sub = fx_teacher('Sue', 'Substitute');
+        SemesterManagement::setLocationTeachers($this->ctx, $semesterId, [[$locationId, $teacher], [$locationId, $sub]]);
+        $otherStudent = fx_student('Otto', 'Other');
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $sub, 'location_id' => $locationId,
+            'student_user_id' => $otherStudent, 'day_of_week' => 6, 'start_time' => '11:00',
+            'duration_minutes' => 30, 'status' => 'confirmed',
+        ]);
+
+        try {
+            LessonManagement::moveLesson($this->ctx, $lessonIds[0], '2030-09-07 11:00', $sub);
+            $this->fail('Expected the clash to be refused');
+        } catch (InvalidArgumentException $e) {
+            $this->assertNotSame('', $e->getMessage());
+        }
+
+        // Nothing committed: the lesson is where it was, with no substitute.
+        $lesson = LessonManagement::getLesson($lessonIds[0]);
+        $this->assertSame('2030-09-07 10:00:00', $lesson['start_datetime']);
+        $this->assertNull($lesson['substitute_teacher_user_id']);
+    }
+
+    public function testMoveRefusesSomeoneWhoIsNotATeacher(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        $notATeacher = fx_user('Norm', 'Nonteacher');
+
+        $this->expectException(InvalidArgumentException::class);
+        LessonManagement::moveLesson($this->ctx, $lessonIds[0], '2030-09-07 13:00', $notATeacher);
+    }
+
+    public function testMoveRefusesAMomentTheTeacherAlreadyHas(): void
+    {
+        [$teacher, , $semesterId, $locationId, , $lessonIds] = $this->makeConfirmed();
+        $otherStudent = fx_student('Otto', 'Other');
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+            'student_user_id' => $otherStudent, 'day_of_week' => 6, 'start_time' => '11:00',
+            'duration_minutes' => 30, 'status' => 'confirmed',
+        ]);
+
+        try {
+            LessonManagement::moveLesson($this->ctx, $lessonIds[0], '2030-09-07 11:00');
+            $this->fail('Expected the clash to be refused');
+        } catch (InvalidArgumentException $e) {
+            $this->assertNotSame('', $e->getMessage());
+        }
+        $this->assertSame('2030-09-07 10:00:00', LessonManagement::getLesson($lessonIds[0])['start_datetime']);
+    }
+
+    public function testMoveOntoAnotherLocationRecordsAnOverride(): void
+    {
+        [$teacher, , $semesterId, $locationId, , $lessonIds] = $this->makeConfirmed();
+        $second = fx_second_location_id();
+        SemesterManagement::setActiveLocations($this->ctx, $semesterId, [$locationId, $second]);
+        SemesterManagement::setLocationTeachers($this->ctx, $semesterId, [[$locationId, $teacher], [$second, $teacher]]);
+
+        LessonManagement::moveLesson($this->ctx, $lessonIds[0], '2030-09-07 13:00', $teacher, $second);
+
+        $lesson = LessonManagement::getLesson($lessonIds[0]);
+        $this->assertSame($second, (int)$lesson['location_id_override']);
+        $this->assertSame($second, (int)$lesson['effective_location_id']);
+
+        // Moving back to its own location drops the override rather than
+        // storing one that says nothing.
+        LessonManagement::moveLesson($this->ctx, $lessonIds[0], '2030-09-07 13:00', $teacher, $locationId);
+        $this->assertNull(LessonManagement::getLesson($lessonIds[0])['location_id_override']);
+    }
+
+    public function testMoveRequiresAnAdmin(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        $this->expectException(RuntimeException::class);
+        LessonManagement::moveLesson(new UserContext(fx_user('Nel', 'Nobody'), false), $lessonIds[0], '2030-09-07 13:00');
+    }
 }

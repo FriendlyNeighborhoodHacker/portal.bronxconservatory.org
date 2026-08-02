@@ -32,7 +32,8 @@ unset($_SESSION['teacher_flash'], $_SESSION['teacher_flash_error']);
 header_html('Lesson — ' . $studentName);
 ?>
 
-<h2>Lesson #<?=(int)$lesson['lesson_number']?> — <?=h($studentName)?></h2>
+<h2>Lesson #<?=(int)$lesson['lesson_number']?> — <?=h($studentName)?>
+  <?php if (LessonManagement::isCancelled($lesson)): ?><span class="badge">Cancelled</span><?php endif; ?></h2>
 <p class="small">
   <?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?>
   · <?=h($lesson['location_name'])?>
@@ -40,6 +41,9 @@ header_html('Lesson — ' . $studentName);
     · covered by <?=h(trim(($lesson['substitute_first_name'] ?? '') . ' ' . ($lesson['substitute_last_name'] ?? '')))?>
   <?php endif; ?>
 </p>
+<?php if (LessonManagement::isCancelled($lesson)): ?>
+  <p class="small">This lesson was cancelled. Nothing is expected of you for it.</p>
+<?php endif; ?>
 <?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
 <?php if ($flashError): ?><p class="error"><?=h($flashError)?></p><?php endif; ?>
 

@@ -108,11 +108,14 @@ class ScheduleConflicts {
         int $durationMinutes,
         array $exclude = []
     ): ?string {
+        // A cancelled lesson keeps its row but gives up its slot — that is the
+        // point of cancelling rather than deleting.
         $sql = "SELECT su.first_name, su.last_name, l.start_datetime, l.duration_minutes
                 FROM lessons l
                 JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
                 JOIN users su ON su.id = r.student_user_id
                 WHERE COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) = ?
+                  AND l.cancelled_at IS NULL
                   AND l.start_datetime < DATE_ADD(?, INTERVAL ? MINUTE)
                   AND DATE_ADD(l.start_datetime, INTERVAL l.duration_minutes MINUTE) > ?";
         $params = [$teacherUserId, $startDatetime, $durationMinutes, $startDatetime];

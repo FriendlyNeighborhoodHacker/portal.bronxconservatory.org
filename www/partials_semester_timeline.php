@@ -47,6 +47,10 @@ function semester_timeline_html(array $entries, callable $whoFn): string {
 
         $lesson = $entry['lesson'];
         $missed = $lesson['attended'] !== null && (int)$lesson['attended'] === 0;
+        // A cancelled lesson stays on this list on purpose: the family and the
+        // teacher planned around it, so they are told it is off rather than
+        // finding it quietly gone.
+        $cancelled = LessonManagement::isCancelled($lesson);
         $start = strtotime((string)$lesson['start_datetime']);
         $end = $start + ((int)$lesson['duration_minutes']) * 60;
         // This week only: a time that no longer matches the standing slot, and
@@ -54,10 +58,12 @@ function semester_timeline_html(array $entries, callable $whoFn): string {
         $timeMoved = LessonManagement::isTimeMoved($lesson);
         $substituteNote = LessonManagement::substituteNote($lesson);
 
-        $html .= '<div class="sem-date sem-date-active' . ($missed ? ' sem-date-missed' : '') . '">'
+        $html .= '<div class="sem-date sem-date-active'
+            . ($cancelled ? ' sem-date-cancelled' : ($missed ? ' sem-date-missed' : '')) . '">'
             . '<div class="sem-date-head"><strong>' . h(date('D M j, Y', $start)) . '</strong>'
-            . ($missed ? ' <span class="badge">Missed</span>' : '')
-            . ($timeMoved ? ' <span class="badge">Time moved</span>' : '') . $tag
+            . ($cancelled ? ' <span class="badge">Cancelled</span>' : '')
+            . (!$cancelled && $missed ? ' <span class="badge">Missed</span>' : '')
+            . (!$cancelled && $timeMoved ? ' <span class="badge">Time moved</span>' : '') . $tag
             . '<span class="sem-date-time">' . h(date('g:i a', $start) . '–' . date('g:i a', $end)) . '</span></div>';
 
         $detail = array_filter([

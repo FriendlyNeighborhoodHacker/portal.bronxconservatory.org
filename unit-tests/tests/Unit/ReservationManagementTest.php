@@ -474,4 +474,83 @@ final class ReservationManagementTest extends TestCase
         $this->assertArrayHasKey($student, $grid['balances']);
         $this->assertSame(0, $grid['balances'][$student]['total_balance_cents']);
     }
+
+    // ===== Dragging a weekly slot on the Semester Schedule =====
+
+    public function testDragToAnotherTeacherAndTimeMovesTheWholeReservation(): void
+    {
+        // Dropping a box on another column changes the teacher AND the time in
+        // one gesture, which is what the grid's drag does.
+        $teacher = fx_teacher('Ada', 'First');
+        $setup = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
+        [$semesterId, $locationId, , $dayOfWeek] = $setup;
+        $second = fx_teacher('Bea', 'Second');
+        SemesterManagement::setLocationTeachers($this->ctx, $semesterId, [[$locationId, $teacher], [$locationId, $second]]);
+        [$reservationId] = $this->makeReservation($setup, 'confirmed');
+
+        ReservationManagement::updateReservation($this->ctx, $reservationId, [
+            'teacher_user_id' => $second,
+            'location_id' => $locationId,
+            'day_of_week' => $dayOfWeek,
+            'start_time' => '14:00',
+        ]);
+
+        $reservation = ReservationManagement::findReservation($reservationId);
+        $this->assertSame($second, (int)$reservation['teacher_user_id']);
+        $this->assertSame('14:00:00', $reservation['start_time']);
+        // Every future lesson followed it across.
+        $this->assertSame(
+            ['2030-09-07 14:00:00', '2030-09-14 14:00:00', '2030-09-21 14:00:00'],
+            array_column($this->lessonRows($reservationId), 'start_datetime')
+        );
+    }
+
+    public function testDragOntoATeacherNotAtThatLocationIsRejected(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher('Ada', 'First'), '2030-09-07', 2);
+        [, $locationId, , $dayOfWeek] = $setup;
+        [$reservationId] = $this->makeReservation($setup);
+        $stranger = fx_teacher('Cy', 'Stranger');
+
+        $this->expectException(InvalidArgumentException::class);
+        ReservationManagement::updateReservation($this->ctx, $reservationId, [
+            'teacher_user_id' => $stranger, 'location_id' => $locationId,
+            'day_of_week' => $dayOfWeek, 'start_time' => '14:00',
+        ]);
+    }
+
+    public function testACancelledWeekNoLongerBlocksAReservationMove(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);
+        [$semesterId, $locationId, $teacherId, $dayOfWeek] = $setup;
+        [$reservationId] = $this->makeReservation($setup, 'confirmed');
+
+        // Another student's lesson is hand-moved into 11:00 on week 2, which is
+        // exactly what blocks a move of the first reservation to 11:00.
+        $otherId = ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacherId,
+            'location_id' => $locationId, 'student_user_id' => fx_student('Other', 'Student'),
+            'day_of_week' => $dayOfWeek, 'start_time' => '15:00',
+            'duration_minutes' => 30, 'status' => 'confirmed',
+        ]);
+        pdo()->prepare('UPDATE lessons SET start_datetime=? WHERE semester_lesson_reservation_id=? AND DATE(start_datetime)=?')
+            ->execute(['2030-09-14 11:00:00', $otherId, '2030-09-14']);
+
+        $blockerId = (int)pdo()->query(
+            "SELECT id FROM lessons WHERE start_datetime='2030-09-14 11:00:00'"
+        )->fetchColumn();
+
+        try {
+            ReservationManagement::updateReservation($this->ctx, $reservationId, ['start_time' => '11:00']);
+            $this->fail('Expected the colliding week to block the move');
+        } catch (InvalidArgumentException $e) {
+            $this->assertNotSame('', $e->getMessage());
+        }
+
+        // Cancel the week that was in the way and the same move goes through.
+        LessonManagement::cancelLesson($this->ctx, $blockerId);
+        ReservationManagement::updateReservation($this->ctx, $reservationId, ['start_time' => '11:00']);
+
+        $this->assertSame('11:00:00', ReservationManagement::findReservation($reservationId)['start_time']);
+    }
 }

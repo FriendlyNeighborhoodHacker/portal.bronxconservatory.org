@@ -69,12 +69,13 @@ header_html($child['first_name'] . "'s lessons");
       <span>No lesson — <?=h($row['title'])?></span>
       <span class="small"><?=h($row['location'])?></span>
     </div>
-    <?php else: $lesson = $row['lesson']; ?>
-    <div class="lesson-row">
+    <?php else: $lesson = $row['lesson']; $cancelled = LessonManagement::isCancelled($lesson); ?>
+    <div class="lesson-row<?=$cancelled ? ' lesson-cancelled' : ''?>">
       <span class="lesson-row-time"><?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?></span>
       <span>Lesson with <?=h(trim(($lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name']) . ' '
         . ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])))?></span>
       <span><?=h($lesson['location_name'])?></span>
+      <?php if ($cancelled): ?><span class="badge">Cancelled</span><?php endif; ?>
     </div>
     <?php endif; ?>
   <?php endforeach; ?>

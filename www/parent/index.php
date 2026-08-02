@@ -76,7 +76,9 @@ header_html('My Family');
       </div>
       <?php if ($nextLesson): ?>
         <div class="small" style="margin-top:8px;">Next: <?=lesson_time_html($nextLesson['start_datetime'], (int)$nextLesson['duration_minutes'])?>
-          · <?=h($nextLesson['location_name'])?></div>
+          · <?=h($nextLesson['location_name'])?>
+          <?php if (LessonManagement::isCancelled($nextLesson)): ?><span class="badge">Cancelled</span><?php endif; ?>
+        </div>
       <?php else: ?>
         <div class="small" style="margin-top:8px;">No upcoming lessons scheduled.</div>
       <?php endif; ?>

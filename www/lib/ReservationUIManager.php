@@ -227,6 +227,9 @@ class ReservationUIManager {
           document.addEventListener('click', function (e) {
             if (!e.target.closest) return;
             if (e.target.closest('.modal')) return;
+            // In edit mode a click on the grid is the start of a drag, not a
+            // request to open anything.
+            if (document.body.classList.contains('schedule-edit-mode')) return;
 
             var item = e.target.closest('.cell-item');
             if (item && item.dataset.reservationId) {

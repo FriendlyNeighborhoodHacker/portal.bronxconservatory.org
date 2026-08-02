@@ -11,6 +11,7 @@ require_once __DIR__ . '/../lib/ReservationManagement.php';
 require_once __DIR__ . '/../lib/HoldBlockManagement.php';
 require_once __DIR__ . '/../lib/ReservationUIManager.php';
 require_once __DIR__ . '/../lib/ScheduleGridData.php';
+require_once __DIR__ . '/schedule_edit_mode.php';
 require_once __DIR__ . '/../lib/Billing.php';
 Application::init();
 require_admin();
@@ -47,6 +48,11 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $balances) {
             'html' => '',
             'class' => '',
             'attrs' => [
+                // data-slot-free and data-slot-key are what edit mode reads to
+                // decide whether a dragged box may land here and whether a
+                // longer one still fits.
+                'data-slot-free' => '1',
+                'data-slot-key' => $columnKey . ':' . $row['day'] . ':' . $row['minutes'],
                 'data-location-id' => $column['location_id'],
                 'data-teacher-id' => $column['teacher_user_id'],
                 'data-day' => $row['day'],
@@ -96,6 +102,7 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $balances) {
             'data-status' => $occupant['status'],
             'data-student-id' => $studentId,
             'data-student-name' => $studentName,
+            'data-duration' => $duration,
             'data-context' => $context,
             'data-balance-text' => $balanceText,
         ], $multi ? $presentation['class'] : '');
@@ -128,6 +135,7 @@ header_html('Semester Schedule', ['wide' => true]);
 
 <div class="page-head">
   <h2>Semester Schedule — <?=h(SemesterManagement::label($semester))?></h2>
+  <?=schedule_edit_toggle_html()?>
 </div>
 
 <div class="grid-legend">
@@ -143,8 +151,21 @@ header_html('Semester Schedule', ['wide' => true]);
 <?=schedule_grid_html($columns, $rows, $cellFn)?>
 
 <p class="small" style="margin-top:10px;">Click an empty cell to reserve it for a student or hold it
-for the teacher; click a filled cell to change or remove it.</p>
+for the teacher; click a filled cell to change or remove it. Press <strong>Edit</strong> to drag a
+student's weekly slot to a different teacher or time.</p>
 
 <?php ReservationUIManager::renderModals($semesterId); ?>
+<?php render_schedule_edit_mode([
+    'endpoint' => '/admin/reservation_move.php',
+    'item_attr' => 'reservationId',
+    'id_field' => 'reservation_id',
+    'fields' => [
+        'location_id' => 'locationId',
+        'teacher_user_id' => 'teacherId',
+        'day_of_week' => 'day',
+        'start_time' => 'time',
+    ],
+    'noun' => 'weekly slot',
+]); ?>
 
 <?php footer_html(); ?>

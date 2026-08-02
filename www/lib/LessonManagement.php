@@ -51,13 +51,20 @@ class LessonManagement {
         return $row ?: null;
     }
 
-    /** A teacher's lessons on one date (as effective teacher), time order. */
-    public static function lessonsForTeacherOnDate(int $teacherUserId, string $date): array {
+    /**
+     * A teacher's lessons on one date (as effective teacher), time order.
+     *
+     * Cancelled lessons are included by default because the teacher still
+     * wants to see that the lesson was called off. Anything asking "is this
+     * teacher free?" must pass false — a cancelled lesson holds nothing.
+     */
+    public static function lessonsForTeacherOnDate(int $teacherUserId, string $date, bool $includeCancelled = true): array {
         $st = self::pdo()->prepare(
             self::LESSON_SELECT .
             ' WHERE DATE(l.start_datetime) = ?
-                AND COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) = ?
-              ORDER BY l.start_datetime'
+                AND COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) = ?'
+            . ($includeCancelled ? '' : ' AND l.cancelled_at IS NULL') .
+            ' ORDER BY l.start_datetime'
         );
         $st->execute([$date, $teacherUserId]);
         return $st->fetchAll();
@@ -93,13 +100,21 @@ class LessonManagement {
         return $d !== false ? (string)$d : null;
     }
 
-    /** Lessons in a date range (inclusive), optionally one semester — calendars. */
-    public static function lessonsBetween(string $fromDate, string $toDate, ?int $semesterId = null): array {
+    /**
+     * Lessons in a date range (inclusive), optionally one semester — calendars.
+     * Pass false for $includeCancelled to leave out lessons that were called
+     * off, which is what the admin calendar wants: the slot is free again and
+     * showing it would suggest otherwise.
+     */
+    public static function lessonsBetween(string $fromDate, string $toDate, ?int $semesterId = null, bool $includeCancelled = true): array {
         $sql = self::LESSON_SELECT . ' WHERE DATE(l.start_datetime) BETWEEN ? AND ?';
         $params = [$fromDate, $toDate];
         if ($semesterId !== null) {
             $sql .= ' AND r.semester_id = ?';
             $params[] = $semesterId;
+        }
+        if (!$includeCancelled) {
+            $sql .= ' AND l.cancelled_at IS NULL';
         }
         $st = self::pdo()->prepare($sql . ' ORDER BY l.start_datetime');
         $st->execute($params);
@@ -213,6 +228,100 @@ class LessonManagement {
         self::pdo()->prepare('UPDATE lessons SET start_datetime=? WHERE id=?')
             ->execute([$newStart, $lessonId]);
         self::log($ctx, 'lesson.rescheduled', ['lesson_id' => $lessonId, 'start_datetime' => $newStart]);
+    }
+
+    /**
+     * Move one lesson to another moment, and/or hand it to another teacher.
+     *
+     * This is the calendar's drag-and-drop, so a single gesture can change the
+     * date, the time, the teacher and the location at once. The teacher is
+     * expressed the way this app already expresses "someone else is covering
+     * this week": as a substitute on the occurrence, never by touching the
+     * standing reservation. Dropping a lesson back on its own teacher's column
+     * clears the substitute again, which is the only way to undo it by drag.
+     *
+     * $teacherUserId and $locationId are the column dropped on; pass null to
+     * leave either as it is. Throws if the moment is not free for whoever ends
+     * up teaching it, so nothing commits on a clash.
+     */
+    public static function moveLesson(
+        ?UserContext $ctx,
+        int $lessonId,
+        string $newStartDatetime,
+        ?int $teacherUserId = null,
+        ?int $locationId = null
+    ): void {
+        self::assertAdmin($ctx);
+        $lesson = self::requireLesson($lessonId);
+        if (!empty($lesson['cancelled_at'])) {
+            throw new InvalidArgumentException('This lesson was cancelled.');
+        }
+
+        $start = strtotime($newStartDatetime);
+        if ($start === false) {
+            throw new InvalidArgumentException('That is not a time we understand.');
+        }
+        $newStart = date('Y-m-d H:i:s', $start);
+
+        // Who teaches it after the move, and therefore whose diary has to be
+        // free: the substitute when one is being set, otherwise the
+        // reservation's own teacher.
+        $ownTeacherId = (int)$lesson['teacher_user_id'];
+        $newTeacherId = $teacherUserId ?? (int)$lesson['effective_teacher_user_id'];
+        $substituteId = $newTeacherId === $ownTeacherId ? null : $newTeacherId;
+
+        if ($substituteId !== null) {
+            $st = self::pdo()->prepare('SELECT 1 FROM teacher_profiles WHERE user_id=?');
+            $st->execute([$substituteId]);
+            if (!$st->fetchColumn()) {
+                throw new InvalidArgumentException('The substitute must be a teacher.');
+            }
+        }
+
+        $conflict = ScheduleConflicts::occurrenceConflict(
+            $newTeacherId, $newStart, (int)$lesson['duration_minutes'], ['lesson_id' => $lessonId]
+        );
+        if ($conflict !== null) {
+            throw new InvalidArgumentException($conflict);
+        }
+
+        // A location override is only worth storing when it actually differs
+        // from the reservation's own location.
+        $newLocationId = $locationId ?? (int)$lesson['effective_location_id'];
+        $locationOverride = $newLocationId === (int)$lesson['location_id'] ? null : $newLocationId;
+
+        self::pdo()->prepare(
+            'UPDATE lessons SET start_datetime=?, substitute_teacher_user_id=?, location_id_override=? WHERE id=?'
+        )->execute([$newStart, $substituteId, $locationOverride, $lessonId]);
+
+        self::log($ctx, 'lesson.moved', [
+            'lesson_id' => $lessonId,
+            'start_datetime' => $newStart,
+            'substitute_teacher_user_id' => $substituteId,
+            'location_id_override' => $locationOverride,
+        ]);
+    }
+
+    /**
+     * Call a lesson off. The row stays — the family and the teacher still need
+     * to see that it was scheduled and then cancelled — but it drops off the
+     * admin calendar and stops holding the teacher's slot, so the time can be
+     * used for something else.
+     */
+    public static function cancelLesson(?UserContext $ctx, int $lessonId): void {
+        self::assertAdmin($ctx);
+        $lesson = self::requireLesson($lessonId);
+        if (!empty($lesson['cancelled_at'])) {
+            return; // Already cancelled; saying so twice helps nobody.
+        }
+        self::pdo()->prepare('UPDATE lessons SET cancelled_at=NOW(), cancelled_by_user_id=? WHERE id=?')
+            ->execute([$ctx->id, $lessonId]);
+        self::log($ctx, 'lesson.cancelled', ['lesson_id' => $lessonId]);
+    }
+
+    /** Is this lesson called off? */
+    public static function isCancelled(array $lesson): bool {
+        return !empty($lesson['cancelled_at']);
     }
 
     /**

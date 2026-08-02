@@ -34,7 +34,7 @@ foreach (SemesterManagement::locationDates((int)$lesson['semester_id'], (int)$le
 // Busy intervals for the same effective teacher that day: their other
 // lessons, plus any hold blocks (lunch, errands) they have.
 $busy = [];
-foreach (LessonManagement::lessonsForTeacherOnDate((int)$lesson['effective_teacher_user_id'], $date) as $other) {
+foreach (LessonManagement::lessonsForTeacherOnDate((int)$lesson['effective_teacher_user_id'], $date, false) as $other) {
     if ((int)$other['id'] === (int)$lesson['id']) {
         continue;
     }
