@@ -371,12 +371,36 @@ The **"Pay Now"** button is the last thing in the flow, not the first.
 
 The portal extends BCM's existing visual identity from `bronxconservatory.org`.
 
-* **Primary blue:** `#4A7FC1` (from BCM logo) — used for headers, links, and accents
-* **Navy:** `#0D1B2A` (from website footer) — used for sidebar, footer, and contrast areas
-* **Gold/Yellow:** `#E8C547` (from "Register Now" button) — used exclusively for primary CTAs: Register, Pay Now, Submit
-* **White:** `#FFFFFF` — primary background, keeps everything clean and breathable
+# Design Notes
+
+## Colors.
+The app colors should primarily feature a clean, modern aesthetic. 
+
+Buttons should be #0062DC — used for headers, links, and accents
+
+The background should be #FFFFFF, keeps everything clean and breathable
+
+payment buttons should be #FFDC2B (from "Register Now" button) — used exclusively for primary CTAs: Register, Pay Now, Submit
+
+the footer and contrast areas should be #00132A with white text
+
 * **Warm grays:** For secondary text, borders, and subtle backgrounds
-* **Typography:** Clean sans-serif (the site uses a modern sans). Portal should match.
-* **Imagery:** Real photos of BCM students and teachers where possible, especially on the landing page and registration flow.
-* **Logo:** BCM treble-clef logo in the top left of every portal page.
+
+, and you should use #FF724C whenever you want to spice it up a bit. 
+
+The colors in the schedule and calendar should remain exactly how they are as they dictate specific meanings within the web app.
+
+The interface should be generally light with white backgrounds, dark text, and soft pastel accents (specific collors mentioned above) for chat bubbles and UI elements to encourage a clean, organized, and inviting community atmosphere. App Interface: White backgrounds. Overall Vibe: Friendly, modern, and uncluttered.
+
+## Fonts.
+I want the main font of the app to be BD Megalona Extra Light. This font should be used for titles, and when the app is asking the user to do something. Normal fonds should be in BB Noname Pro Regular
+
+## Bolding and italicizing
+Any text with instructions to the user should bold and italicize the most important part of that text so that it is easy to read. An example of this is “What’s your number?” or “Enter your code.” Anything text that is bold and italicized should be in BD Megalona Extra Light.
+
+
+Style should be guided by the slogan "warm, not institutional."
+
+BCM's families are often navigating systems that feel cold or bureaucratic. The portal should feel like an extension of the conservatory itself — welcoming, personal, and human. Real photos, warm language, the BCM gold-and-navy brand, and a visible phone number on every page.
+
 * **Phone number:** `(718) 841-7415` visible in the footer of every page and prominently on the login/registration page.
