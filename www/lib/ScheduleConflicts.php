@@ -110,11 +110,13 @@ class ScheduleConflicts {
     ): ?string {
         // A cancelled lesson keeps its row but gives up its slot — that is the
         // point of cancelling rather than deleting.
+        // LEFT JOIN so a one-off lesson — which has no reservation and carries
+        // its own teacher and student — still holds the teacher's time.
         $sql = "SELECT su.first_name, su.last_name, l.start_datetime, l.duration_minutes
                 FROM lessons l
-                JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
-                JOIN users su ON su.id = r.student_user_id
-                WHERE COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) = ?
+                LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+                JOIN users su ON su.id = COALESCE(r.student_user_id, l.student_user_id)
+                WHERE COALESCE(l.substitute_teacher_user_id, r.teacher_user_id, l.teacher_user_id) = ?
                   AND l.cancelled_at IS NULL
                   AND l.start_datetime < DATE_ADD(?, INTERVAL ? MINUTE)
                   AND DATE_ADD(l.start_datetime, INTERVAL l.duration_minutes MINUTE) > ?";
@@ -135,11 +137,12 @@ class ScheduleConflicts {
                 . ' is already booked for this teacher.';
         }
 
+        // Likewise a one-off hold block.
         $sql = "SELECT COALESCE(b.title_override, hr.title) AS effective_title,
                        b.start_datetime, b.duration_minutes
                 FROM semester_hold_blocks b
-                JOIN semester_hold_block_reservations hr ON hr.id = b.semester_hold_block_reservation_id
-                WHERE hr.teacher_user_id = ?
+                LEFT JOIN semester_hold_block_reservations hr ON hr.id = b.semester_hold_block_reservation_id
+                WHERE COALESCE(hr.teacher_user_id, b.teacher_user_id) = ?
                   AND b.start_datetime < DATE_ADD(?, INTERVAL ? MINUTE)
                   AND DATE_ADD(b.start_datetime, INTERVAL b.duration_minutes MINUTE) > ?";
         $params = [$teacherUserId, $startDatetime, $durationMinutes, $startDatetime];

@@ -127,9 +127,10 @@ class ResourceManagement {
              FROM lesson_resources lr
              LEFT JOIN private_files pf ON pf.id = lr.private_file_id
              JOIN lessons l ON l.id = lr.lesson_id
-             JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
              LEFT JOIN users up ON up.id = lr.created_by_user_id
-             WHERE r.student_user_id = ? AND r.semester_id = ?
+             WHERE COALESCE(r.student_user_id, l.student_user_id) = ?
+               AND COALESCE(r.semester_id, l.semester_id) = ?
              ORDER BY l.start_datetime, lr.id'
         );
         $st->execute([$studentUserId, $semesterId]);

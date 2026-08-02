@@ -35,20 +35,35 @@ class HoldBlockManagement {
         JOIN locations l ON l.id = hr.location_id
     ";
 
-    /** A materialized block plus everything it inherits from its reservation. */
+    /**
+     * A materialized block plus everything it inherits from its reservation.
+     *
+     * A one-off hold has no reservation, so its semester, teacher and location
+     * are read off the block itself and its title lives in title_override. The
+     * reservation still wins where there is one, so existing rows are
+     * unaffected. `is_ad_hoc` lets callers tell the two apart.
+     */
     private const BLOCK_SELECT = "
         SELECT b.*,
-               hr.semester_id, hr.teacher_user_id, hr.location_id, hr.day_of_week,
-               hr.status AS reservation_status, hr.title,
+               COALESCE(hr.semester_id, b.semester_id) AS semester_id,
+               COALESCE(hr.teacher_user_id, b.teacher_user_id) AS teacher_user_id,
+               COALESCE(hr.location_id, b.location_id) AS location_id,
+               hr.day_of_week, hr.status AS reservation_status, hr.title,
+               (b.semester_hold_block_reservation_id IS NULL) AS is_ad_hoc,
                COALESCE(b.title_override, hr.title) AS effective_title,
                tu.first_name AS teacher_first_name, tu.last_name AS teacher_last_name,
                tu.preferred_name AS teacher_preferred_name,
                l.name AS location_name
         FROM semester_hold_blocks b
-        JOIN semester_hold_block_reservations hr ON hr.id = b.semester_hold_block_reservation_id
-        JOIN users tu ON tu.id = hr.teacher_user_id
-        JOIN locations l ON l.id = hr.location_id
+        LEFT JOIN semester_hold_block_reservations hr ON hr.id = b.semester_hold_block_reservation_id
+        JOIN users tu ON tu.id = COALESCE(hr.teacher_user_id, b.teacher_user_id)
+        JOIN locations l ON l.id = COALESCE(hr.location_id, b.location_id)
     ";
+
+    // Filters cannot use the SELECT's aliases, so the same COALESCEs are
+    // named here and reused verbatim.
+    private const F_TEACHER = 'COALESCE(hr.teacher_user_id, b.teacher_user_id)';
+    private const F_SEMESTER = 'COALESCE(hr.semester_id, b.semester_id)';
 
     private static function pdo(): PDO {
         return pdo();
@@ -283,7 +298,7 @@ class HoldBlockManagement {
         $sql = self::BLOCK_SELECT . ' WHERE DATE(b.start_datetime) BETWEEN ? AND ?';
         $params = [$fromDate, $toDate];
         if ($semesterId !== null) {
-            $sql .= ' AND hr.semester_id = ?';
+            $sql .= ' AND ' . self::F_SEMESTER . ' = ?';
             $params[] = $semesterId;
         }
         $st = self::pdo()->prepare($sql . ' ORDER BY b.start_datetime');
@@ -295,7 +310,7 @@ class HoldBlockManagement {
     public static function holdBlocksBetweenForTeacher(int $teacherUserId, string $fromDate, string $toDate): array {
         $st = self::pdo()->prepare(
             self::BLOCK_SELECT .
-            ' WHERE DATE(b.start_datetime) BETWEEN ? AND ? AND hr.teacher_user_id = ?
+            ' WHERE DATE(b.start_datetime) BETWEEN ? AND ? AND ' . self::F_TEACHER . ' = ?
               ORDER BY b.start_datetime'
         );
         $st->execute([$fromDate, $toDate, $teacherUserId]);
@@ -306,7 +321,7 @@ class HoldBlockManagement {
     public static function holdBlocksForTeacherOnDate(int $teacherUserId, string $date): array {
         $st = self::pdo()->prepare(
             self::BLOCK_SELECT .
-            ' WHERE DATE(b.start_datetime) = ? AND hr.teacher_user_id = ?
+            ' WHERE DATE(b.start_datetime) = ? AND ' . self::F_TEACHER . ' = ?
               ORDER BY b.start_datetime'
         );
         $st->execute([$date, $teacherUserId]);
@@ -318,6 +333,68 @@ class HoldBlockManagement {
         $st->execute([$blockId]);
         $row = $st->fetch();
         return $row ?: null;
+    }
+
+    /**
+     * Hold one slot on the calendar without a standing weekly reservation
+     * behind it — the single afternoon out, not the every-week lunch.
+     *
+     * $fields: semester_id, teacher_user_id, location_id, start_datetime,
+     * duration_minutes, title. Returns the new block id.
+     */
+    public static function createAdHocHoldBlock(?UserContext $ctx, array $fields): int {
+        self::assertAdmin($ctx);
+
+        $semesterId = (int)($fields['semester_id'] ?? 0);
+        $teacherUserId = (int)($fields['teacher_user_id'] ?? 0);
+        $locationId = (int)($fields['location_id'] ?? 0);
+        $duration = (int)($fields['duration_minutes'] ?? 30);
+        $title = trim((string)($fields['title'] ?? ''));
+
+        $start = strtotime((string)($fields['start_datetime'] ?? ''));
+        if ($start === false) {
+            throw new InvalidArgumentException('That is not a time we understand.');
+        }
+        $startDatetime = date('Y-m-d H:i:s', $start);
+
+        if ($semesterId <= 0 || $teacherUserId <= 0 || $locationId <= 0) {
+            throw new InvalidArgumentException('A one-off hold needs a semester, a teacher and a location.');
+        }
+        if ($title === '') {
+            throw new InvalidArgumentException('Please say what this time is for.');
+        }
+        if ($duration <= 0 || $duration > 240) {
+            throw new InvalidArgumentException('That length looks wrong.');
+        }
+
+        $conflict = ScheduleConflicts::occurrenceConflict($teacherUserId, $startDatetime, $duration);
+        if ($conflict !== null) {
+            throw new InvalidArgumentException($conflict);
+        }
+
+        // The title lives in title_override, which is where a block's own
+        // title has always lived when it differs from its reservation's.
+        self::pdo()->prepare(
+            'INSERT INTO semester_hold_blocks
+               (semester_hold_block_reservation_id, semester_id, teacher_user_id, location_id,
+                start_datetime, duration_minutes, title_override, created_by_user_id)
+             VALUES (NULL,?,?,?,?,?,?,?)'
+        )->execute([
+            $semesterId, $teacherUserId, $locationId,
+            $startDatetime, $duration, $title, $ctx->id,
+        ]);
+        $blockId = (int)self::pdo()->lastInsertId();
+
+        self::log($ctx, 'hold_block.ad_hoc_created', [
+            'hold_block_id' => $blockId, 'semester_id' => $semesterId,
+            'teacher_user_id' => $teacherUserId, 'start_datetime' => $startDatetime,
+        ]);
+        return $blockId;
+    }
+
+    /** Was this block booked on its own, with no standing reservation? */
+    public static function isAdHoc(array $block): bool {
+        return empty($block['semester_hold_block_reservation_id']);
     }
 
     // ── Single occurrences ─────────────────────────────────────────────────

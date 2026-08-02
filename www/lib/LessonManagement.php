@@ -20,27 +20,45 @@ class LessonManagement {
         return pdo();
     }
 
-    /** The SELECT every lesson query shares: lesson + reservation + names. */
+    /**
+     * The SELECT every lesson query shares: lesson + reservation + names.
+     *
+     * A one-off lesson has no reservation, so the semester, teacher, student
+     * and location it would have inherited are read off the lesson itself.
+     * The reservation still wins where there is one, which keeps every
+     * existing row behaving exactly as before. `is_ad_hoc` lets callers tell
+     * the two apart without knowing how it is stored.
+     */
     private const LESSON_SELECT = "
         SELECT l.*,
-               r.semester_id, r.teacher_user_id, r.location_id, r.student_user_id,
+               COALESCE(r.semester_id, l.semester_id) AS semester_id,
+               COALESCE(r.teacher_user_id, l.teacher_user_id) AS teacher_user_id,
+               COALESCE(r.location_id, l.location_id) AS location_id,
+               COALESCE(r.student_user_id, l.student_user_id) AS student_user_id,
                r.day_of_week, r.status AS reservation_status,
                r.start_time AS reservation_start_time,
                r.duration_minutes AS reservation_duration_minutes,
-               COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) AS effective_teacher_user_id,
-               COALESCE(l.location_id_override, r.location_id) AS effective_location_id,
+               (l.semester_lesson_reservation_id IS NULL) AS is_ad_hoc,
+               COALESCE(l.substitute_teacher_user_id, r.teacher_user_id, l.teacher_user_id) AS effective_teacher_user_id,
+               COALESCE(l.location_id_override, r.location_id, l.location_id) AS effective_location_id,
                su.first_name AS student_first_name, su.last_name AS student_last_name,
                su.preferred_name AS student_preferred_name,
                tu.first_name AS teacher_first_name, tu.last_name AS teacher_last_name,
                stu.first_name AS substitute_first_name, stu.last_name AS substitute_last_name,
                loc.name AS location_name
         FROM lessons l
-        JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
-        JOIN users su ON su.id = r.student_user_id
-        JOIN users tu ON tu.id = r.teacher_user_id
+        LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+        JOIN users su ON su.id = COALESCE(r.student_user_id, l.student_user_id)
+        JOIN users tu ON tu.id = COALESCE(r.teacher_user_id, l.teacher_user_id)
         LEFT JOIN users stu ON stu.id = l.substitute_teacher_user_id
-        JOIN locations loc ON loc.id = COALESCE(l.location_id_override, r.location_id)
+        JOIN locations loc ON loc.id = COALESCE(l.location_id_override, r.location_id, l.location_id)
     ";
+
+    // Filters cannot use the SELECT's aliases (MySQL resolves WHERE before
+    // them), so the same COALESCEs are named here and reused verbatim.
+    private const F_TEACHER = 'COALESCE(l.substitute_teacher_user_id, r.teacher_user_id, l.teacher_user_id)';
+    private const F_SEMESTER = 'COALESCE(r.semester_id, l.semester_id)';
+    private const F_STUDENT = 'COALESCE(r.student_user_id, l.student_user_id)';
 
     // ── Queries ────────────────────────────────────────────────────────────
 
@@ -62,7 +80,7 @@ class LessonManagement {
         $st = self::pdo()->prepare(
             self::LESSON_SELECT .
             ' WHERE DATE(l.start_datetime) = ?
-                AND COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) = ?'
+                AND ' . self::F_TEACHER . ' = ?'
             . ($includeCancelled ? '' : ' AND l.cancelled_at IS NULL') .
             ' ORDER BY l.start_datetime'
         );
@@ -75,9 +93,9 @@ class LessonManagement {
         $st = self::pdo()->prepare(
             'SELECT DATE(l.start_datetime) AS d
              FROM lessons l
-             JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
              WHERE DATE(l.start_datetime) > ?
-               AND COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) = ?
+               AND ' . self::F_TEACHER . ' = ?
              ORDER BY l.start_datetime LIMIT 1'
         );
         $st->execute([$afterDate, $teacherUserId]);
@@ -90,9 +108,9 @@ class LessonManagement {
         $st = self::pdo()->prepare(
             'SELECT DATE(l.start_datetime) AS d
              FROM lessons l
-             JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
              WHERE DATE(l.start_datetime) < ?
-               AND COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) = ?
+               AND ' . self::F_TEACHER . ' = ?
              ORDER BY l.start_datetime DESC LIMIT 1'
         );
         $st->execute([$beforeDate, $teacherUserId]);
@@ -110,7 +128,7 @@ class LessonManagement {
         $sql = self::LESSON_SELECT . ' WHERE DATE(l.start_datetime) BETWEEN ? AND ?';
         $params = [$fromDate, $toDate];
         if ($semesterId !== null) {
-            $sql .= ' AND r.semester_id = ?';
+            $sql .= ' AND ' . self::F_SEMESTER . ' = ?';
             $params[] = $semesterId;
         }
         if (!$includeCancelled) {
@@ -126,7 +144,7 @@ class LessonManagement {
         $st = self::pdo()->prepare(
             self::LESSON_SELECT .
             ' WHERE DATE(l.start_datetime) BETWEEN ? AND ?
-                AND COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) = ?
+                AND ' . self::F_TEACHER . ' = ?
               ORDER BY l.start_datetime'
         );
         $st->execute([$fromDate, $toDate, $teacherUserId]);
@@ -142,8 +160,8 @@ class LessonManagement {
         $placeholders = implode(',', array_fill(0, count($semesterIds), '?'));
         $st = self::pdo()->prepare(
             self::LESSON_SELECT .
-            " WHERE r.semester_id IN ($placeholders)
-                AND COALESCE(l.substitute_teacher_user_id, r.teacher_user_id) = ?
+            ' WHERE ' . self::F_SEMESTER . " IN ($placeholders)
+                AND " . self::F_TEACHER . " = ?
               ORDER BY l.start_datetime"
         );
         $st->execute(array_merge($semesterIds, [$teacherUserId]));
@@ -161,7 +179,7 @@ class LessonManagement {
         $semesterPlaceholders = implode(',', array_fill(0, count($semesterIds), '?'));
         $st = self::pdo()->prepare(
             self::LESSON_SELECT .
-            " WHERE r.semester_id IN ($semesterPlaceholders) AND r.student_user_id IN ($studentPlaceholders)
+            ' WHERE ' . self::F_SEMESTER . " IN ($semesterPlaceholders) AND " . self::F_STUDENT . " IN ($studentPlaceholders)
               ORDER BY l.start_datetime"
         );
         $st->execute(array_merge($semesterIds, $ids));
@@ -177,7 +195,7 @@ class LessonManagement {
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $st = self::pdo()->prepare(
             self::LESSON_SELECT .
-            " WHERE DATE(l.start_datetime) BETWEEN ? AND ? AND r.student_user_id IN ($placeholders)
+            " WHERE DATE(l.start_datetime) BETWEEN ? AND ? AND " . self::F_STUDENT . " IN ($placeholders)
               ORDER BY l.start_datetime"
         );
         $st->execute(array_merge([$fromDate, $toDate], $ids));
@@ -189,7 +207,7 @@ class LessonManagement {
         $limit = max(1, min(100, $limit));
         $st = self::pdo()->prepare(
             self::LESSON_SELECT .
-            " WHERE r.student_user_id = ? AND DATE(l.start_datetime) >= ?
+            ' WHERE ' . self::F_STUDENT . " = ? AND DATE(l.start_datetime) >= ?
               ORDER BY l.start_datetime LIMIT $limit"
         );
         $st->execute([$studentUserId, $fromDate]);
@@ -203,6 +221,93 @@ class LessonManagement {
     }
 
     // ── Mutations ──────────────────────────────────────────────────────────
+
+    /**
+     * Book a single lesson straight onto the calendar, with no standing weekly
+     * reservation behind it — the one-off make-up or trial that does not
+     * belong to a pattern.
+     *
+     * It carries no charge. Money follows a confirmed reservation, and there
+     * is deliberately no reservation here.
+     *
+     * $fields: semester_id, teacher_user_id, student_user_id, location_id,
+     * start_datetime, duration_minutes. Returns the new lesson id.
+     */
+    public static function createAdHocLesson(?UserContext $ctx, array $fields): int {
+        self::assertAdmin($ctx);
+
+        $semesterId = (int)($fields['semester_id'] ?? 0);
+        $teacherUserId = (int)($fields['teacher_user_id'] ?? 0);
+        $studentUserId = (int)($fields['student_user_id'] ?? 0);
+        $locationId = (int)($fields['location_id'] ?? 0);
+        $duration = (int)($fields['duration_minutes'] ?? 30);
+
+        $start = strtotime((string)($fields['start_datetime'] ?? ''));
+        if ($start === false) {
+            throw new InvalidArgumentException('That is not a time we understand.');
+        }
+        $startDatetime = date('Y-m-d H:i:s', $start);
+
+        if ($semesterId <= 0 || $locationId <= 0) {
+            throw new InvalidArgumentException('A one-off lesson needs a semester and a location.');
+        }
+        if ($studentUserId <= 0) {
+            throw new InvalidArgumentException('Please pick a student.');
+        }
+        if ($duration <= 0 || $duration > 240) {
+            throw new InvalidArgumentException('Lesson length looks wrong.');
+        }
+        $st = self::pdo()->prepare('SELECT 1 FROM teacher_profiles WHERE user_id=?');
+        $st->execute([$teacherUserId]);
+        if (!$st->fetchColumn()) {
+            throw new InvalidArgumentException('That is not a teacher.');
+        }
+
+        // The teacher has to actually be free — a one-off is a real commitment.
+        $conflict = ScheduleConflicts::occurrenceConflict($teacherUserId, $startDatetime, $duration);
+        if ($conflict !== null) {
+            throw new InvalidArgumentException($conflict);
+        }
+
+        // lesson_number 0: this is not the Nth of anything.
+        self::pdo()->prepare(
+            'INSERT INTO lessons
+               (semester_lesson_reservation_id, semester_id, teacher_user_id, student_user_id, location_id,
+                start_datetime, duration_minutes, lesson_number, created_by_user_id)
+             VALUES (NULL,?,?,?,?,?,?,0,?)'
+        )->execute([
+            $semesterId, $teacherUserId, $studentUserId, $locationId,
+            $startDatetime, $duration, $ctx->id,
+        ]);
+        $lessonId = (int)self::pdo()->lastInsertId();
+
+        self::log($ctx, 'lesson.ad_hoc_created', [
+            'lesson_id' => $lessonId, 'semester_id' => $semesterId,
+            'teacher_user_id' => $teacherUserId, 'student_user_id' => $studentUserId,
+            'start_datetime' => $startDatetime,
+        ]);
+        return $lessonId;
+    }
+
+    /** Was this lesson booked on its own, with no standing reservation? */
+    public static function isAdHoc(array $lesson): bool {
+        return empty($lesson['semester_lesson_reservation_id']);
+    }
+
+    /**
+     * Remove a one-off lesson outright. A lesson that belongs to a reservation
+     * is never deleted here — cancel it instead, so the family keeps the record
+     * of a lesson that was promised.
+     */
+    public static function deleteAdHocLesson(?UserContext $ctx, int $lessonId): void {
+        self::assertAdmin($ctx);
+        $lesson = self::requireLesson($lessonId);
+        if (!self::isAdHoc($lesson)) {
+            throw new InvalidArgumentException('This lesson belongs to a weekly booking — cancel it instead.');
+        }
+        self::pdo()->prepare('DELETE FROM lessons WHERE id=?')->execute([$lessonId]);
+        self::log($ctx, 'lesson.ad_hoc_deleted', ['lesson_id' => $lessonId]);
+    }
 
     /**
      * Move one lesson to another moment, and/or hand it to another teacher.
@@ -242,13 +347,18 @@ class LessonManagement {
         // reservation's own teacher.
         $ownTeacherId = (int)$lesson['teacher_user_id'];
         $newTeacherId = $teacherUserId ?? (int)$lesson['effective_teacher_user_id'];
-        $substituteId = $newTeacherId === $ownTeacherId ? null : $newTeacherId;
+        $adHoc = self::isAdHoc($lesson);
+        // A one-off has no standing teacher to substitute FOR, so dropping it
+        // on another column simply changes whose lesson it is.
+        $substituteId = ($adHoc || $newTeacherId === $ownTeacherId) ? null : $newTeacherId;
 
-        if ($substituteId !== null) {
+        if ($newTeacherId !== $ownTeacherId) {
             $st = self::pdo()->prepare('SELECT 1 FROM teacher_profiles WHERE user_id=?');
-            $st->execute([$substituteId]);
+            $st->execute([$newTeacherId]);
             if (!$st->fetchColumn()) {
-                throw new InvalidArgumentException('The substitute must be a teacher.');
+                throw new InvalidArgumentException(
+                    $adHoc ? 'That is not a teacher.' : 'The substitute must be a teacher.'
+                );
             }
         }
 
@@ -259,20 +369,28 @@ class LessonManagement {
             throw new InvalidArgumentException($conflict);
         }
 
-        // A location override is only worth storing when it actually differs
-        // from the reservation's own location.
         $newLocationId = $locationId ?? (int)$lesson['effective_location_id'];
-        $locationOverride = $newLocationId === (int)$lesson['location_id'] ? null : $newLocationId;
 
-        self::pdo()->prepare(
-            'UPDATE lessons SET start_datetime=?, substitute_teacher_user_id=?, location_id_override=? WHERE id=?'
-        )->execute([$newStart, $substituteId, $locationOverride, $lessonId]);
+        if ($adHoc) {
+            // Nothing to override against: the one-off owns these outright.
+            self::pdo()->prepare(
+                'UPDATE lessons SET start_datetime=?, teacher_user_id=?, location_id=? WHERE id=?'
+            )->execute([$newStart, $newTeacherId, $newLocationId, $lessonId]);
+        } else {
+            // An override is only worth storing when it actually differs from
+            // the reservation's own location.
+            $locationOverride = $newLocationId === (int)$lesson['location_id'] ? null : $newLocationId;
+            self::pdo()->prepare(
+                'UPDATE lessons SET start_datetime=?, substitute_teacher_user_id=?, location_id_override=? WHERE id=?'
+            )->execute([$newStart, $substituteId, $locationOverride, $lessonId]);
+        }
 
         self::log($ctx, 'lesson.moved', [
             'lesson_id' => $lessonId,
             'start_datetime' => $newStart,
-            'substitute_teacher_user_id' => $substituteId,
-            'location_id_override' => $locationOverride,
+            'ad_hoc' => $adHoc,
+            'teacher_user_id' => $newTeacherId,
+            'location_id' => $newLocationId,
         ]);
     }
 

@@ -74,9 +74,9 @@ class NotesManagement {
                     a.first_name AS teacher_first_name, a.last_name AS teacher_last_name
              FROM lesson_notes ln
              JOIN lessons l ON l.id = ln.lesson_id
-             JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
              JOIN users a ON a.id = ln.created_by_user_id
-             WHERE ln.body <> '' AND r.student_user_id = ?
+             WHERE ln.body <> '' AND COALESCE(r.student_user_id, l.student_user_id) = ?
              ORDER BY l.start_datetime DESC
              LIMIT $limit"
         );

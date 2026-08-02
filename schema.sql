@@ -374,10 +374,16 @@ CREATE INDEX idx_slr_student ON semester_lesson_reservations(student_user_id, se
 -- stable across regeneration.
 CREATE TABLE lessons (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  semester_lesson_reservation_id INT NOT NULL,
+  semester_lesson_reservation_id INT DEFAULT NULL COMMENT 'NULL for a one-off lesson booked straight onto the calendar',
+  -- Set only on a one-off, where there is no reservation to inherit from.
+  -- Every read COALESCEs the reservation's value over these.
+  semester_id INT DEFAULT NULL,
+  teacher_user_id INT DEFAULT NULL,
+  student_user_id INT DEFAULT NULL,
+  location_id INT DEFAULT NULL,
   start_datetime DATETIME NOT NULL,
   duration_minutes INT NOT NULL DEFAULT 30,
-  lesson_number INT NOT NULL COMMENT 'Ordinal within the semester for this reservation',
+  lesson_number INT NOT NULL COMMENT 'Ordinal within the semester for this reservation; 0 for a one-off',
   location_id_override INT DEFAULT NULL,
   substitute_teacher_user_id INT DEFAULT NULL COMMENT 'Teacher override: who actually taught',
   attended TINYINT(1) DEFAULT NULL COMMENT 'NULL=unmarked, 1=attended, 0=missed',
@@ -388,6 +394,10 @@ CREATE TABLE lessons (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY unique_reservation_number (semester_lesson_reservation_id, lesson_number),
   CONSTRAINT fk_l_reservation FOREIGN KEY (semester_lesson_reservation_id) REFERENCES semester_lesson_reservations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_l_semester FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE CASCADE,
+  CONSTRAINT fk_l_teacher FOREIGN KEY (teacher_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_l_student FOREIGN KEY (student_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_l_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
   CONSTRAINT fk_l_loc_override FOREIGN KEY (location_id_override) REFERENCES locations(id) ON DELETE SET NULL,
   CONSTRAINT fk_l_sub_teacher FOREIGN KEY (substitute_teacher_user_id) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT fk_l_cancelled_by FOREIGN KEY (cancelled_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
@@ -433,7 +443,12 @@ CREATE INDEX idx_shbr_grid ON semester_hold_block_reservations(semester_id, loca
 -- lets one week say something different from the standing title.
 CREATE TABLE semester_hold_blocks (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  semester_hold_block_reservation_id INT NOT NULL,
+  semester_hold_block_reservation_id INT DEFAULT NULL COMMENT 'NULL for a one-off hold booked straight onto the calendar',
+  -- Set only on a one-off; title_override carries its title. Every read
+  -- COALESCEs the reservation's value over these.
+  semester_id INT DEFAULT NULL,
+  teacher_user_id INT DEFAULT NULL,
+  location_id INT DEFAULT NULL,
   start_datetime DATETIME NOT NULL,
   duration_minutes INT NOT NULL DEFAULT 30,
   title_override VARCHAR(200) DEFAULT NULL,
@@ -442,6 +457,9 @@ CREATE TABLE semester_hold_blocks (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY unique_hold_block_start (semester_hold_block_reservation_id, start_datetime),
   CONSTRAINT fk_shb_reservation FOREIGN KEY (semester_hold_block_reservation_id) REFERENCES semester_hold_block_reservations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_shb_semester FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE CASCADE,
+  CONSTRAINT fk_shb_teacher FOREIGN KEY (teacher_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_shb_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
   CONSTRAINT fk_shb_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 

@@ -10,6 +10,7 @@ require_once __DIR__ . '/../lib/HoldBlockManagement.php';
 require_once __DIR__ . '/../lib/NotesManagement.php';
 require_once __DIR__ . '/../lib/LessonUIManager.php';
 require_once __DIR__ . '/../lib/HoldBlockUIManager.php';
+require_once __DIR__ . '/../lib/CalendarAddUIManager.php';
 require_once __DIR__ . '/schedule_edit_mode.php';
 Application::init();
 require_admin();
@@ -119,8 +120,12 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson, 
                 }
             }
         }
-        // Empty cells carry the real date as well as the slot, because a drag
-        // here moves one dated lesson, not a weekly pattern.
+        // Empty cells carry the real date as well as the slot, because both
+        // dragging and adding here act on one dated occurrence, not a weekly
+        // pattern.
+        $date = date('Y-m-d', strtotime('+' . (int)$row['day'] . ' days', $weekStartTs));
+        $teacherLabel = ($column['teacher_preferred_name'] ?: $column['teacher_first_name'])
+            . ' ' . $column['teacher_last_name'];
         return [
             'html' => '',
             'class' => '',
@@ -129,8 +134,12 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $notesByLesson, 
                 'data-slot-key' => $slotKey,
                 'data-location-id' => $column['location_id'],
                 'data-teacher-id' => $column['teacher_user_id'],
-                'data-date' => date('Y-m-d', strtotime('+' . (int)$row['day'] . ' days', $weekStartTs)),
+                'data-date' => $date,
                 'data-time' => substr($row['time'], 0, 5),
+                'data-context' => date('D M j', strtotime($date))
+                    . ' · ' . date('g:i a', mktime(intdiv($row['minutes'], 60), $row['minutes'] % 60))
+                    . ' · ' . $teacherLabel
+                    . ' · ' . $column['location_name'],
             ],
         ];
     }
@@ -236,8 +245,11 @@ header_html('Calendar Week', ['wide' => true]);
 </div>
 
 <?php if (!$lessons && !$holdBlocks): ?>
-  <div class="card"><p>Nothing scheduled this week.</p></div>
-<?php else: ?>
+  <p class="small">Nothing scheduled this week yet.</p>
+<?php endif; ?>
+
+<?php /* The grid is drawn even on an empty week — that is precisely when you
+         want to be able to click a slot and put something in it. */ ?>
   <?=schedule_grid_html($columns, $rows, $cellFn)?>
   <div class="grid-legend" style="margin-top:10px;">
     <span><span class="swatch" style="background:var(--res-paid-bg);"></span>Scheduled</span>
@@ -245,14 +257,15 @@ header_html('Calendar Week', ['wide' => true]);
     <span><span class="swatch" style="background:#fff;"></span><em class="small">Missed</em></span>
     <span><span class="swatch" style="background:var(--res-hold-bg);"></span>Hold block</span>
   </div>
-  <p class="small" style="margin-top:10px;">Click a lesson to reschedule it, mark it missed,
-  assign a substitute, cancel it, or add a note. Click a grey hold block to change just that
-  week. Press <strong>Edit</strong> to drag a lesson to another time — dropping it on another
-  teacher makes them the substitute for that week.</p>
-<?php endif; ?>
+  <p class="small" style="margin-top:10px;">Click an empty cell to add a one-off lesson or hold
+  this time. Click a lesson to mark it missed, assign a substitute, change its location, cancel
+  it, or add a note. Click a grey hold block to change just that week. Press <strong>Edit</strong>
+  to drag a lesson to another time — dropping it on another teacher makes them the substitute for
+  that week.</p>
 
 <?php LessonUIManager::renderModal($semesterId); ?>
 <?php HoldBlockUIManager::renderModal(); ?>
+<?php CalendarAddUIManager::renderModal($semesterId); ?>
 <?php render_schedule_edit_mode([
     'endpoint' => '/admin/lesson_move.php',
     'item_attr' => 'lessonId',

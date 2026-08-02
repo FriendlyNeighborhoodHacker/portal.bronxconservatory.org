@@ -391,8 +391,10 @@ class Billing {
     private static function studentHasOccurredLessonInSemester(int $studentUserId, int $semesterId): bool {
         $st = self::pdo()->prepare(
             'SELECT 1 FROM lessons l
-             JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
-             WHERE r.student_user_id = ? AND r.semester_id = ? AND l.start_datetime <= NOW()
+             LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             WHERE COALESCE(r.student_user_id, l.student_user_id) = ?
+               AND COALESCE(r.semester_id, l.semester_id) = ?
+               AND l.start_datetime <= NOW()
              LIMIT 1'
         );
         $st->execute([$studentUserId, $semesterId]);
