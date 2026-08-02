@@ -16,7 +16,7 @@ ApplicationUI::minimalHeaderHtml('Register — Payment Plan');
 
   <?php if ($error): ?><p class="error"><?=h($error)?></p><?php endif; ?>
 
-  <p>Check "Yes" below if you wish to pay tuition in two installments. There is a
+  <p><span class="prompt-em">Would you like to pay in two installments?</span> There is a
     <?=registration_dollars(Settings::installmentFeeCents())?> fee for this option. Check "No"
     if you intend to pay the full tuition upfront.</p>
 

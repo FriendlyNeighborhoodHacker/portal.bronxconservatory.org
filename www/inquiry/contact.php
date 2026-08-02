@@ -16,7 +16,7 @@ ApplicationUI::minimalHeaderHtml('Request Information — Contact');
   <h1>Request information about our programs</h1>
   <?=inquiry_steps_html(1)?>
 
-  <p>Tell us a little about who you are and who would like to study with us, and a member of
+  <p><span class="prompt-em">Tell us a little about who you are</span> and who would like to study with us, and a member of
     our team will be in touch. It takes about three minutes, and there is nothing to pay.</p>
 
   <?php if ($error): ?><p class="error"><?=h($error)?></p><?php endif; ?>
