@@ -175,6 +175,32 @@ final class LessonManagementTest extends TestCase
 
         $between = LessonManagement::lessonsBetweenForStudents([$student], '2030-09-01', '2030-09-30');
         $this->assertCount(3, $between);
+
+        // Looking back: most recent first, which is where the notes are.
+        $past = LessonManagement::recentLessonsForStudent($student, '2030-09-21');
+        $this->assertSame(['2030-09-14 10:00:00', '2030-09-07 10:00:00'], array_column($past, 'start_datetime'));
+        $this->assertSame([], LessonManagement::recentLessonsForStudent($student, '2030-09-07'));
+    }
+
+    public function testTeachingDaysCountLessonsAndNameThePlaces(): void
+    {
+        [$teacher, , , , , $lessonIds] = $this->makeConfirmed('2030-09-07', 3);
+
+        $days = LessonManagement::upcomingTeachingDaysForTeacher($teacher, '2030-09-01');
+        $this->assertSame(['2030-09-07', '2030-09-14', '2030-09-21'], array_column($days, 'lesson_date'));
+        $this->assertSame(1, (int)$days[0]['lesson_count']);
+        $this->assertNotSame('', (string)$days[0]['location_names']);
+        // The day ends when the last lesson ends, not when it starts.
+        $this->assertSame('2030-09-07 10:30:00', (string)$days[0]['last_end']);
+
+        // Days already gone are not upcoming.
+        $this->assertSame(['2030-09-14', '2030-09-21'],
+            array_column(LessonManagement::upcomingTeachingDaysForTeacher($teacher, '2030-09-08'), 'lesson_date'));
+
+        // A day whose lessons were all called off is not a day they work.
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[1]);
+        $this->assertSame(['2030-09-07', '2030-09-21'],
+            array_column(LessonManagement::upcomingTeachingDaysForTeacher($teacher, '2030-09-01'), 'lesson_date'));
     }
 
     // ===== Cancelling a lesson =====
