@@ -392,13 +392,6 @@ The colors in the schedule and calendar should remain exactly how they are as th
 
 The interface should be generally light with white backgrounds, dark text, and soft pastel accents (specific collors mentioned above) for chat bubbles and UI elements to encourage a clean, organized, and inviting community atmosphere. App Interface: White backgrounds. Overall Vibe: Friendly, modern, and uncluttered.
 
-## Fonts.
-I want the main font of the app to be BD Megalona Extra Light. This font should be used for titles, and when the app is asking the user to do something. Normal fonds should be in BB Noname Pro Regular
-
-## Bolding and italicizing
-Any text with instructions to the user should bold and italicize the most important part of that text so that it is easy to read. An example of this is “What’s your number?” or “Enter your code.” Anything text that is bold and italicized should be in BD Megalona Extra Light.
-
-
 Style should be guided by the slogan "warm, not institutional."
 
 BCM's families are often navigating systems that feel cold or bureaucratic. The portal should feel like an extension of the conservatory itself — welcoming, personal, and human. Real photos, warm language, the BCM gold-and-navy brand, and a visible phone number on every page.
