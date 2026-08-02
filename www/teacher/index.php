@@ -41,12 +41,14 @@ if (!$lessons && $requestedDate === null) {
 $prevDay = LessonManagement::previousTeachingDateForTeacher((int)$me['id'], $date);
 $nextDay = LessonManagement::nextTeachingDateForTeacher((int)$me['id'], $date);
 
-if ($date === $today && $lessons) {
-    $title = "Today's Lessons";
-} elseif ($showingNextDay) {
-    $title = 'Upcoming Lessons';
-} else {
+if ($requestedDate !== null) {
     $title = 'Lessons for ' . date('D, M j', strtotime($date));
+} elseif ($date === $today && $lessons) {
+    $title = "Today's Lessons";
+} else {
+    // The next teaching day, or nothing scheduled at all — either way this
+    // page is about what is coming rather than about today.
+    $title = 'Upcoming Lessons';
 }
 
 header_html($title);
@@ -70,7 +72,8 @@ header_html($title);
 <?php endif; ?>
 
 <?php if (!$lessons): ?>
-  <p class="small">No lessons on this day.
+  <p class="small">
+    <?php if ($requestedDate !== null): ?>No lessons on this day.<?php else: ?>You have no lessons scheduled yet.<?php endif; ?>
     <?php if ($nextDay): ?>Your next teaching day is
       <a href="/teacher/index.php?date=<?=h($nextDay)?>"><?=h(date('l, M j', strtotime($nextDay)))?></a>.<?php endif; ?>
   </p>

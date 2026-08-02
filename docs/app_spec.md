@@ -299,19 +299,36 @@ The parents menu should be:
 2. Homepage - Students
 - My Schedule: Upcoming classes (note breaks)
 ... shows all upcoming lessons and inactive semester_location_dates for the current semester that are on the same weekday is the person's semester_lesson_reservation, so that they know when holidays are.
-- Teacher Notes (most recent first)
+... every lesson opens its notes and materials in a modal, where the student can add a note of their own.
+- Recent Lessons: the last few lessons, which is where the notes and materials from them are.
+- Notes (most recent first)
 - My Materials (shows resources linked to lessons this semester, in order of the chronological date of the lesson)
 
 The students menu should be:
 [Calendar] [Materials] [Profile photo (to edit profile)]
 
 3. Homepage - Teachers
-- Today's lessons: Simple list of today's lessons in chronological order.  Each row shows time, student name, class name, Room / location.  Online lessons should be tagged with an icon.  Can log a note by clicking on a log link here.  Typing a note should auto-save. It should be easy to mark that the student attended the lesson (or missed the lesson)
-- Should be able to navigate to the next day the person has lessons
+- Today's lessons: one card per lesson of a single day, in chronological order.  Each card shows time, student name, class name, Room / location.  Online lessons should be tagged with an icon.  It should be easy to mark that the student attended the lesson (or missed the lesson) - and to take that mark back off again ("Unmark", with a confirmation), because a mis-tap between two lessons should not be permanent.
+... Lessons are sparse, so when there are none today the page shows the next day that has any, under the title "Upcoming Lessons".  There is no date picker for the same reason - most dates have nothing on them.  Navigation is by teaching day: arrows to the previous/next one, and the Teaching Days view for the list.
+... Each card carries the lesson's notes and its materials, so the teacher never has to leave the day to write one.  "Add a resource" attaches a file or a link (each with a title) in a modal.
+- Teaching Days: just the dates a teacher works, with where they are and how many lessons - the view that answers "am I at Bronx CC on Saturday?".  Each day opens the hour-by-hour view.
 - [Calendar]
 
 The teachers' menu should be:
-[Calendar] [Profile photo (to edit profile)]
+[Teaching Days] [Calendar] [Profile photo (to edit profile)]
+
+## Lesson notes
+
+Notes belong to a lesson, not to a person: each one is its own row, kept for
+good, and shown with who wrote it and when.  Anyone who may see a lesson may
+add a note to it - its teacher, an admin, the student, and their parents - so
+"she has a cold, can we make this up?" and the teacher's account of the lesson
+sit in the same short thread.  Notes are saved with a button, never
+auto-saved: the teacher should know it was written down.
+
+The family reaches them from their schedule - every lesson on the student's
+and the parent's pages, past and upcoming, opens its notes and materials in a
+modal that they can add to.
 
 The teacher calendar should be like the admin calendar for the monthly view.
 The weekly view should be just a list of lessons that week in chronological order.
