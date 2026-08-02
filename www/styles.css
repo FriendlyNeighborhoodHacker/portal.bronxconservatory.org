@@ -98,23 +98,6 @@ h1 { font-size: 2rem; margin: 0 0 0.4em; }
 h2 { font-size: 1.5rem; }
 h3 { font-size: 1.15rem; }
 
-/* The most important words of instruction text ("Enter your code.") are bold
-   italic in the display font so they are easy to pick out. */
-.prompt-em {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-style: italic;
-}
-
-/* A whole line of instruction — the question a screen is asking. */
-.prompt {
-  font-family: var(--font-display);
-  font-weight: 300;
-  font-size: 1.15rem;
-  color: var(--color-navy);
-  margin: 0 0 10px;
-}
-
 a {
   color: var(--color-primary);
 }

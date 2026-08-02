@@ -25,7 +25,7 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
     <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
 
     <h3>Student Information</h3>
-    <p class="prompt"><span class="prompt-em">Tell us about the student(s)</span> who will be studying.</p>
+    <p class="small">Please tell us about the student(s) who will be studying.</p>
 
     <?php foreach ($students as $i => $student): ?>
     <fieldset class="card stack" style="position:relative;">

@@ -43,7 +43,7 @@ $resetDone = !empty($_GET['reset']);
     <?php endif; ?>
     <div style="text-align:center; margin-bottom:8px;"><?=ApplicationUI::brandWordmarkHtml()?></div>
     <h1 style="text-align: center;">Login</h1>
-    <p class="subtitle" style="text-align: center;"><span class="prompt-em">Sign in</span> to <?=h(Settings::siteTitle())?></p>
+    <p class="subtitle" style="text-align: center;">Sign in to <?=h(Settings::siteTitle())?></p>
     <?php if (!empty($verified)): ?><p class="flash">Email verified. You can now sign in.</p><?php endif; ?>
     <?php if (!empty($resetDone)): ?><p class="flash">Your password has been reset. You can now sign in.</p><?php endif; ?>
     <?php if (!empty($verifyError)): ?><p class="error">Invalid or expired verification link.</p><?php endif; ?>
