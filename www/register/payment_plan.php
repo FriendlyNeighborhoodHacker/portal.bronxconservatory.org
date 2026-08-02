@@ -2,7 +2,7 @@
 // Registration wizard step 4: installment plan choice.
 require_once __DIR__ . '/register_ui.php';
 Application::init();
-registration_require_open();
+$semester = registration_require_open();
 $state = registration_require_step(4);
 
 $error = registration_flash_error();
@@ -17,7 +17,7 @@ ApplicationUI::minimalHeaderHtml('Register — Payment Plan');
   <?php if ($error): ?><p class="error"><?=h($error)?></p><?php endif; ?>
 
   <p>Check "Yes" below if you wish to pay tuition in two installments. There is a
-    <?=registration_dollars(Settings::installmentFeeCents())?> fee for this option. Check "No"
+    <?=registration_dollars(SemesterManagement::installmentPlanFeeCents($semester))?> fee for this option. Check "No"
     if you intend to pay the full tuition upfront.</p>
 
   <form method="post" action="/register/payment_plan_eval.php" class="stack">
@@ -28,7 +28,7 @@ ApplicationUI::minimalHeaderHtml('Register — Payment Plan');
     </label>
     <label class="inline">
       <input type="radio" name="installment" value="1"<?=$installment === 1 || $installment === '1' ? ' checked' : ''?>>
-      <span><strong>Yes</strong> — installment plan (+<?=registration_dollars(Settings::installmentFeeCents())?>):
+      <span><strong>Yes</strong> — installment plan (+<?=registration_dollars(SemesterManagement::installmentPlanFeeCents($semester))?>):
         fees and 50% of tuition today, the remaining tuition due by week 4 of the semester.</span>
     </label>
     <div class="actions">

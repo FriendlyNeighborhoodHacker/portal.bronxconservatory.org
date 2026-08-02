@@ -65,17 +65,11 @@ CREATE TABLE settings (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- Costs are dollar strings; Settings exposes them in cents
--- (Settings::registrationCostCents() etc.). registration_cost /
--- semester_lesson_cost / recital_fee price a semester confirmation;
--- registration_cost and recital_fee ALSO price the public registration
--- quote (registration: once per family; recital: per lesson block), and
--- tuition_30 / tuition_60 / tuition_ensemble / installment_fee exist only
--- for that quote. registration_semester_id is the semester the public
--- registration wizard is open for ('' = registration closed).
--- inquiry_semester_options are the Semester choices on the public information
--- request form (a JSON array of labels — these are free text, not semesters
--- rows), and inquiry_notification_email is where its staff notification goes.
+-- registration_semester_id is the semester the public registration wizard is
+-- open for ('' = registration closed). inquiry_semester_options are the
+-- Semester choices on the public information request form (a JSON array of
+-- labels — these are free text, not semesters rows), and inquiry_notification_email
+-- is where its staff notification goes. Pricing now lives on semesters table.
 INSERT INTO settings (key_name, value) VALUES
   ('site_title', 'BCM Portal'),
   ('announcement', ''),
@@ -83,14 +77,6 @@ INSERT INTO settings (key_name, value) VALUES
   ('login_image_file_id', ''),
   ('site_base_url', 'https://portal.bronxconservatory.org'),
   ('contact_phone', '(718) 841-7415'),
-  ('registration_cost', '35.00'),
-  ('semester_lesson_cost', '300.00'),
-  ('recital_fee', '10.00'),
-  ('tuition_30', '420.00'),
-  ('tuition_60', '840.00'),
-  ('tuition_ensemble', '270.00'),
-  ('installment_fee', '20.00'),
-  ('semester_weeks', '15'),
   ('registration_semester_id', ''),
   ('inquiry_semester_options', '["Fall 2026","Spring 2027","Summer 2027"]'),
   ('inquiry_notification_email', 'info@bronxconservatory.org')
@@ -282,6 +268,13 @@ CREATE TABLE semesters (
   end_date DATE NOT NULL,
   created_by_user_id INT DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  registration_fee DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Charged once per student when their semester reservation is confirmed',
+  lesson_fee_30_minutes DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Full-semester price for weekly 30-minute private lessons',
+  lesson_fee_60_minutes DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Full-semester price for weekly 60-minute private lessons',
+  guitar_ensemble_fee DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Full-semester price for 30-minute Guitar Ensemble',
+  recital_fee DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Charged per lesson block',
+  installment_plan_fee DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'One-time fee for paying tuition in two installments',
+  lessons_per_semester INT NOT NULL DEFAULT 15 COMMENT 'Used for per-lesson price display on registration form',
   UNIQUE KEY unique_season_year (season, year),
   CONSTRAINT fk_sem_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;

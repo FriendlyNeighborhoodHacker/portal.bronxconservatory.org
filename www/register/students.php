@@ -63,14 +63,14 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
         </label>
         <label>Lesson length
           <select name="students[<?=$i?>][lesson_length_minutes]">
-            <option value="30"<?=(int)($student['lesson_length_minutes'] ?? 30) === 30 ? ' selected' : ''?>>30 minutes (<?=$dollars(Settings::tuition30Cents())?>/semester)</option>
-            <option value="60"<?=(int)($student['lesson_length_minutes'] ?? 0) === 60 ? ' selected' : ''?>>60 minutes (<?=$dollars(Settings::tuition60Cents())?>/semester)</option>
+            <option value="30"<?=(int)($student['lesson_length_minutes'] ?? 30) === 30 ? ' selected' : ''?>>30 minutes (<?=$dollars(SemesterManagement::lessonFeeCents($semester, 30))?>/semester)</option>
+            <option value="60"<?=(int)($student['lesson_length_minutes'] ?? 0) === 60 ? ' selected' : ''?>>60 minutes (<?=$dollars(SemesterManagement::lessonFeeCents($semester, 60))?>/semester)</option>
           </select>
         </label>
       </div>
       <label class="inline">
         <input type="checkbox" name="students[<?=$i?>][guitar_ensemble]" value="1"<?=!empty($student['guitar_ensemble']) ? ' checked' : ''?>>
-        Also interested in the 30-minute Guitar Ensemble (<?=$dollars(Settings::tuitionEnsembleCents())?>/semester)
+        Also interested in the 30-minute Guitar Ensemble (<?=$dollars(SemesterManagement::guitarEnsembleFeeCents($semester))?>/semester)
       </label>
     </fieldset>
     <?php endforeach; ?>
@@ -131,14 +131,14 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
 
     <div class="card">
       <h3 style="margin-top:0;">Recital &amp; Logistics Fee</h3>
-      <p class="small">A <?=$dollars(Settings::recitalFeeCents())?> per lesson block, per student, per semester fee will be
-        added at registration. This is not <?=$dollars(Settings::recitalFeeCents())?> per individual lesson, but a one-time
+      <p class="small">A <?=$dollars(SemesterManagement::recitalFeeCents($semester))?> per lesson block, per student, per semester fee will be
+        added at registration. This is not <?=$dollars(SemesterManagement::recitalFeeCents($semester))?> per individual lesson, but a one-time
         fee per subject.</p>
       <p class="small">Examples:<br>
-        • 1 student taking piano = <?=$dollars(Settings::recitalFeeCents())?> total<br>
-        • 1 student taking both piano &amp; violin = <?=$dollars(2 * Settings::recitalFeeCents())?> total<br>
-        • 2 siblings taking 1 lesson each = <?=$dollars(2 * Settings::recitalFeeCents())?> total<br>
-        • 3 siblings taking 1 lesson each = <?=$dollars(3 * Settings::recitalFeeCents())?>.</p>
+        • 1 student taking piano = <?=$dollars(SemesterManagement::recitalFeeCents($semester))?> total<br>
+        • 1 student taking both piano &amp; violin = <?=$dollars(2 * SemesterManagement::recitalFeeCents($semester))?> total<br>
+        • 2 siblings taking 1 lesson each = <?=$dollars(2 * SemesterManagement::recitalFeeCents($semester))?> total<br>
+        • 3 siblings taking 1 lesson each = <?=$dollars(3 * SemesterManagement::recitalFeeCents($semester))?>.</p>
       <p class="small">This supports recital venue costs, accompanists, program printing, and
         other logistical fees. Thank you for helping us provide high-quality performance
         experiences!</p>

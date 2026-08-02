@@ -55,51 +55,6 @@ class Settings {
         return self::get('contact_phone', '(718) 841-7415');
     }
 
-    // ── Semester pricing ────────────────────────────────────────────────
-    // Stored as dollar strings ("300.00"), exposed in integer cents (exact
-    // arithmetic; matches Stripe's unit). Charged to a student's ledger when
-    // their semester reservation is confirmed.
-
-    public static function registrationCostCents(): int {
-        return self::dollarsToCents(self::get('registration_cost', '0'));
-    }
-
-    public static function semesterLessonCostCents(): int {
-        return self::dollarsToCents(self::get('semester_lesson_cost', '0'));
-    }
-
-    public static function recitalFeeCents(): int {
-        return self::dollarsToCents(self::get('recital_fee', '0'));
-    }
-
-    // ── Public registration wizard pricing ──────────────────────────────
-    // These price the quote on the public registration form (leads).
-    // registrationCostCents (once per family) and recitalFeeCents (per
-    // lesson block) are shared with the semester-confirmation charges above.
-
-    public static function tuition30Cents(): int {
-        return self::dollarsToCents(self::get('tuition_30', '0'));
-    }
-
-    public static function tuition60Cents(): int {
-        return self::dollarsToCents(self::get('tuition_60', '0'));
-    }
-
-    public static function tuitionEnsembleCents(): int {
-        return self::dollarsToCents(self::get('tuition_ensemble', '0'));
-    }
-
-    public static function installmentFeeCents(): int {
-        return self::dollarsToCents(self::get('installment_fee', '0'));
-    }
-
-    // Lessons in a full semester — used to show families what a semester's
-    // tuition works out to per lesson ("$420 for 15 weeks ($28 per lesson)").
-    public static function semesterWeeks(): int {
-        $weeks = (int)self::get('semester_weeks', '15');
-        return $weeks > 0 ? $weeks : 15;
-    }
-
     // The semester the public registration wizard is open for; null means
     // registration is closed (the wizard shows a friendly closed page).
     public static function registrationSemesterId(): ?int {
@@ -139,13 +94,6 @@ class Settings {
         return trim(self::get('inquiry_notification_email', ''));
     }
 
-    private static function dollarsToCents(string $dollars): int {
-        $dollars = trim(str_replace(['$', ','], '', $dollars));
-        if ($dollars === '' || !is_numeric($dollars)) {
-            return 0;
-        }
-        return (int)round((float)$dollars * 100);
-    }
 
     public static function loginImageUrl(): string {
         $fileId = self::get('login_image_file_id', '');

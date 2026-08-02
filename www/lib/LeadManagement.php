@@ -8,6 +8,7 @@ require_once __DIR__ . '/ActivityLog.php';
 require_once __DIR__ . '/UserManagement.php';
 require_once __DIR__ . '/StudentTeacherManagement.php';
 require_once __DIR__ . '/InstrumentCatalog.php';
+require_once __DIR__ . '/SemesterManagement.php';
 
 /**
  * Leads: submissions from either public form — the registration wizard
@@ -102,7 +103,7 @@ class LeadManagement {
     // ===== Pricing =====
 
     /**
-     * The itemized quote for a set of students, straight from Settings.
+     * The itemized quote for a set of students, from the semester's pricing.
      * $students: [['first_name','instrument','lesson_length_minutes','guitar_ensemble'], ...]
      * Returns ['lines' => [['label','amount_cents'],...], 'total_cents', 'due_now_cents'].
      *
@@ -111,22 +112,26 @@ class LeadManagement {
      * second block); installment plan adds its fee. Due now = everything for
      * full pay; for installment, all fees plus half of each tuition line.
      */
-    public static function priceQuote(array $students, bool $installmentPlan): array {
+    public static function priceQuote(int $semesterId, array $students, bool $installmentPlan): array {
+        $semester = SemesterManagement::find($semesterId);
+        if (!$semester) {
+            throw new InvalidArgumentException('Semester not found.');
+        }
         $lines = [];
         $tuitionCents = 0;
         $feeCents = 0;
 
-        $registration = Settings::registrationCostCents();
+        $registration = SemesterManagement::registrationFeeCents($semester);
         if ($registration > 0) {
             $lines[] = ['label' => 'Registration fee (one per family per semester)', 'amount_cents' => $registration];
             $feeCents += $registration;
         }
 
-        $recital = Settings::recitalFeeCents();
+        $recital = SemesterManagement::recitalFeeCents($semester);
         foreach ($students as $student) {
             $name = trim((string)($student['first_name'] ?? '')) ?: 'Student';
             $length = (int)($student['lesson_length_minutes'] ?? 30);
-            $tuition = $length === 60 ? Settings::tuition60Cents() : Settings::tuition30Cents();
+            $tuition = SemesterManagement::lessonFeeCents($semester, $length);
             $lines[] = [
                 'label' => $name . ' — ' . $length . '-minute private lessons (full semester)',
                 'amount_cents' => $tuition,
@@ -138,7 +143,7 @@ class LeadManagement {
             }
 
             if (!empty($student['guitar_ensemble'])) {
-                $ensemble = Settings::tuitionEnsembleCents();
+                $ensemble = SemesterManagement::guitarEnsembleFeeCents($semester);
                 $lines[] = [
                     'label' => $name . ' — Guitar Ensemble (full semester)',
                     'amount_cents' => $ensemble,
@@ -152,7 +157,7 @@ class LeadManagement {
         }
 
         if ($installmentPlan) {
-            $installmentFee = Settings::installmentFeeCents();
+            $installmentFee = SemesterManagement::installmentPlanFeeCents($semester);
             if ($installmentFee > 0) {
                 $lines[] = ['label' => 'Installment plan fee', 'amount_cents' => $installmentFee];
                 $feeCents += $installmentFee;
@@ -224,7 +229,7 @@ class LeadManagement {
             throw new InvalidArgumentException('At least one student is required.');
         }
 
-        $quote = self::priceQuote($cleanStudents, $installmentPlan);
+        $quote = self::priceQuote($semesterId, $cleanStudents, $installmentPlan);
 
         $pdo = self::pdo();
         $pdo->beginTransaction();

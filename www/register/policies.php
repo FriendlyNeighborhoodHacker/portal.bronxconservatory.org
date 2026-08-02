@@ -2,7 +2,7 @@
 // Registration wizard step 3: policies and procedures (agreement required).
 require_once __DIR__ . '/register_ui.php';
 Application::init();
-registration_require_open();
+$semester = registration_require_open();
 $state = registration_require_step(3);
 
 $error = registration_flash_error();
@@ -19,10 +19,10 @@ ApplicationUI::minimalHeaderHtml('Register — Policies');
     <h3>Bronx Conservatory Terms of Enrollment and Payment Policies</h3>
 
     <h4>1. Registration, Recital &amp; Logistics Fees</h4>
-    <p>A non-refundable <?=registration_dollars(Settings::registrationCostCents())?> registration fee is payable upon enrollment. Only one fee
+    <p>A non-refundable <?=registration_dollars(SemesterManagement::registrationFeeCents($semester))?> registration fee is payable upon enrollment. Only one fee
       is charged per family per semester.</p>
-    <p>A <?=registration_dollars(Settings::recitalFeeCents())?> per lesson recital &amp; logistics fee will be added to each lesson
-      registration per semester. Example: One violin lesson + one voice lesson = <?=registration_dollars(2 * Settings::recitalFeeCents())?> total
+    <p>A <?=registration_dollars(SemesterManagement::recitalFeeCents($semester))?> per lesson recital &amp; logistics fee will be added to each lesson
+      registration per semester. Example: One violin lesson + one voice lesson = <?=registration_dollars(2 * SemesterManagement::recitalFeeCents($semester))?> total
       fee. This supports recital venue costs, accompanists, and program printing. Thank you
       for helping us provide high-quality performance experiences!</p>
 
@@ -35,7 +35,7 @@ ApplicationUI::minimalHeaderHtml('Register — Policies');
       before the first lesson, and the remaining tuition is due by week 4 of the semester.
       PLEASE NOTE: selecting this option still obligates you to payment for the full term,
       subject to the withdrawal policies described below. There is a
-      <?=registration_dollars(Settings::installmentFeeCents())?> (per family) fee for the installment plan. The payer will
+      <?=registration_dollars(SemesterManagement::installmentPlanFeeCents($semester))?> (per family) fee for the installment plan. The payer will
       provide their payment information to the Bronx Conservatory at the time of their first
       payment, and by doing so, authorize the Bronx Conservatory of Music to debit their
       credit or debit card on the fourth week of the semester for the second payment.</p>

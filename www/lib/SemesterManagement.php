@@ -18,13 +18,20 @@ class SemesterManagement {
 
     // ── Semesters ─────────────────────────────────────────────────────────
 
-    public static function createSemester(?UserContext $ctx, string $season, int $year, string $startDate, string $endDate): int {
+    public static function createSemester(?UserContext $ctx, string $season, int $year, string $startDate, string $endDate, array $pricing = []): int {
         self::assertAdmin($ctx);
         [$season, $year, $start, $end] = self::validateSemesterFields($season, $year, $startDate, $endDate);
+        $pricing = self::validatePricingFields($pricing);
         try {
             self::pdo()->prepare(
-                'INSERT INTO semesters (season, year, start_date, end_date, created_by_user_id) VALUES (?,?,?,?,?)'
-            )->execute([$season, $year, $start, $end, $ctx?->id]);
+                'INSERT INTO semesters (season, year, start_date, end_date, registration_fee, lesson_fee_30_minutes, lesson_fee_60_minutes, guitar_ensemble_fee, recital_fee, installment_plan_fee, lessons_per_semester, created_by_user_id)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+            )->execute([
+                $season, $year, $start, $end,
+                $pricing['registration_fee'], $pricing['lesson_fee_30_minutes'], $pricing['lesson_fee_60_minutes'],
+                $pricing['guitar_ensemble_fee'], $pricing['recital_fee'], $pricing['installment_plan_fee'],
+                $pricing['lessons_per_semester'], $ctx?->id
+            ]);
         } catch (PDOException $e) {
             if ((string)$e->getCode() === '23000') {
                 throw new InvalidArgumentException(ucfirst($season) . ' ' . $year . ' already exists.');
@@ -37,9 +44,9 @@ class SemesterManagement {
     }
 
     /**
-     * Edit a semester's identity and date range. The dates here are only used
-     * to resolve the "current" semester and to sanity-check imports — the
-     * class calendar that actually drives lessons is semester_location_dates,
+     * Edit a semester's identity, date range, and pricing. The dates here are
+     * only used to resolve the "current" semester and to sanity-check imports —
+     * the class calendar that actually drives lessons is semester_location_dates,
      * so nothing needs to be regenerated when they change.
      */
     public static function updateSemester(
@@ -48,16 +55,24 @@ class SemesterManagement {
         string $season,
         int $year,
         string $startDate,
-        string $endDate
+        string $endDate,
+        array $pricing = []
     ): void {
         self::assertAdmin($ctx);
         if (!self::find($semesterId)) {
             throw new InvalidArgumentException('Semester not found.');
         }
         [$season, $year, $start, $end] = self::validateSemesterFields($season, $year, $startDate, $endDate);
+        $pricing = self::validatePricingFields($pricing);
         try {
-            self::pdo()->prepare('UPDATE semesters SET season=?, year=?, start_date=?, end_date=? WHERE id=?')
-                ->execute([$season, $year, $start, $end, $semesterId]);
+            self::pdo()->prepare(
+                'UPDATE semesters SET season=?, year=?, start_date=?, end_date=?, registration_fee=?, lesson_fee_30_minutes=?, lesson_fee_60_minutes=?, guitar_ensemble_fee=?, recital_fee=?, installment_plan_fee=?, lessons_per_semester=? WHERE id=?'
+            )->execute([
+                $season, $year, $start, $end,
+                $pricing['registration_fee'], $pricing['lesson_fee_30_minutes'], $pricing['lesson_fee_60_minutes'],
+                $pricing['guitar_ensemble_fee'], $pricing['recital_fee'], $pricing['installment_plan_fee'],
+                $pricing['lessons_per_semester'], $semesterId
+            ]);
         } catch (PDOException $e) {
             if ((string)$e->getCode() === '23000') {
                 throw new InvalidArgumentException(ucfirst($season) . ' ' . $year . ' already exists.');
@@ -93,6 +108,37 @@ class SemesterManagement {
             throw new InvalidArgumentException('End date must be on or after the start date.');
         }
         return [$season, $year, $start, $end];
+    }
+
+    /** Pricing field validation. Returns array with normalized (string) decimal values. */
+    private static function validatePricingFields(array $pricing): array {
+        $out = [
+            'registration_fee' => '0.00',
+            'lesson_fee_30_minutes' => '0.00',
+            'lesson_fee_60_minutes' => '0.00',
+            'guitar_ensemble_fee' => '0.00',
+            'recital_fee' => '0.00',
+            'installment_plan_fee' => '0.00',
+            'lessons_per_semester' => 15,
+        ];
+        foreach (['registration_fee', 'lesson_fee_30_minutes', 'lesson_fee_60_minutes', 'guitar_ensemble_fee', 'recital_fee', 'installment_plan_fee'] as $key) {
+            $val = (string)($pricing[$key] ?? '0');
+            $val = trim(str_replace(['$', ','], '', $val));
+            if ($val === '' || !is_numeric($val)) {
+                $val = '0.00';
+            }
+            $float = (float)$val;
+            if ($float < 0) {
+                throw new InvalidArgumentException(ucfirst(str_replace('_', ' ', $key)) . ' cannot be negative.');
+            }
+            $out[$key] = number_format($float, 2);
+        }
+        $lessons = (int)($pricing['lessons_per_semester'] ?? 15);
+        if ($lessons <= 0) {
+            throw new InvalidArgumentException('Lessons per semester must be positive.');
+        }
+        $out['lessons_per_semester'] = $lessons;
+        return $out;
     }
 
     public static function find(int $semesterId): ?array {
@@ -180,6 +226,43 @@ class SemesterManagement {
     /** "Fall 2026" — the display label used everywhere. */
     public static function label(array $semester): string {
         return ucfirst((string)$semester['season']) . ' ' . (int)$semester['year'];
+    }
+
+    // ── Pricing (moved from global Settings) ──────────────────────────────
+
+    public static function registrationFeeCents(array $semester): int {
+        return (int)round((float)($semester['registration_fee'] ?? 0) * 100);
+    }
+
+    public static function lessonFeeCents(array $semester, int $durationMinutes): int {
+        $fee30 = (float)($semester['lesson_fee_30_minutes'] ?? 0);
+        $fee60 = (float)($semester['lesson_fee_60_minutes'] ?? 0);
+        if ($durationMinutes === 30) {
+            return (int)round($fee30 * 100);
+        }
+        if ($durationMinutes === 60) {
+            return (int)round($fee60 * 100);
+        }
+        // Prorate off the 30-minute rate for other durations (90, 120 min, etc.)
+        $perMinute = $fee30 / 30;
+        return (int)round($perMinute * $durationMinutes * 100);
+    }
+
+    public static function guitarEnsembleFeeCents(array $semester): int {
+        return (int)round((float)($semester['guitar_ensemble_fee'] ?? 0) * 100);
+    }
+
+    public static function recitalFeeCents(array $semester): int {
+        return (int)round((float)($semester['recital_fee'] ?? 0) * 100);
+    }
+
+    public static function installmentPlanFeeCents(array $semester): int {
+        return (int)round((float)($semester['installment_plan_fee'] ?? 0) * 100);
+    }
+
+    public static function lessonsPerSemester(array $semester): int {
+        $weeks = (int)($semester['lessons_per_semester'] ?? 15);
+        return $weeks > 0 ? $weeks : 15;
     }
 
     // ── Active locations (wizard step 2) ──────────────────────────────────

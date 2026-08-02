@@ -17,7 +17,8 @@ try {
         (string)($_POST['season'] ?? ''),
         (int)($_POST['year'] ?? 0),
         (string)($_POST['start_date'] ?? ''),
-        (string)($_POST['end_date'] ?? '')
+        (string)($_POST['end_date'] ?? ''),
+        (array)($_POST['pricing'] ?? [])
     );
     $_SESSION['admin_semester_id'] = $semesterId;
     header('Location: /admin/semester/locations.php?semester_id=' . $semesterId);
@@ -28,6 +29,7 @@ try {
         'year' => (string)($_POST['year'] ?? ''),
         'start_date' => (string)($_POST['start_date'] ?? ''),
         'end_date' => (string)($_POST['end_date'] ?? ''),
+        'pricing' => (array)($_POST['pricing'] ?? []),
     ];
     header('Location: /admin/semester/new.php');
 }

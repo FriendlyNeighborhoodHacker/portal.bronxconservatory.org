@@ -13,7 +13,7 @@ $family = (array)$state['family'];
 $students = registration_clean_students($state);
 $scheduling = (array)$state['scheduling'];
 $installment = (int)$state['installment'] === 1;
-$quote = LeadManagement::priceQuote($students, $installment);
+$quote = LeadManagement::priceQuote((int)$semester['id'], $students, $installment);
 $stripeReady = StripeCheckout::isConfigured();
 
 ApplicationUI::minimalHeaderHtml('Register — Review');

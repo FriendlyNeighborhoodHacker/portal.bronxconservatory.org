@@ -69,7 +69,15 @@ function fx_semester_with_dates(UserContext $ctx, int $teacherId, string $firstD
     $firstTs = strtotime($firstDate);
     $start = $start ?? date('Y-m-d', $firstTs - 7 * 86400);
     $end = $end ?? date('Y-m-d', $firstTs + ($count + 2) * 7 * 86400);
-    $semesterId = SemesterManagement::createSemester($ctx, $season, $year, $start, $end);
+    $semesterId = SemesterManagement::createSemester($ctx, $season, $year, $start, $end, [
+        'registration_fee' => '50.00',
+        'lesson_fee_30_minutes' => '300.00',
+        'lesson_fee_60_minutes' => '600.00',
+        'guitar_ensemble_fee' => '270.00',
+        'recital_fee' => '25.00',
+        'installment_plan_fee' => '25.00',
+        'lessons_per_semester' => 15,
+    ]);
     $locationId = fx_location_id();
     SemesterManagement::setActiveLocations($ctx, $semesterId, [$locationId]);
     SemesterManagement::setLocationTeachers($ctx, $semesterId, [[$locationId, $teacherId]]);

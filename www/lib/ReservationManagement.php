@@ -92,7 +92,7 @@ class ReservationManagement {
         if ($status === 'confirmed') {
             self::generateLessonsForReservation($ctx, $id);
             if ($options['post_charges'] ?? true) {
-                Billing::postSemesterConfirmationCharges($ctx, $studentUserId, $semesterId);
+                Billing::postSemesterConfirmationCharges($ctx, $studentUserId, $semesterId, $durationMinutes);
             }
         }
 
@@ -211,7 +211,7 @@ class ReservationManagement {
 
         if ($newStatus === 'confirmed') {
             self::generateLessonsForReservation($ctx, $reservationId);
-            Billing::postSemesterConfirmationCharges($ctx, (int)$r['student_user_id'], (int)$r['semester_id']);
+            Billing::postSemesterConfirmationCharges($ctx, (int)$r['student_user_id'], (int)$r['semester_id'], (int)$r['duration_minutes']);
         } elseif ($oldStatus === 'confirmed') {
             self::deleteFutureLessons($reservationId);
             // Status is already updated, so "another confirmed reservation"

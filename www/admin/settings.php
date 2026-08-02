@@ -39,46 +39,6 @@ $SETTINGS_DEF = [
     'hint'  => 'Shown in the footer of every page. Families should always see a way to reach a real person.',
     'type'  => 'text',
   ],
-  'registration_cost' => [
-    'label' => 'Registration cost ($)',
-    'hint'  => 'Charged once per student when their semester reservation is confirmed. Also prices the public registration form (once per family there).',
-    'type'  => 'text',
-  ],
-  'semester_lesson_cost' => [
-    'label' => 'Semester lesson cost ($)',
-    'hint'  => 'The semester\'s lessons, charged when the reservation is confirmed.',
-    'type'  => 'text',
-  ],
-  'recital_fee' => [
-    'label' => 'Recital fee ($)',
-    'hint'  => 'Charged with the semester; opt-outs get a custom ledger credit. Also prices the public registration form (per lesson block there).',
-    'type'  => 'text',
-  ],
-  'tuition_30' => [
-    'label' => '30-minute lesson tuition ($/semester)',
-    'hint'  => 'Public registration form: full-semester price for weekly 30-minute private lessons.',
-    'type'  => 'text',
-  ],
-  'tuition_60' => [
-    'label' => '60-minute lesson tuition ($/semester)',
-    'hint'  => 'Public registration form: full-semester price for weekly 60-minute private lessons.',
-    'type'  => 'text',
-  ],
-  'tuition_ensemble' => [
-    'label' => 'Guitar Ensemble tuition ($/semester)',
-    'hint'  => 'Public registration form: full-semester price for the 30-minute Guitar Ensemble class.',
-    'type'  => 'text',
-  ],
-  'installment_fee' => [
-    'label' => 'Installment plan fee ($)',
-    'hint'  => 'Public registration form: one-time per-family fee for paying tuition in two installments.',
-    'type'  => 'text',
-  ],
-  'semester_weeks' => [
-    'label' => 'Lessons per semester',
-    'hint'  => 'Public registration form: used for the "$420 for 15 weeks ($28 per lesson)" breakdown.',
-    'type'  => 'text',
-  ],
   'registration_semester_id' => [
     'label' => 'Registration open for',
     'hint'  => 'The semester the public Register form signs families up for. "Registration closed" hides the form.',

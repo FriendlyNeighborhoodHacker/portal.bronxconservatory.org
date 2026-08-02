@@ -59,6 +59,27 @@ header_html('Edit Semester');
         <input type="date" name="end_date" required
                value="<?=h((string)($old['end_date'] ?? $semester['end_date']))?>">
       </label>
+      <label>Registration fee ($)
+        <input type="text" name="pricing[registration_fee]" value="<?=h((string)($old['pricing']['registration_fee'] ?? $semester['registration_fee']))?>">
+      </label>
+      <label>30-minute lesson fee ($/semester)
+        <input type="text" name="pricing[lesson_fee_30_minutes]" value="<?=h((string)($old['pricing']['lesson_fee_30_minutes'] ?? $semester['lesson_fee_30_minutes']))?>">
+      </label>
+      <label>60-minute lesson fee ($/semester)
+        <input type="text" name="pricing[lesson_fee_60_minutes]" value="<?=h((string)($old['pricing']['lesson_fee_60_minutes'] ?? $semester['lesson_fee_60_minutes']))?>">
+      </label>
+      <label>Guitar Ensemble fee ($/semester)
+        <input type="text" name="pricing[guitar_ensemble_fee]" value="<?=h((string)($old['pricing']['guitar_ensemble_fee'] ?? $semester['guitar_ensemble_fee']))?>">
+      </label>
+      <label>Recital fee ($)
+        <input type="text" name="pricing[recital_fee]" value="<?=h((string)($old['pricing']['recital_fee'] ?? $semester['recital_fee']))?>">
+      </label>
+      <label>Installment plan fee ($)
+        <input type="text" name="pricing[installment_plan_fee]" value="<?=h((string)($old['pricing']['installment_plan_fee'] ?? $semester['installment_plan_fee']))?>">
+      </label>
+      <label>Lessons per semester
+        <input type="number" name="pricing[lessons_per_semester]" min="1" value="<?=h((string)($old['pricing']['lessons_per_semester'] ?? $semester['lessons_per_semester']))?>">
+      </label>
     </div>
     <p class="small">The date range decides which semester the portal treats as current.
     Lessons come from the imported class dates, so changing it here does not add or remove any.

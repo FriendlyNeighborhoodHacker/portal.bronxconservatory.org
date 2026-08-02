@@ -45,6 +45,27 @@ header_html('New Semester');
       <label>End date
         <input type="date" name="end_date" required value="<?=h($old['end_date'] ?? '')?>">
       </label>
+      <label>Registration fee ($)
+        <input type="text" name="pricing[registration_fee]" value="<?=h($old['pricing']['registration_fee'] ?? '')?>">
+      </label>
+      <label>30-minute lesson fee ($/semester)
+        <input type="text" name="pricing[lesson_fee_30_minutes]" value="<?=h($old['pricing']['lesson_fee_30_minutes'] ?? '')?>">
+      </label>
+      <label>60-minute lesson fee ($/semester)
+        <input type="text" name="pricing[lesson_fee_60_minutes]" value="<?=h($old['pricing']['lesson_fee_60_minutes'] ?? '')?>">
+      </label>
+      <label>Guitar Ensemble fee ($/semester)
+        <input type="text" name="pricing[guitar_ensemble_fee]" value="<?=h($old['pricing']['guitar_ensemble_fee'] ?? '')?>">
+      </label>
+      <label>Recital fee ($)
+        <input type="text" name="pricing[recital_fee]" value="<?=h($old['pricing']['recital_fee'] ?? '')?>">
+      </label>
+      <label>Installment plan fee ($)
+        <input type="text" name="pricing[installment_plan_fee]" value="<?=h($old['pricing']['installment_plan_fee'] ?? '')?>">
+      </label>
+      <label>Lessons per semester
+        <input type="number" name="pricing[lessons_per_semester]" min="1" value="<?=h($old['pricing']['lessons_per_semester'] ?? '15')?>">
+      </label>
     </div>
     <div class="actions">
       <button type="submit" class="button primary">Create &amp; Continue</button>

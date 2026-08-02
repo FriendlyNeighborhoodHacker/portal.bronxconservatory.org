@@ -5,6 +5,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/UserContext.php';
 require_once __DIR__ . '/ActivityLog.php';
+require_once __DIR__ . '/SemesterManagement.php';
 
 // Light accounting so balances are explainable. Every row is a ledger entry
 // in integer cents; a student's balance = SUM(debits) - SUM(credits).
@@ -25,17 +26,21 @@ class Billing {
 
     /**
      * Post the semester's charges (registration + lessons + recital fee, from
-     * Settings) as debits on the student's ledger. Idempotent per
+     * the semester row) as debits on the student's ledger. Idempotent per
      * (student, semester, entry_type): a student confirming a second
      * reservation in the same semester (e.g. a second instrument) is not
      * charged twice.
      */
-    public static function postSemesterConfirmationCharges(?UserContext $ctx, int $studentUserId, int $semesterId): void {
+    public static function postSemesterConfirmationCharges(?UserContext $ctx, int $studentUserId, int $semesterId, int $durationMinutes = 30): void {
         self::assertAdmin($ctx);
+        $semester = SemesterManagement::find($semesterId);
+        if (!$semester) {
+            throw new InvalidArgumentException('Semester not found.');
+        }
         $charges = [
-            'registration' => [Settings::registrationCostCents(), 'Semester registration'],
-            'lessons' => [Settings::semesterLessonCostCents(), 'Semester lessons'],
-            'recital_fee' => [Settings::recitalFeeCents(), 'Recital fee'],
+            'registration' => [SemesterManagement::registrationFeeCents($semester), 'Semester registration'],
+            'lessons' => [SemesterManagement::lessonFeeCents($semester, $durationMinutes), 'Semester lessons'],
+            'recital_fee' => [SemesterManagement::recitalFeeCents($semester), 'Recital fee'],
         ];
         foreach ($charges as $entryType => [$amountCents, $description]) {
             if ($amountCents <= 0) {

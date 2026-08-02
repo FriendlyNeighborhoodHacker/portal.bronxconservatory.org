@@ -11,10 +11,7 @@ final class BillingTest extends TestCase
     {
         test_reset_all();
         $this->ctx = fx_admin_ctx();
-        // Deterministic pricing for every test.
-        Settings::set('registration_cost', '50.00');
-        Settings::set('semester_lesson_cost', '300.00');
-        Settings::set('recital_fee', '25.00');
+        // Pricing is now configured per-semester via fx_semester_with_dates fixture.
     }
 
     private function confirmReservationFor(int $studentId, string $firstDate = '2030-09-07', int $weeks = 4): array
@@ -33,13 +30,15 @@ final class BillingTest extends TestCase
         return [$semesterId, $reservationId, $setup];
     }
 
-    public function testSettingsCostHelpersParseDollars(): void
+    public function testSemesterCostHelpersParsePricing(): void
     {
-        $this->assertSame(5000, Settings::registrationCostCents());
-        $this->assertSame(30000, Settings::semesterLessonCostCents());
-        $this->assertSame(2500, Settings::recitalFeeCents());
-        Settings::set('recital_fee', '$1,234.56');
-        $this->assertSame(123456, Settings::recitalFeeCents());
+        $student = fx_student();
+        [$semesterId] = $this->confirmReservationFor($student);
+        $semester = SemesterManagement::find($semesterId);
+
+        $this->assertSame(5000, SemesterManagement::registrationFeeCents($semester));
+        $this->assertSame(30000, SemesterManagement::lessonFeeCents($semester, 30));
+        $this->assertSame(2500, SemesterManagement::recitalFeeCents($semester));
     }
 
     public function testConfirmationPostsAllThreeChargesOnce(): void
@@ -51,7 +50,7 @@ final class BillingTest extends TestCase
         $this->assertSame(37500, Billing::balanceForStudentSemesterCents($student, $semesterId));
 
         // Idempotent — reposting (e.g. a second instrument confirmed) adds nothing.
-        Billing::postSemesterConfirmationCharges($this->ctx, $student, $semesterId);
+        Billing::postSemesterConfirmationCharges($this->ctx, $student, $semesterId, 30);
         $this->assertSame(37500, Billing::balanceForStudentCents($student));
         $this->assertCount(3, Billing::ledgerForStudent($student, $semesterId));
     }
