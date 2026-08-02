@@ -75,24 +75,24 @@ DEALLOCATE PREPARE stmt;
 -- Backfill pricing columns from global settings (only on first run when columns were just added).
 -- This runs only when the columns were newly added, and backfills every existing semester
 -- with the current global settings values.
-SET @backfill := (SELECT COUNT(*) FROM information_schema.columns
-  WHERE table_schema = DATABASE() AND table_name = 'semesters' AND column_name = 'registration_fee'
-  AND column_key = '' AND extra NOT LIKE '%AUTO%');
-SET @was_new := (
-  SELECT COUNT(*) FROM information_schema.columns
-  WHERE table_schema = DATABASE() AND table_name = 'semesters' AND column_name = 'registration_fee'
-);
+SET @reg_fee := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'registration_cost'), 0);
+SET @lesson_30 := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'tuition_30'), 0);
+SET @lesson_60 := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'tuition_60'), 0);
+SET @ensemble := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'tuition_ensemble'), 0);
+SET @recital := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'recital_fee'), 0);
+SET @installment := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'installment_fee'), 0);
+SET @lessons_per := COALESCE((SELECT CAST(value AS INT) FROM settings WHERE key_name = 'semester_weeks'), 15);
 
 -- Only backfill if columns exist but still have default values (not yet backfilled)
 UPDATE semesters s
 SET
-  s.registration_fee = COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'registration_cost'), 0),
-  s.lesson_fee_30_minutes = COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'tuition_30'), 0),
-  s.lesson_fee_60_minutes = COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'tuition_60'), 0),
-  s.guitar_ensemble_fee = COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'tuition_ensemble'), 0),
-  s.recital_fee = COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'recital_fee'), 0),
-  s.installment_plan_fee = COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'installment_fee'), 0),
-  s.lessons_per_semester = COALESCE((SELECT CAST(value AS INT) FROM settings WHERE key_name = 'semester_weeks'), 15)
+  s.registration_fee = @reg_fee,
+  s.lesson_fee_30_minutes = @lesson_30,
+  s.lesson_fee_60_minutes = @lesson_60,
+  s.guitar_ensemble_fee = @ensemble,
+  s.recital_fee = @recital,
+  s.installment_plan_fee = @installment,
+  s.lessons_per_semester = @lessons_per
 WHERE s.registration_fee = 0.00 AND s.lesson_fee_30_minutes = 0.00;
 
 -- Delete the old global settings keys (idempotent).
