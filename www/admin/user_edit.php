@@ -90,7 +90,7 @@ if (isset($_GET['photo_err'])) { $err = 'Photo upload failed.'; }
     <?php if ($userPhotoUrl !== ''): ?>
       <img class="avatar" src="<?= h($userPhotoUrl) ?>" alt="<?= h($userName) ?>" style="width:80px;height:80px;border-radius:50%;object-fit:cover;">
     <?php else: ?>
-      <div class="avatar avatar-initials" aria-hidden="true" style="width:80px;height:80px;border-radius:50%;background:#007bff;color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:500;"><?= h($userInitials) ?></div>
+      <div class="avatar avatar-initials" aria-hidden="true" style="width:80px;height:80px;border-radius:50%;background:var(--color-primary);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:500;"><?= h($userInitials) ?></div>
     <?php endif; ?>
 
     <form method="post" action="/upload_photo.php?user_id=<?= (int)$userId ?>&return_to=<?= urlencode('/admin/user_edit.php?id=' . $userId) ?>" enctype="multipart/form-data" class="stack" style="margin-left:auto;min-width:260px" id="profilePhotoForm">
@@ -145,11 +145,11 @@ if (isset($_GET['photo_err'])) { $err = 'Photo upload failed.'; }
           <span class="small">With Admin, access to Admin &gt; Maintenance (migrations, activity log, email log).</span>
         </div>
       <?php elseif (!$hasLogin): ?>
-        <div class="small" style="color: #6c757d;">
+        <div class="small" style="color:var(--color-text-muted);">
           Admin status: No (people without a login cannot be admins)
         </div>
       <?php else: ?>
-        <div class="small" style="color: #6c757d;">
+        <div class="small" style="color:var(--color-text-muted);">
           Admin status: <?= !empty($user['is_admin']) ? 'Yes' : 'No' ?><br>
           Developer: <?= !empty($user['is_developer']) ? 'Yes' : 'No' ?><br>
           (cannot change your own admin or developer status)

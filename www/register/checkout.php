@@ -129,8 +129,11 @@ ApplicationUI::minimalHeaderHtml('Register — Checkout');
     appearance: {
       theme: 'stripe',
       variables: {
-        colorPrimary: '#4A7FC1',
+        // Keep Stripe's fields in the portal's palette (www/styles.css :root)
+        // so the card form doesn't read as somebody else's page.
+        colorPrimary: '#0062DC',
         colorText: '#1f2733',
+        colorDanger: '#b91c1c',
         fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif',
         borderRadius: '8px'
       }

@@ -97,9 +97,9 @@ function build_url(array $overrides): string {
 header_html('Activity Log');
 ?>
 <style>
-#userTypeaheadResults { display:none; border:1px solid #ddd; border-radius:6px; background:#fff; max-height:220px; overflow:auto; margin-top:4px; }
+#userTypeaheadResults { display:none; border:1px solid var(--color-border); border-radius:6px; background:#fff; max-height:220px; overflow:auto; margin-top:4px; }
 #userTypeaheadResults .item { padding:6px 8px; cursor:pointer; }
-#userTypeaheadResults .item:hover { background:#f5f5f5; }
+#userTypeaheadResults .item:hover { background:var(--color-accent-soft); }
 </style>
 <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
   <h2>Activity Log</h2>

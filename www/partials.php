@@ -16,9 +16,11 @@ function footer_html(): void {
     ApplicationUI::footerHtml();
 }
 
-// Stable avatar color for a person's name (child cards, rosters).
+// Stable avatar color for a person's name (child cards, rosters). Drawn
+// around the BCM blue and coral (docs/app_spec.md "Design Notes") rather than
+// a generic rainbow, and every one is dark enough to carry white initials.
 function person_avatar_color(string $name): string {
-    $palette = ['#579bfc', '#00c875', '#a25ddc', '#fdab3d', '#e2445c', '#0086c0', '#9d99b9', '#037f4c'];
+    $palette = ['#0062DC', '#C2410C', '#6D28D9', '#0F766E', '#B45309', '#9D174D', '#166534', '#00132A'];
     return $palette[crc32($name) % count($palette)];
 }
 

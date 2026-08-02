@@ -397,6 +397,8 @@ class ApplicationUI {
     }
 
     public static function minimalFooterHtml(): void {
-        echo '</main>' . self::siteFooterHtml() . '</div>' . self::jsScript('/main.js') . '</body></html>';
+        // The footer closes the centered column first so the navy band runs
+        // the full width of the page, as it does in the signed-in shell.
+        echo '</main></div>' . self::siteFooterHtml() . self::jsScript('/main.js') . '</body></html>';
     }
 }

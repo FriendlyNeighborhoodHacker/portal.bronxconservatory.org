@@ -101,11 +101,11 @@ function build_url(array $overrides): string {
 header_html('Email Log');
 ?>
 <style>
-#userTypeaheadResults { display:none; border:1px solid #ddd; border-radius:6px; background:#fff; max-height:220px; overflow:auto; margin-top:4px; }
+#userTypeaheadResults { display:none; border:1px solid var(--color-border); border-radius:6px; background:#fff; max-height:220px; overflow:auto; margin-top:4px; }
 #userTypeaheadResults .item { padding:6px 8px; cursor:pointer; }
-#userTypeaheadResults .item:hover { background:#f5f5f5; }
-.status-success { color: #28a745; font-weight: bold; }
-.status-failed { color: #dc3545; font-weight: bold; }
+#userTypeaheadResults .item:hover { background:var(--color-accent-soft); }
+.status-success { color: #0a6e3d; font-weight: bold; }
+.status-failed { color: var(--color-danger); font-weight: bold; }
 </style>
 <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
   <h2>Email Log</h2>
@@ -204,7 +204,7 @@ header_html('Email Log');
                   if (mb_strlen($error) > 100) {
                     $error = mb_substr($error, 0, 100) . '…';
                   }
-                  echo '<span style="color: #dc3545;">' . h($error) . '</span>';
+                  echo '<span style="color: var(--color-danger);">' . h($error) . '</span>';
                 } else {
                   echo '<span class="muted">—</span>';
                 }

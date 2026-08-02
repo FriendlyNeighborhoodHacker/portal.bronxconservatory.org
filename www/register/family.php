@@ -20,6 +20,9 @@ ApplicationUI::minimalHeaderHtml('Register — Family');
     have any questions, prefer to pay over the phone, or would like to be considered for
     scholarship, please still fill out this form and we will call you to follow up.</p>
 
+  <p class="contact-callout">Rather do this with a person? <span>Call us at
+    <a href="tel:+17188417415"><?=h(Settings::contactPhone())?></a> and we'll walk you through it.</span></p>
+
   <?=registration_tuition_intro_html($semester)?>
 
   <?php if ($error): ?><p class="error"><?=h($error)?></p><?php endif; ?>

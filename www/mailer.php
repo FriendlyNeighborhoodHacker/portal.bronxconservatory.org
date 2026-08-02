@@ -397,7 +397,9 @@ function send_lead_registration_email(array $lead, array $students, array $quote
   $days = json_decode((string)($lead['preferred_days'] ?? '[]'), true) ?: [];
   $blocks = json_decode((string)($lead['availability_blocks'] ?? '[]'), true) ?: [];
 
-  $html = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#0D1B2A;">'
+  // Inline hex, not a CSS variable: mail clients don't resolve custom
+  // properties. #00132A is the portal's navy (www/styles.css :root).
+  $html = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#00132A;">'
     . '<p>Hello ' . $e($lead['parent_first_name']) . ',</p>'
     . '<p>Thank you for registering' . $semesterLabel . ' at the Bronx Conservatory of Music! '
     . 'If you have not heard from our team within 5 business days of registering, please reach '

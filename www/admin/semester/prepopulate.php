@@ -107,7 +107,7 @@ header_html('Pre-populate Schedule');
             <span style="color:var(--color-danger);font-weight:600;">Error</span>
           <?php endif; ?>
           <?php foreach ($entry['messages'] as $message): ?>
-            <div class="small" style="color:#b45309;"><?=h($message)?></div>
+            <div class="small" style="color:var(--color-spice-text);"><?=h($message)?></div>
           <?php endforeach; ?>
         </td>
         <td class="small"><?=h($entry['changes'])?></td>

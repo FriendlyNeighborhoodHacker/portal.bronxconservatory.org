@@ -29,7 +29,7 @@ $mePhotoUrl = Files::profilePhotoUrl($me['photo_public_file_id'] ?? null, 80);
     <?php if ($mePhotoUrl !== ''): ?>
       <img class="avatar" src="<?= h($mePhotoUrl) ?>" alt="<?= h($meName) ?>" style="width:80px;height:80px;border-radius:50%;object-fit:cover;">
     <?php else: ?>
-      <div class="avatar avatar-initials" aria-hidden="true" style="width:80px;height:80px;border-radius:50%;background:#007bff;color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:500;"><?= h($meInitials) ?></div>
+      <div class="avatar avatar-initials" aria-hidden="true" style="width:80px;height:80px;border-radius:50%;background:var(--color-primary);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:500;"><?= h($meInitials) ?></div>
     <?php endif; ?>
 
     <form method="post" action="/upload_photo.php?user_id=<?= (int)$me['id'] ?>&return_to=<?= urlencode('/profile/edit_picture.php') ?>" enctype="multipart/form-data" class="stack" style="margin-left:auto;min-width:260px" id="profilePhotoForm">
