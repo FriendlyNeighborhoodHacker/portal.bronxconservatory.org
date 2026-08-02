@@ -72,16 +72,15 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
--- Backfill pricing columns from global settings (only on first run when columns were just added).
--- This runs only when the columns were newly added, and backfills every existing semester
--- with the current global settings values.
-SET @reg_fee := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'registration_cost'), 0);
-SET @lesson_30 := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'tuition_30'), 0);
-SET @lesson_60 := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'tuition_60'), 0);
-SET @ensemble := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'tuition_ensemble'), 0);
-SET @recital := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'recital_fee'), 0);
-SET @installment := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'installment_fee'), 0);
-SET @lessons_per := COALESCE((SELECT CAST(value AS INT) FROM settings WHERE key_name = 'semester_weeks'), 15);
+-- Backfill pricing columns from global settings (only if no semesters have been configured yet).
+-- On re-run, this is a no-op since all semesters already have pricing.
+SET @reg_fee := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'registration_cost' LIMIT 1), CAST(0 AS DECIMAL(8,2)));
+SET @lesson_30 := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'tuition_30' LIMIT 1), CAST(0 AS DECIMAL(8,2)));
+SET @lesson_60 := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'tuition_60' LIMIT 1), CAST(0 AS DECIMAL(8,2)));
+SET @ensemble := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'tuition_ensemble' LIMIT 1), CAST(0 AS DECIMAL(8,2)));
+SET @recital := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'recital_fee' LIMIT 1), CAST(0 AS DECIMAL(8,2)));
+SET @installment := COALESCE((SELECT CAST(value AS DECIMAL(8,2)) FROM settings WHERE key_name = 'installment_fee' LIMIT 1), CAST(0 AS DECIMAL(8,2)));
+SET @lessons_per := COALESCE((SELECT CAST(value AS UNSIGNED) FROM settings WHERE key_name = 'semester_weeks' LIMIT 1), 15);
 
 -- Only backfill if columns exist but still have default values (not yet backfilled)
 UPDATE semesters s

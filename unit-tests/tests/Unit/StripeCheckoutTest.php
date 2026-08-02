@@ -5,12 +5,25 @@ use PHPUnit\Framework\TestCase;
 
 final class StripeCheckoutTest extends TestCase
 {
+    private int $semesterId;
+
     protected function setUp(): void
     {
         test_reset_all();
         if (!defined('STRIPE_SECRET_KEY')) {
             define('STRIPE_SECRET_KEY', 'sk_test_dummy');
         }
+        $ctx = fx_admin_ctx();
+        $this->semesterId = SemesterManagement::createSemester($ctx, 'fall', 2030, '2030-09-01', '2030-12-31', [
+            'registration_fee' => '35.00',
+            'lesson_fee_30_minutes' => '420.00',
+            'lesson_fee_60_minutes' => '840.00',
+            'guitar_ensemble_fee' => '270.00',
+            'recital_fee' => '10.00',
+            'installment_plan_fee' => '20.00',
+            'lessons_per_semester' => 15,
+        ]);
+        Settings::set('registration_semester_id', (string)$this->semesterId);
     }
 
     protected function tearDown(): void
@@ -252,7 +265,7 @@ final class StripeCheckoutTest extends TestCase
     /** A minimal registration lead to hang payments off. */
     private function makeLead(): int
     {
-        return LeadManagement::createLead(null, null, [
+        return LeadManagement::createLead(null, $this->semesterId, [
             'first_name' => 'Rosa', 'last_name' => 'Ramos', 'email' => 'rosa@example.org',
             'phone' => '718-555-0110', 'address_street_1' => 'x', 'address_city' => 'Bronx',
             'address_state' => 'NY', 'address_zip' => '10454',
