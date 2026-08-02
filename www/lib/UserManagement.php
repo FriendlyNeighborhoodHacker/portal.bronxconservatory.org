@@ -6,6 +6,7 @@ require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/../mailer.php';
 require_once __DIR__ . '/UserContext.php';
 require_once __DIR__ . '/ActivityLog.php';
+require_once __DIR__ . '/KeywordSearch.php';
 
 class UserManagement {
     private static function pdo(): PDO {
@@ -410,10 +411,16 @@ class UserManagement {
         if (!$includeDeleted) {
             $where[] = 'is_deleted = 0';
         }
-        if ($search !== '') {
-            $where[] = '(first_name LIKE ? OR last_name LIKE ? OR email LIKE ?)';
-            $searchTerm = '%' . $search . '%';
-            $params = [$searchTerm, $searchTerm, $searchTerm];
+        // Every word must match one of the columns, so "Brian Rosenthal"
+        // finds Brian Rosenthal. Matching anywhere in the column rather than
+        // only at its start keeps searching by a fragment of an email address
+        // working.
+        $keywordClause = KeywordSearch::allTokensClause(
+            ['first_name', 'last_name', 'preferred_name', 'email'],
+            $search, 'u', $params, false
+        );
+        if ($keywordClause !== '') {
+            $where[] = $keywordClause;
         }
         if ($where) {
             $sql .= ' WHERE ' . implode(' AND ', $where);

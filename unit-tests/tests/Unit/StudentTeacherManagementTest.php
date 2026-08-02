@@ -102,6 +102,27 @@ final class StudentTeacherManagementTest extends TestCase
         $this->assertSame([], self::studentIds('marco'));
     }
 
+    public function testTypeaheadsFindPeopleByTheirWholeName(): void
+    {
+        $devon = fx_student('Devon', 'Brown');
+        fx_student('Devon', 'Okafor');
+        $marisol = fx_teacher('Marisol', 'Vega');
+        $denise = fx_parent_of($devon, 'Denise', 'Brown');
+
+        $ids = fn(array $rows) => array_map(fn($r) => (int)$r['id'], $rows);
+
+        // Typing the whole name used to find nobody: no column holds both words.
+        $this->assertSame([$devon], $ids(StudentTeacherManagement::searchStudentsByNamePrefix('Devon Brown')));
+        $this->assertSame([$marisol], $ids(StudentTeacherManagement::searchTeachersByNamePrefix('Marisol Vega')));
+        $this->assertSame([$denise], $ids(StudentTeacherManagement::searchPeopleForParentLink('Denise Brown')));
+
+        // A first name alone still finds everyone who has it.
+        $this->assertCount(2, StudentTeacherManagement::searchStudentsByNamePrefix('Devon'));
+        // Words are prefixes here — you are typing a name from its start.
+        $this->assertSame([], StudentTeacherManagement::searchStudentsByNamePrefix('evon'));
+        $this->assertSame([], StudentTeacherManagement::searchStudentsByNamePrefix('Devon Nobody'));
+    }
+
     public function testAParentStaysFindableAfterTheirLastChildIsUnlinked(): void
     {
         $ctx = fx_admin_ctx();

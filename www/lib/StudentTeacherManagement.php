@@ -5,6 +5,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/UserContext.php';
 require_once __DIR__ . '/ActivityLog.php';
 require_once __DIR__ . '/InstrumentCatalog.php';
+require_once __DIR__ . '/KeywordSearch.php';
 
 /**
  * Student and teacher profiles (whose existence defines the student/teacher
@@ -167,14 +168,14 @@ class StudentTeacherManagement {
                 WHERE u.is_deleted = 0';
         $params = [];
 
-        foreach (self::keywordTokens($keyword) as $i => $token) {
+        foreach (KeywordSearch::tokens($keyword) as $i => $token) {
             $like = $token . '%';
-            $student = self::likeAnyClause(
+            $student = KeywordSearch::likeAnyClause(
                 ['u.first_name', 'u.last_name', 'u.preferred_name',
                  'u.cell_phone', 'u.home_phone', 'u.address_street_1'],
                 $like, "s{$i}", $params
             );
-            $parent = self::likeAnyClause(
+            $parent = KeywordSearch::likeAnyClause(
                 ['pu.first_name', 'pu.last_name', 'pu.preferred_name',
                  'pu.cell_phone', 'pu.home_phone', 'pu.address_street_1'],
                 $like, "p{$i}", $params
@@ -224,8 +225,8 @@ class StudentTeacherManagement {
                 WHERE u.is_deleted = 0';
         $params = [];
 
-        foreach (self::keywordTokens($keyword) as $i => $token) {
-            $sql .= ' AND ' . self::likeAnyClause(
+        foreach (KeywordSearch::tokens($keyword) as $i => $token) {
+            $sql .= ' AND ' . KeywordSearch::likeAnyClause(
                 ['u.first_name', 'u.last_name', 'u.preferred_name',
                  'u.cell_phone', 'u.email', 'u.address_street_1'],
                 $token . '%', "t{$i}", $params
@@ -296,19 +297,21 @@ class StudentTeacherManagement {
      * Rows: id, first_name, last_name, email, is_parent, is_teacher, is_student.
      */
     public static function searchPeopleForParentLink(string $prefix, ?int $forChildUserId = null, int $limit = 10): array {
-        $prefix = trim($prefix);
-        if ($prefix === '') {
+        $params = [];
+        $keywordClause = KeywordSearch::allTokensClause(
+            ['u.first_name', 'u.last_name', 'u.preferred_name'], $prefix, 'n', $params
+        );
+        if ($keywordClause === '') {
             return [];
         }
         $limit = max(1, min(50, $limit));
-        $params = [$prefix . '%', $prefix . '%'];
         $excludeSql = '';
         if ($forChildUserId !== null && $forChildUserId > 0) {
-            $excludeSql = ' AND u.id <> ?
+            $excludeSql = ' AND u.id <> :child_id
                AND NOT EXISTS (SELECT 1 FROM parenthood linked
-                               WHERE linked.parent_user_id = u.id AND linked.child_user_id = ?)';
-            $params[] = $forChildUserId;
-            $params[] = $forChildUserId;
+                               WHERE linked.parent_user_id = u.id AND linked.child_user_id = :child_id_2)';
+            $params[':child_id'] = $forChildUserId;
+            $params[':child_id_2'] = $forChildUserId;
         }
         $st = self::pdo()->prepare(
             "SELECT u.id, u.first_name, u.last_name, u.email,
@@ -316,7 +319,7 @@ class StudentTeacherManagement {
                     EXISTS (SELECT 1 FROM teacher_profiles tp WHERE tp.user_id = u.id) AS is_teacher,
                     EXISTS (SELECT 1 FROM student_profiles sp WHERE sp.user_id = u.id) AS is_student
              FROM users u
-             WHERE u.is_deleted = 0 AND (u.first_name LIKE ? OR u.last_name LIKE ?)
+             WHERE u.is_deleted = 0 AND $keywordClause
                AND NOT EXISTS (SELECT 1 FROM parenthood own WHERE own.child_user_id = u.id)" . $excludeSql . "
              ORDER BY is_parent DESC, u.first_name, u.last_name
              LIMIT $limit"
@@ -326,8 +329,13 @@ class StudentTeacherManagement {
     }
 
     private static function searchByNamePrefix(string $profileTable, string $prefix, int $limit): array {
-        $prefix = trim($prefix);
-        if ($prefix === '') {
+        $params = [];
+        // Each word typed must match one of the name columns, so a typeahead
+        // still finds somebody once you have typed their whole name.
+        $keywordClause = KeywordSearch::allTokensClause(
+            ['u.first_name', 'u.last_name', 'u.preferred_name'], $prefix, 'n', $params
+        );
+        if ($keywordClause === '') {
             return [];
         }
         $limit = max(1, min(50, $limit));
@@ -335,36 +343,15 @@ class StudentTeacherManagement {
             "SELECT u.id, u.first_name, u.last_name, u.email
              FROM $profileTable p
              JOIN users u ON u.id = p.user_id
-             WHERE u.is_deleted = 0 AND (u.first_name LIKE ? OR u.last_name LIKE ?)
+             WHERE u.is_deleted = 0 AND $keywordClause
              ORDER BY u.first_name, u.last_name
              LIMIT $limit"
         );
-        $st->execute([$prefix . '%', $prefix . '%']);
+        $st->execute($params);
         return $st->fetchAll();
     }
 
     /** Split a keyword search into lowercase tokens (max 5, ignore empties). */
-    private static function keywordTokens(string $keyword): array {
-        $tokens = preg_split('/\s+/', trim($keyword)) ?: [];
-        return array_slice(array_values(array_filter($tokens, fn($t) => $t !== '')), 0, 5);
-    }
-
-    /**
-     * `(col1 LIKE :p_0 OR col2 LIKE :p_1 ...)` for one search value, appending
-     * the bindings to $params. Each column gets its own placeholder because we
-     * run with PDO::ATTR_EMULATE_PREPARES off, where reusing a named
-     * placeholder within a statement fails with "Invalid parameter number".
-     */
-    private static function likeAnyClause(array $columns, string $like, string $prefix, array &$params): string {
-        $parts = [];
-        foreach ($columns as $j => $col) {
-            $ph = ":{$prefix}_{$j}";
-            $parts[] = "{$col} LIKE {$ph}";
-            $params[$ph] = $like;
-        }
-        return '(' . implode(' OR ', $parts) . ')';
-    }
-
     private static function orNull($v): ?string {
         if ($v === null) return null;
         $v = trim((string)$v);

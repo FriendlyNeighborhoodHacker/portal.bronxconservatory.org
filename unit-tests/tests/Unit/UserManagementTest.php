@@ -37,6 +37,29 @@ final class UserManagementTest extends TestCase
         $this->assertNotNull(UserManagement::findAuthByEmail('del@example.org'));
     }
 
+    public function testUserSearchMatchesEveryWordTyped(): void
+    {
+        $brian = fx_user('Brian', 'Rosenthal', ['email' => 'brian@example.org']);
+        $lilly = fx_user('Lilly', 'Rosenthal', ['email' => 'lilly@example.org']);
+        fx_user('Brian', 'Okafor', ['email' => 'bo@example.com']);
+
+        $ids = fn(string $q) => array_map(fn($r) => (int)$r['id'], UserManagement::listUsers($q));
+
+        // The whole name, which matches no single column on its own.
+        $this->assertSame([$brian], $ids('Brian Rosenthal'));
+        // Word order is the person's, not ours.
+        $this->assertSame([$brian], $ids('Rosenthal Brian'));
+        // One word still means one word.
+        $this->assertSame([$brian, $lilly], $ids('rosenthal'));
+        $this->assertSame([], $ids('Brian Nobody'));
+        // A fragment mid-column still matches — this list is searched with
+        // pieces of email addresses too.
+        $this->assertSame([$brian, $lilly], $ids('senthal'));
+        $this->assertSame([$brian], $ids('brian@ex'));
+        // Wildcards typed into the box are data, not pattern.
+        $this->assertSame([], $ids('%'));
+    }
+
     public function testCannotDeleteYourself(): void
     {
         $this->expectException(RuntimeException::class);
