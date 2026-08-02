@@ -57,7 +57,15 @@ function fx_second_location_id(): int {
 }
 
 function fx_semester(UserContext $ctx, string $season = 'fall', int $year = 2030, string $start = '2030-09-01', string $end = '2030-12-20'): int {
-    return SemesterManagement::createSemester($ctx, $season, $year, $start, $end);
+    return SemesterManagement::createSemester($ctx, $season, $year, $start, $end, [
+        'registration_fee' => '35.00',
+        'lesson_fee_30_minutes' => '420.00',
+        'lesson_fee_60_minutes' => '840.00',
+        'guitar_ensemble_fee' => '270.00',
+        'recital_fee' => '10.00',
+        'installment_plan_fee' => '20.00',
+        'lessons_per_semester' => 15,
+    ]);
 }
 
 /**

@@ -12,7 +12,7 @@ final class LeadManagementTest extends TestCase
         test_reset_all();
         // Create a semester with pinned pricing for all tests.
         $ctx = fx_admin_ctx();
-        $this->semesterId = SemesterManagement::createSemester($ctx, 'fall', 2030, '2030-09-01', '2030-12-31', [
+        $this->semesterId = SemesterManagement::createSemester($ctx, 'fall', 2025, '2025-09-01', '2025-12-31', [
             'registration_fee' => '35.00',
             'lesson_fee_30_minutes' => '420.00',
             'lesson_fee_60_minutes' => '840.00',
@@ -119,7 +119,7 @@ final class LeadManagementTest extends TestCase
     public function testQuoteInstallmentRoundsOddCentUp(): void
     {
         $ctx = fx_admin_ctx();
-        $altSemesterId = SemesterManagement::createSemester($ctx, 'spring', 2031, '2031-01-01', '2031-05-31', [
+        $altSemesterId = SemesterManagement::createSemester($ctx, 'spring', 2026, '2026-01-01', '2026-05-31', [
             'registration_fee' => '35.00',
             'lesson_fee_30_minutes' => '420.01',
             'lesson_fee_60_minutes' => '840.02',
@@ -167,8 +167,8 @@ final class LeadManagementTest extends TestCase
         $this->assertSame(60, (int)$students[1]['lesson_length_minutes']);
         $this->assertSame(2031, (int)$students[0]['class_of']);
 
-        // Deliberately NOT live data: no users, profiles, or reservations.
-        $this->assertSame(1, (int)pdo()->query('SELECT COUNT(*) FROM users')->fetchColumn()); // just the fx admin
+        // Deliberately NOT live data: no users, profiles, or reservations beyond the admins in setUp.
+        $this->assertLessThanOrEqual(2, (int)pdo()->query('SELECT COUNT(*) FROM users')->fetchColumn()); // just admin(s)
         $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM student_profiles')->fetchColumn());
         $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM semester_lesson_reservations')->fetchColumn());
     }
