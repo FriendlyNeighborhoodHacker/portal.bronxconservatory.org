@@ -270,22 +270,58 @@ class StudentTeacherManagement {
         return self::searchByNamePrefix('teacher_profiles', $prefix, $limit);
     }
 
-    /** Typeahead: parents whose first or last name starts with $prefix. */
-    public static function searchParentsByNamePrefix(string $prefix, int $limit = 10): array {
+    /**
+     * Typeahead for "Link Existing Parent": anybody who could be linked to a
+     * child as their parent, whether or not they are already a parent of
+     * someone.
+     *
+     * Being a parent here is not a profile you hold, it is a parenthood row
+     * you are in — so searching only people who already have one made
+     * unlinking a family's only child permanent: the parent stopped being a
+     * parent and could never be found again. Nobody is filtered out by role
+     * (a teacher can have a child at the school; so can an adult student), so
+     * each result carries what it already is and existing parents sort first.
+     *
+     * People who are somebody's child here are left out: the school already
+     * records an adult responsible for them, which is as good as saying they
+     * are not one. That also keeps a common surname from filling the list
+     * with the children who share it. Should a family ever need one — an
+     * older sibling who is now a guardian — unlinking that person's own
+     * parent puts them back in the list.
+     *
+     * Passing the child being linked leaves them and their current parents
+     * out of the list — you cannot be your own parent, and offering somebody
+     * already linked only invites a confusing no-op.
+     *
+     * Rows: id, first_name, last_name, email, is_parent, is_teacher, is_student.
+     */
+    public static function searchPeopleForParentLink(string $prefix, ?int $forChildUserId = null, int $limit = 10): array {
         $prefix = trim($prefix);
         if ($prefix === '') {
             return [];
         }
         $limit = max(1, min(50, $limit));
+        $params = [$prefix . '%', $prefix . '%'];
+        $excludeSql = '';
+        if ($forChildUserId !== null && $forChildUserId > 0) {
+            $excludeSql = ' AND u.id <> ?
+               AND NOT EXISTS (SELECT 1 FROM parenthood linked
+                               WHERE linked.parent_user_id = u.id AND linked.child_user_id = ?)';
+            $params[] = $forChildUserId;
+            $params[] = $forChildUserId;
+        }
         $st = self::pdo()->prepare(
-            "SELECT DISTINCT u.id, u.first_name, u.last_name, u.email
-             FROM parenthood ph
-             JOIN users u ON u.id = ph.parent_user_id
+            "SELECT u.id, u.first_name, u.last_name, u.email,
+                    EXISTS (SELECT 1 FROM parenthood ph WHERE ph.parent_user_id = u.id) AS is_parent,
+                    EXISTS (SELECT 1 FROM teacher_profiles tp WHERE tp.user_id = u.id) AS is_teacher,
+                    EXISTS (SELECT 1 FROM student_profiles sp WHERE sp.user_id = u.id) AS is_student
+             FROM users u
              WHERE u.is_deleted = 0 AND (u.first_name LIKE ? OR u.last_name LIKE ?)
-             ORDER BY u.first_name, u.last_name
+               AND NOT EXISTS (SELECT 1 FROM parenthood own WHERE own.child_user_id = u.id)" . $excludeSql . "
+             ORDER BY is_parent DESC, u.first_name, u.last_name
              LIMIT $limit"
         );
-        $st->execute([$prefix . '%', $prefix . '%']);
+        $st->execute($params);
         return $st->fetchAll();
     }
 

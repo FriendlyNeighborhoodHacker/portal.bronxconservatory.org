@@ -45,7 +45,9 @@ function render_parent_modal(int $childUserId): void {
           <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
           <input type="hidden" name="child_user_id" value="<?=$childUserId?>">
           <label>Find the parent
-            <?php render_typeahead_field('apLink', 'parent_user_id', '/admin/parent_search.php', 'Type the parent\'s name...'); ?>
+            <?php render_typeahead_field('apLink', 'parent_user_id',
+                '/admin/parent_search.php?child_user_id=' . $childUserId,
+                'Type the parent\'s name...'); ?>
           </label>
           <label>Relationship
             <select name="role">

@@ -102,6 +102,59 @@ final class StudentTeacherManagementTest extends TestCase
         $this->assertSame([], self::studentIds('marco'));
     }
 
+    public function testAParentStaysFindableAfterTheirLastChildIsUnlinked(): void
+    {
+        $ctx = fx_admin_ctx();
+        $child = fx_student('Devon', 'Brown');
+        $parent = fx_parent_of($child, 'Denise', 'Brown');
+
+        $ids = fn(string $q, ?int $forChild = null) => array_map(
+            fn($r) => (int)$r['id'],
+            StudentTeacherManagement::searchPeopleForParentLink($q, $forChild)
+        );
+
+        // Unlinking the only child is what used to make a parent unfindable:
+        // being a parent is a parenthood row, and they no longer had one.
+        StudentTeacherManagement::unlinkParentChild($ctx, $parent, $child);
+        $this->assertSame([], StudentTeacherManagement::parentsOfStudent($child));
+        $this->assertSame([$parent], $ids('deni'));
+
+        // ...so they can be linked straight back.
+        StudentTeacherManagement::linkParentChild($ctx, $parent, $child, 'mother');
+        $this->assertSame([$parent], array_map(fn($r) => (int)$r['id'],
+            StudentTeacherManagement::parentsOfStudent($child)));
+    }
+
+    public function testParentLinkSearchOffersAnyoneExceptWhoIsAlreadyLinked(): void
+    {
+        $ctx = fx_admin_ctx();
+        $child = fx_student('Devon', 'Devlin');
+        $linked = fx_parent_of($child, 'Denise', 'Devlin');
+        $teacher = fx_teacher('Dora', 'Devlin');
+        $stranger = fx_user('Dana', 'Devlin');
+
+        $ids = fn(string $q, ?int $forChild = null) => array_map(
+            fn($r) => (int)$r['id'],
+            StudentTeacherManagement::searchPeopleForParentLink($q, $forChild)
+        );
+
+        // Without a child in hand: everyone matching, parents first.
+        $this->assertSame($linked, $ids('dev')[0]);
+        $this->assertContains($teacher, $ids('dev'));   // a teacher can be a parent too
+        $this->assertContains($stranger, $ids('dev'));
+
+        // For this child: the child themselves and their current parents drop out.
+        $offered = $ids('dev', $child);
+        $this->assertNotContains($linked, $offered);
+        $this->assertNotContains($child, $offered);
+        $this->assertSame([$stranger, $teacher], $offered);
+
+        // Roles come back so the admin can tell two Devlins apart.
+        $rows = StudentTeacherManagement::searchPeopleForParentLink('deni');
+        $this->assertSame(1, (int)$rows[0]['is_parent']);
+        $this->assertSame(0, (int)$rows[0]['is_teacher']);
+    }
+
     public function testTeacherKeywordAndInstrumentFilters(): void
     {
         $ctx = fx_admin_ctx();
