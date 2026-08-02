@@ -67,6 +67,7 @@ class ApplicationUI {
         }
         if (in_array('teacher', $roles, true)) {
             $groups[] = [
+                ['path' => '/teacher/days.php', 'label' => 'Teaching Days', 'prefixes' => ['/teacher/days.php']],
                 ['path' => '/teacher/calendar.php', 'label' => 'Calendar', 'prefixes' => ['/teacher/']],
             ];
         }

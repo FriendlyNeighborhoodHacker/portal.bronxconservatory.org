@@ -32,45 +32,69 @@ final class NotesManagementTest extends TestCase
         return [$teacher, $student, array_map('intval', array_column($st->fetchAll(), 'id'))];
     }
 
-    public function testAutoSaveUpsertsPerAuthor(): void
+    public function testEveryNoteIsKeptAndSigned(): void
     {
         [$teacher, , $lessonIds] = $this->makeLessons();
         $teacherCtx = new UserContext($teacher, false);
 
-        $saved = NotesManagement::saveLessonNote($teacherCtx, $lessonIds[0], 'Worked on scales.');
+        $saved = NotesManagement::addLessonNote($teacherCtx, $lessonIds[0], 'Worked on scales.');
         $this->assertSame('Worked on scales.', $saved['body']);
-        $saved = NotesManagement::saveLessonNote($teacherCtx, $lessonIds[0], 'Worked on scales and arpeggios.');
-        $this->assertSame('Worked on scales and arpeggios.', $saved['body']);
+        $this->assertSame('Tess', $saved['author_first_name']);
 
-        // An admin's note is a second row, not an overwrite.
-        NotesManagement::saveLessonNote($this->ctx, $lessonIds[0], 'Please collect the signed form.');
+        // A second note from the same author is a second note, not an edit —
+        // this is a thread, not a box.
+        NotesManagement::addLessonNote($teacherCtx, $lessonIds[0], 'Also started Suzuki book 2.');
+        NotesManagement::addLessonNote($this->ctx, $lessonIds[0], 'Please collect the signed form.');
+
         $notes = NotesManagement::lessonNotesForLesson($lessonIds[0]);
-        $this->assertCount(2, $notes);
+        $this->assertCount(3, $notes);
+        $this->assertSame(
+            ['Worked on scales.', 'Also started Suzuki book 2.', 'Please collect the signed form.'],
+            array_column($notes, 'body')
+        );
     }
 
-    public function testOnlyTheLessonsTeacherOrAdminMayWrite(): void
+    public function testTheFamilyMayWriteToo(): void
     {
-        [, , $lessonIds] = $this->makeLessons();
-        $other = fx_teacher('Olga', 'Other');
-        $this->expectException(RuntimeException::class);
-        NotesManagement::saveLessonNote(new UserContext($other, false), $lessonIds[0], 'Nope.');
+        [, $student, $lessonIds] = $this->makeLessons();
+        $parent = fx_parent_of($student);
+
+        NotesManagement::addLessonNote(new UserContext($parent, false), $lessonIds[0], 'She has a cold — can we make this up?');
+        NotesManagement::addLessonNote(new UserContext($student, false), $lessonIds[0], 'Practised 20 minutes a day.');
+
+        $this->assertCount(2, NotesManagement::lessonNotesForLesson($lessonIds[0]));
     }
 
-    public function testRecentNotesForStudentNewestLessonFirst(): void
+    public function testStrangersMayNotWriteAndEmptyNotesAreRefused(): void
+    {
+        [$teacher, , $lessonIds] = $this->makeLessons();
+        $other = fx_teacher('Olga', 'Other');
+
+        try {
+            NotesManagement::addLessonNote(new UserContext($other, false), $lessonIds[0], 'Nope.');
+            $this->fail('A teacher with no claim on the lesson should not be able to write on it.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('not yours', $e->getMessage());
+        }
+
+        $this->expectException(InvalidArgumentException::class);
+        NotesManagement::addLessonNote(new UserContext($teacher, false), $lessonIds[0], '   ');
+    }
+
+    public function testRecentNotesForStudentNewestFirst(): void
     {
         [$teacher, $student, $lessonIds] = $this->makeLessons();
         $teacherCtx = new UserContext($teacher, false);
-        NotesManagement::saveLessonNote($teacherCtx, $lessonIds[0], 'Week one.');
-        NotesManagement::saveLessonNote($teacherCtx, $lessonIds[1], 'Week two.');
-        NotesManagement::saveLessonNote($teacherCtx, $lessonIds[1], ''); // emptied notes are hidden... this empties week two
+        NotesManagement::addLessonNote($teacherCtx, $lessonIds[0], 'Week one.');
+        NotesManagement::addLessonNote($teacherCtx, $lessonIds[1], 'Week two.');
+        NotesManagement::addLessonNote($teacherCtx, $lessonIds[1], 'Week two, afterthought.');
 
         $notes = NotesManagement::recentLessonNotesForStudent($student);
-        $this->assertCount(1, $notes);
-        $this->assertSame('Week one.', $notes[0]['body']);
-
-        NotesManagement::saveLessonNote($teacherCtx, $lessonIds[1], 'Week two, really.');
-        $notes = NotesManagement::recentLessonNotesForStudent($student);
-        $this->assertCount(2, $notes);
-        $this->assertSame('Week two, really.', $notes[0]['body']);
+        $this->assertCount(3, $notes);
+        // Newest lesson first, and within it the newest note.
+        $this->assertSame('Week two, afterthought.', $notes[0]['body']);
+        $this->assertSame('Week two.', $notes[1]['body']);
+        $this->assertSame('Week one.', $notes[2]['body']);
+        $this->assertSame('Tess', $notes[0]['author_first_name']);
     }
 }

@@ -103,6 +103,40 @@ class LessonManagement {
         return $d !== false ? (string)$d : null;
     }
 
+    /**
+     * The teacher's teaching days from $fromDate on: one row per date with
+     * the lessons on it counted, when the day starts and ends, and where it
+     * is spent. Lessons here are sparse and spread across buildings, so what
+     * a teacher wants first is which days they work and where — the hour by
+     * hour comes after they pick one.
+     *
+     * Cancelled lessons are left out: a day whose lessons were all called off
+     * is not a day they have to be anywhere.
+     *
+     * Rows: lesson_date, lesson_count, first_start, last_end, location_names.
+     */
+    public static function upcomingTeachingDaysForTeacher(int $teacherUserId, string $fromDate, int $limit = 20): array {
+        $limit = max(1, min(200, $limit));
+        $st = self::pdo()->prepare(
+            'SELECT DATE(l.start_datetime) AS lesson_date,
+                    COUNT(*) AS lesson_count,
+                    MIN(l.start_datetime) AS first_start,
+                    MAX(l.start_datetime + INTERVAL l.duration_minutes MINUTE) AS last_end,
+                    GROUP_CONCAT(DISTINCT loc.name ORDER BY loc.name SEPARATOR ", ") AS location_names
+             FROM lessons l
+             LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             JOIN locations loc ON loc.id = COALESCE(l.location_id_override, r.location_id, l.location_id)
+             WHERE DATE(l.start_datetime) >= ?
+               AND ' . self::F_TEACHER . ' = ?
+               AND l.cancelled_at IS NULL
+             GROUP BY lesson_date
+             ORDER BY lesson_date
+             LIMIT ' . $limit
+        );
+        $st->execute([$fromDate, $teacherUserId]);
+        return $st->fetchAll();
+    }
+
     /** The teacher's previous date with lessons strictly before $beforeDate, or null. */
     public static function previousTeachingDateForTeacher(int $teacherUserId, string $beforeDate): ?string {
         $st = self::pdo()->prepare(
@@ -211,6 +245,22 @@ class LessonManagement {
               ORDER BY l.start_datetime LIMIT $limit"
         );
         $st->execute([$studentUserId, $fromDate]);
+        return $st->fetchAll();
+    }
+
+    /**
+     * A student's lessons that have already happened, most recent first —
+     * where the notes and materials from them are, which is what a family
+     * looks back for.
+     */
+    public static function recentLessonsForStudent(int $studentUserId, string $beforeDate, int $limit = 4): array {
+        $limit = max(1, min(100, $limit));
+        $st = self::pdo()->prepare(
+            self::LESSON_SELECT .
+            ' WHERE ' . self::F_STUDENT . " = ? AND DATE(l.start_datetime) < ?
+              ORDER BY l.start_datetime DESC LIMIT $limit"
+        );
+        $st->execute([$studentUserId, $beforeDate]);
         return $st->fetchAll();
     }
 

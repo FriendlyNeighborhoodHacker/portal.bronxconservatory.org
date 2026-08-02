@@ -1,9 +1,12 @@
 <?php
-// A child's detail for their parent: upcoming schedule (holiday weeks
-// noted), recent teacher notes, and materials.
+// A child's detail for their parent: their schedule (holiday weeks noted),
+// recent teacher notes, and materials. Every lesson on the page — the ones
+// coming up and the ones just gone — opens its notes and materials in a
+// modal, where a parent can add a note of their own.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
+require_once __DIR__ . '/../lib/LessonDetailUIManager.php';
 require_once __DIR__ . '/../lib/NotesManagement.php';
 require_once __DIR__ . '/../lib/ResourceManagement.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
@@ -46,6 +49,7 @@ if ($semesterId !== null) {
 }
 usort($rows, fn($a, $b) => strcmp($a['date'], $b['date']));
 
+$pastLessons = LessonManagement::recentLessonsForStudent($childId, date('Y-m-d'), 4);
 $notes = NotesManagement::recentLessonNotesForStudent($childId);
 $resources = $semesterId !== null
     ? ResourceManagement::resourcesForStudentInSemester($childId, $semesterId)
@@ -76,18 +80,37 @@ header_html($child['first_name'] . "'s lessons");
         . ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])))?></span>
       <span><?=h($lesson['location_name'])?></span>
       <?php if ($cancelled): ?><span class="badge">Cancelled</span><?php endif; ?>
+      <span class="small"><a href="#" data-lesson-detail="<?=(int)$lesson['id']?>">Notes &amp; materials</a></span>
     </div>
     <?php endif; ?>
   <?php endforeach; ?>
 </div>
 
-<h3>Recent teacher notes</h3>
+<?php if ($pastLessons): ?>
+<h3>Recent lessons</h3>
+<div class="card">
+  <p class="small">Open a lesson to read its notes and materials — or to leave a note for the teacher.</p>
+  <?php foreach ($pastLessons as $lesson): ?>
+  <?php $cancelled = LessonManagement::isCancelled($lesson); ?>
+  <div class="lesson-row<?=$cancelled ? ' lesson-cancelled' : ''?>">
+    <span class="lesson-row-time"><?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?></span>
+    <span>Lesson with <?=h(trim(($lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name']) . ' '
+      . ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])))?></span>
+    <span><?=h($lesson['location_name'])?></span>
+    <?php if ($cancelled): ?><span class="badge">Cancelled</span><?php endif; ?>
+    <span class="small"><a href="#" data-lesson-detail="<?=(int)$lesson['id']?>">Notes &amp; materials</a></span>
+  </div>
+  <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
+<h3>Recent notes</h3>
 <div class="card">
   <?php if (!$notes): ?><p class="small">No notes yet — they appear after lessons.</p><?php endif; ?>
   <?php foreach ($notes as $note): ?>
   <div style="padding:6px 0;border-bottom:1px solid var(--color-border);">
     <div class="small"><?=h(date('M j, Y', strtotime($note['start_datetime'])))?>
-      · <?=h(trim($note['teacher_first_name'] . ' ' . $note['teacher_last_name']))?></div>
+      · <?=h(trim($note['author_first_name'] . ' ' . $note['author_last_name']))?></div>
     <div><?=nl2br(h($note['body']))?></div>
   </div>
   <?php endforeach; ?>
@@ -108,4 +131,5 @@ header_html($child['first_name'] . "'s lessons");
   <?php endforeach; ?>
 </div>
 
+<?php LessonDetailUIManager::renderModal(); ?>
 <?php footer_html(); ?>

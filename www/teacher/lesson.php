@@ -1,11 +1,10 @@
 <?php
-// Lesson detail for teachers: upload materials (recordings, sheet music) or
-// share links, and review the note. Attendance and notes live on the
-// dashboard rows.
+// Lesson detail for teachers: the lesson's notes and its materials, the same
+// two blocks as the day view — this page is where you land from a calendar
+// rather than a second way of doing anything.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
-require_once __DIR__ . '/../lib/NotesManagement.php';
-require_once __DIR__ . '/../lib/ResourceManagement.php';
+require_once __DIR__ . '/../lib/LessonDetailUIManager.php';
 Application::init();
 require_login();
 
@@ -21,13 +20,7 @@ if (empty($me['is_admin']) && !LessonManagement::isEffectiveTeacher((int)$me['id
     die('This is not your lesson');
 }
 
-$resources = ResourceManagement::resourcesForLesson($lessonId);
-$note = NotesManagement::lessonNoteFor($lessonId, (int)$me['id']);
 $studentName = trim(($lesson['student_preferred_name'] ?: $lesson['student_first_name']) . ' ' . $lesson['student_last_name']);
-
-$flash = $_SESSION['teacher_flash'] ?? null;
-$flashError = $_SESSION['teacher_flash_error'] ?? null;
-unset($_SESSION['teacher_flash'], $_SESSION['teacher_flash_error']);
 
 header_html('Lesson — ' . $studentName);
 ?>
@@ -40,65 +33,22 @@ header_html('Lesson — ' . $studentName);
   <?php if (!empty($lesson['substitute_teacher_user_id'])): ?>
     · covered by <?=h(trim(($lesson['substitute_first_name'] ?? '') . ' ' . ($lesson['substitute_last_name'] ?? '')))?>
   <?php endif; ?>
+  · <a href="/teacher/index.php?date=<?=h(date('Y-m-d', strtotime($lesson['start_datetime'])))?>">the whole day</a>
 </p>
 <?php if (LessonManagement::isCancelled($lesson)): ?>
   <p class="small">This lesson was cancelled. Nothing is expected of you for it.</p>
 <?php endif; ?>
-<?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
-<?php if ($flashError): ?><p class="error"><?=h($flashError)?></p><?php endif; ?>
 
 <div class="card">
-  <h3>Your note</h3>
-  <?php if ($note && trim($note['body']) !== ''): ?>
-    <div><?=nl2br(h($note['body']))?></div>
-    <div class="small" style="margin-top:6px;">Log and edit notes from <a href="/teacher/index.php?date=<?=h(date('Y-m-d', strtotime($lesson['start_datetime'])))?>">the day view</a>.</div>
-  <?php else: ?>
-    <p class="small">No note yet — log one from <a href="/teacher/index.php?date=<?=h(date('Y-m-d', strtotime($lesson['start_datetime'])))?>">the day view</a>.</p>
-  <?php endif; ?>
+  <h3>Notes</h3>
+  <?=LessonDetailUIManager::notesBlockHtml($lessonId, true, 'What you covered, what to practice…')?>
 </div>
 
 <div class="card">
   <h3>Materials</h3>
-  <?php foreach ($resources as $resource): ?>
-    <div class="lesson-row">
-      <?php if ($resource['resource_type'] === 'link'): ?>
-        <span><a href="<?=h($resource['url'])?>" target="_blank" rel="noopener">🔗 <?=h($resource['title'])?></a></span>
-        <span class="small"><?=h($resource['url'])?></span>
-      <?php else: ?>
-        <span><a href="/resource_download.php?id=<?=(int)$resource['id']?>"><?=h($resource['title'])?></a></span>
-        <span class="small"><?=h((string)($resource['original_filename'] ?? ''))?></span>
-      <?php endif; ?>
-    </div>
-  <?php endforeach; ?>
-  <?php if (!$resources): ?><p class="small">Nothing shared for this lesson yet.</p><?php endif; ?>
-
-  <form method="post" action="/teacher/resource_upload_eval.php" enctype="multipart/form-data" class="stack" style="margin-top:10px;">
-    <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
-    <input type="hidden" name="lesson_id" value="<?=$lessonId?>">
-    <div class="grid-2">
-      <label>Title
-        <input type="text" name="title" placeholder="Week 3 recording">
-      </label>
-      <label>File (audio, PDF, image, or video)
-        <input type="file" name="resource" required>
-      </label>
-    </div>
-    <button type="submit" class="button">Upload Material</button>
-  </form>
-
-  <form method="post" action="/teacher/resource_link_add_eval.php" class="stack" style="margin-top:14px;">
-    <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
-    <input type="hidden" name="lesson_id" value="<?=$lessonId?>">
-    <div class="grid-2">
-      <label>Link title
-        <input type="text" name="title" placeholder="Practice video">
-      </label>
-      <label>Link (http/https)
-        <input type="url" name="url" placeholder="https://..." required>
-      </label>
-    </div>
-    <button type="submit" class="button">Share Link</button>
-  </form>
+  <?=LessonDetailUIManager::resourcesBlockHtml($lessonId, true)?>
 </div>
 
+<?php LessonDetailUIManager::renderNotesScript(); ?>
+<?php LessonDetailUIManager::renderResourceModal(); ?>
 <?php footer_html(); ?>

@@ -1067,11 +1067,27 @@ body.auth .brand-logo {
   color: var(--color-text-muted);
 }
 
-.lesson-note-box {
-  width: 100%;
+/* A lesson's notes: a short thread anyone on the lesson can add to, each
+   entry signed and dated (LessonDetailUIManager). */
+.lesson-notes {
+  margin: 4px 0;
 }
 
-.lesson-note-box textarea {
+.lesson-note {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.lesson-note-by {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.lesson-note-form {
+  margin-top: 8px;
+}
+
+.lesson-note-form textarea {
   width: 100%;
   min-height: 54px;
   border: 1px solid var(--color-border);
@@ -1082,6 +1098,12 @@ body.auth .brand-logo {
 
 .note-save-state {
   font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* Taking a present/absent mark back off — quieter than the two buttons it
+   follows, since it undoes rather than answers. */
+.attendance-unmark {
   color: var(--color-text-muted);
 }
 

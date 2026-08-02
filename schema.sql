@@ -466,10 +466,10 @@ CREATE TABLE semester_hold_blocks (
 CREATE INDEX idx_shb_start ON semester_hold_blocks(start_datetime);
 
 -- ===== Lesson notes =====
--- Notes written after a lesson by the teacher (auto-save upsert on the
--- teacher dashboard) or by an admin (from the calendar's lesson modal).
--- Visible to the student, their parents, and admins. One note per author per
--- lesson.
+-- What was said about a lesson: written by its teacher, by an admin, or by
+-- the family (a parent or the student themselves), and visible to all of
+-- them. Each note is its own row, kept for good and shown with who wrote it
+-- and when — a conversation about the lesson rather than one editable box.
 CREATE TABLE lesson_notes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   lesson_id INT NOT NULL,
@@ -477,10 +477,11 @@ CREATE TABLE lesson_notes (
   body TEXT NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY unique_lesson_author (lesson_id, created_by_user_id),
   CONSTRAINT fk_ln_lesson FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE,
   CONSTRAINT fk_ln_author FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+CREATE INDEX idx_ln_lesson ON lesson_notes(lesson_id, created_at);
 
 -- ===== Lesson resources =====
 -- Materials attached to a lesson: an uploaded file (recording, sheet music —

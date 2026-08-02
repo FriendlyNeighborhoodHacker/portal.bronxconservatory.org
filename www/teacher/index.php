@@ -1,12 +1,16 @@
 <?php
-// Teacher home: today's lessons in chronological order. Each row shows time,
-// student name, location (online lessons get an icon), attendance buttons,
-// and a note box that auto-saves as the teacher types. The arrows jump to
-// the teacher's previous/next day that actually has lessons.
+// Teacher home: one card per lesson for a single day — attendance, the
+// lesson's notes, and its materials, all where the teacher already is.
+//
+// The day shown is today when there are lessons today; otherwise the next day
+// that has any, because lessons here are sparse and an empty page is no use
+// to anybody. There is no date picker for the same reason — most dates have
+// nothing on them. Jumping around is done by teaching day, here with the
+// arrows and in full on Teaching Days.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/fragments.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
-require_once __DIR__ . '/../lib/NotesManagement.php';
+require_once __DIR__ . '/../lib/LessonDetailUIManager.php';
 Application::init();
 require_login();
 
@@ -17,39 +21,64 @@ if (!in_array('teacher', $roles, true) && !in_array('admin', $roles, true)) {
     die('Teachers only');
 }
 
-$date = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['date'] ?? '')) ? $_GET['date'] : date('Y-m-d');
+$today = date('Y-m-d');
+$requestedDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['date'] ?? '')) ? (string)$_GET['date'] : null;
+
+$date = $requestedDate ?? $today;
 $lessons = LessonManagement::lessonsForTeacherOnDate((int)$me['id'], $date);
+
+// Nothing today (and no date asked for): show the next day that has lessons.
+$showingNextDay = false;
+if (!$lessons && $requestedDate === null) {
+    $nextDays = LessonManagement::upcomingTeachingDaysForTeacher((int)$me['id'], $today, 1);
+    if ($nextDays) {
+        $date = (string)$nextDays[0]['lesson_date'];
+        $lessons = LessonManagement::lessonsForTeacherOnDate((int)$me['id'], $date);
+        $showingNextDay = true;
+    }
+}
+
 $prevDay = LessonManagement::previousTeachingDateForTeacher((int)$me['id'], $date);
 $nextDay = LessonManagement::nextTeachingDateForTeacher((int)$me['id'], $date);
 
-header_html("Today's Lessons");
+if ($date === $today && $lessons) {
+    $title = "Today's Lessons";
+} elseif ($showingNextDay) {
+    $title = 'Upcoming Lessons';
+} else {
+    $title = 'Lessons for ' . date('D, M j', strtotime($date));
+}
+
+header_html($title);
 ?>
 
 <div class="page-head">
-  <h2><?=$date === date('Y-m-d') ? "Today's Lessons" : 'Lessons for ' . h(date('D, M j', strtotime($date)))?></h2>
+  <h2><?=h($title)?></h2>
   <span class="actions">
     <?php if ($prevDay): ?>
       <a class="button" href="/teacher/index.php?date=<?=h($prevDay)?>">&larr; <?=h(date('M j', strtotime($prevDay)))?></a>
     <?php endif; ?>
-    <form method="get" class="inline">
-      <input type="date" name="date" value="<?=h($date)?>" onchange="this.form.submit()">
-    </form>
     <?php if ($nextDay): ?>
       <a class="button" href="/teacher/index.php?date=<?=h($nextDay)?>"><?=h(date('M j', strtotime($nextDay)))?> &rarr;</a>
     <?php endif; ?>
+    <a class="button" href="/teacher/days.php">Teaching Days</a>
   </span>
 </div>
 
+<?php if ($lessons && $date !== $today): ?>
+  <p class="small"><?=h(date('l, F j, Y', strtotime($date)))?><?=$showingNextDay ? ' — your next teaching day' : ''?></p>
+<?php endif; ?>
+
 <?php if (!$lessons): ?>
   <p class="small">No lessons on this day.
-  <?php if ($nextDay): ?>Your next teaching day is
-    <a href="/teacher/index.php?date=<?=h($nextDay)?>"><?=h(date('l, M j', strtotime($nextDay)))?></a>.<?php endif; ?>
+    <?php if ($nextDay): ?>Your next teaching day is
+      <a href="/teacher/index.php?date=<?=h($nextDay)?>"><?=h(date('l, M j', strtotime($nextDay)))?></a>.<?php endif; ?>
   </p>
 <?php endif; ?>
 
 <?php foreach ($lessons as $lesson): ?>
   <?php
-    $note = NotesManagement::lessonNoteFor((int)$lesson['id'], (int)$me['id']);
+    $lessonId = (int)$lesson['id'];
     $missed = $lesson['attended'] !== null && (int)$lesson['attended'] === 0;
     // Still listed when cancelled — you planned your day around it.
     $cancelled = LessonManagement::isCancelled($lesson);
@@ -61,7 +90,7 @@ header_html("Today's Lessons");
         <?=h(date('g:i A', strtotime($lesson['start_datetime'])))?>
       </span>
       <span class="<?=$struck ? 'lesson-cancelled' : ''?>">
-        <strong><a href="/teacher/lesson.php?id=<?=(int)$lesson['id']?>"><?=h(trim(($lesson['student_preferred_name'] ?: $lesson['student_first_name']) . ' ' . $lesson['student_last_name']))?></a></strong>
+        <strong><a href="/teacher/lesson.php?id=<?=$lessonId?>"><?=h(trim(($lesson['student_preferred_name'] ?: $lesson['student_first_name']) . ' ' . $lesson['student_last_name']))?></a></strong>
         <span class="small">Lesson #<?=(int)$lesson['lesson_number']?></span>
       </span>
       <span><?=h($lesson['location_name'])?></span>
@@ -71,52 +100,31 @@ header_html("Today's Lessons");
       <?php endif; ?>
     </div>
 
-    <div id="attendance-<?=(int)$lesson['id']?>-solo">
-      <?=teacher_attendance_html((int)$lesson['id'], null, $lesson['attended'])?>
+    <div id="attendance-<?=$lessonId?>-solo">
+      <?=teacher_attendance_html($lessonId, null, $lesson['attended'])?>
     </div>
 
-    <div class="lesson-note-box" style="margin-top:8px;">
-      <textarea data-lesson-id="<?=(int)$lesson['id']?>" class="lesson-note-input"
-        placeholder="Log a note for this lesson — what you covered, what to practice…"><?=h($note['body'] ?? '')?></textarea>
-      <div id="note-state-<?=(int)$lesson['id']?>"><?=teacher_note_state_html($note)?></div>
-    </div>
+    <h4>Notes</h4>
+    <?=LessonDetailUIManager::notesBlockHtml($lessonId, true, 'What you covered, what to practice…')?>
+
+    <h4>Materials</h4>
+    <?=LessonDetailUIManager::resourcesBlockHtml($lessonId, true)?>
   </div>
 <?php endforeach; ?>
+
+<?php LessonDetailUIManager::renderNotesScript(); ?>
+<?php LessonDetailUIManager::renderResourceModal(); ?>
 
 <script>
 (function () {
   var csrf = <?=json_encode(csrf_token())?>;
 
-  // Auto-save lesson notes, debounced per textarea.
-  document.querySelectorAll('.lesson-note-input').forEach(function (box) {
-    var timer = null;
-    box.addEventListener('input', function () {
-      var stateEl = document.getElementById('note-state-' + box.dataset.lessonId);
-      if (stateEl) stateEl.innerHTML = '<span class="note-save-state">Saving…</span>';
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(function () {
-        var body = new URLSearchParams({csrf: csrf, lesson_id: box.dataset.lessonId, body: box.value});
-        fetch('/teacher/lesson_note_save.php', {method: 'POST', body: body})
-          .then(function (r) { return r.text().then(function (t) { return {ok: r.ok, text: t}; }); })
-          .then(function (res) {
-            if (stateEl) stateEl.innerHTML = res.ok ? res.text
-              : '<span class="error">' + res.text + '</span>';
-          })
-          .catch(function () {
-            if (stateEl) stateEl.innerHTML = '<span class="error">Could not save — check your connection.</span>';
-          });
-      }, 700);
-    });
-  });
-
-  // Attendance buttons (event delegation: fragments get re-swapped).
-  document.addEventListener('click', function (e) {
-    var btn = e.target.closest('.attendance-btn');
-    if (!btn || btn.disabled) return;
-    var lessonId = btn.dataset.lessonId;
+  // Attendance: mark, or take the mark back off. Delegated, because the
+  // controls are replaced by the fragment each save returns.
+  function saveAttendance(lessonId, attended) {
     var target = document.getElementById('attendance-' + lessonId + '-solo');
-    var body = new URLSearchParams({csrf: csrf, lesson_id: lessonId, attended: btn.dataset.attended});
-    fetch('/teacher/lesson_attendance_save.php', {method: 'POST', body: body})
+    var body = new URLSearchParams({csrf: csrf, lesson_id: lessonId, attended: attended});
+    fetch('/teacher/lesson_attendance_save.php', {method: 'POST', body: body, credentials: 'same-origin'})
       .then(function (r) { return r.text().then(function (t) { return {ok: r.ok, text: t}; }); })
       .then(function (res) {
         if (target) target.innerHTML = res.ok ? res.text : '<span class="error">' + res.text + '</span>';
@@ -124,6 +132,21 @@ header_html("Today's Lessons");
       .catch(function () {
         if (target) target.innerHTML = '<span class="error">Could not save — try again.</span>';
       });
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.attendance-btn') : null;
+    if (btn && !btn.disabled) {
+      saveAttendance(btn.dataset.lessonId, btn.dataset.attended);
+      return;
+    }
+    var unmark = e.target.closest ? e.target.closest('.attendance-unmark') : null;
+    if (unmark) {
+      e.preventDefault();
+      if (confirm('Clear the present/absent mark for this lesson?')) {
+        saveAttendance(unmark.dataset.lessonId, '');
+      }
+    }
   });
 })();
 </script>

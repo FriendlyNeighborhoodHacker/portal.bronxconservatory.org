@@ -1,7 +1,8 @@
 <?php
-// AJAX: the contents of the lesson-detail modal (notes + materials) as an
-// HTML fragment. Anyone who may see the lesson may see this — the student,
-// their parents, the teacher who has it, and admins.
+// AJAX: the contents of the lesson-detail modal (its notes, a box to add
+// one, and its materials) as an HTML fragment. Anyone who may see the lesson
+// may see this — the student, their parents, the teacher who has it, and
+// admins.
 require_once __DIR__ . '/partials.php';
 require_once __DIR__ . '/lib/LessonManagement.php';
 require_once __DIR__ . '/lib/LessonDetailUIManager.php';
