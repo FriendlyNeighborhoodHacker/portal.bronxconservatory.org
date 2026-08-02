@@ -124,9 +124,10 @@ class InquiryManagement {
 
     /**
      * Page 3: the family has told us about a student, so this is a real lead
-     * now. Creating the lead and deleting the uncompleted form happen in one
-     * transaction — a crash mid-promotion leaves either a draft or a lead,
-     * never both and never neither. Returns the new lead id.
+     * now. Creating the lead, carrying any internal notes across, and deleting
+     * the uncompleted form happen in one transaction — a crash mid-promotion
+     * leaves either a draft or a lead, never both and never neither. Returns
+     * the new lead id.
      */
     public static function promoteToLead(?UserContext $ctx, int $draftId, array $student): int {
         $error = self::validateStudent($student);
@@ -137,11 +138,21 @@ class InquiryManagement {
         if (!$draft) {
             throw new InvalidArgumentException('That form has already been submitted.');
         }
+        // Read before the delete cascades them away.
+        $notes = self::notesFor($draftId);
 
         $pdo = self::pdo();
         $pdo->beginTransaction();
         try {
             $leadId = LeadManagement::createInquiryLead($ctx, $draft, $student);
+            if ($notes) {
+                // Everything staff chased before the form was finished, kept as
+                // one entry on the lead's own history so the story is in one
+                // place. Attributed to whoever completed it; on the public path
+                // nobody is signed in, so it carries no author.
+                $pdo->prepare('INSERT INTO lead_notes (lead_id, created_by_user_id, body) VALUES (?,?,?)')
+                    ->execute([$leadId, $ctx?->id, self::combinedNoteBody($notes)]);
+            }
             $pdo->prepare('DELETE FROM incomplete_inquiries WHERE id = ?')->execute([$draftId]);
             $pdo->commit();
         } catch (\Throwable $e) {
@@ -150,17 +161,146 @@ class InquiryManagement {
         }
 
         self::log($ctx, 'inquiry.draft_promoted', [
-            'incomplete_inquiry_id' => $draftId, 'lead_id' => $leadId,
+            'incomplete_inquiry_id' => $draftId, 'lead_id' => $leadId, 'notes_carried' => count($notes),
         ]);
         return $leadId;
+    }
+
+    // ===== Admin: finishing a form on someone's behalf =====
+
+    /**
+     * Save an admin's edits to the contact details and address of an
+     * uncompleted form, without finishing it. Used when they have reached the
+     * family, corrected a number, and still have nothing to record about a
+     * student.
+     */
+    public static function saveContactAndAddress(?UserContext $ctx, int $id, array $contact, array $address): void {
+        self::assertAdmin($ctx);
+        if (!self::find($id)) {
+            throw new InvalidArgumentException('That form is no longer here.');
+        }
+        $error = self::validateContact($contact, false) ?? self::validateAddress($address, false);
+        if ($error !== null) {
+            throw new InvalidArgumentException($error);
+        }
+
+        $params = array_merge(
+            self::contactParams($contact),
+            array_values(self::normalizeAddress($address)),
+            [self::hasAddress($address) ? 2 : 1, $id]
+        );
+        self::pdo()->prepare(
+            'UPDATE incomplete_inquiries SET
+               first_name = ?, last_name = ?, email = ?, phone = ?, newsletter_opt_in = ?, sms_consent = ?,
+               address_country = ?, address_street_1 = ?, address_street_2 = ?,
+               address_city = ?, address_state = ?, address_zip = ?,
+               last_step_completed = GREATEST(last_step_completed, ?)
+             WHERE id = ?'
+        )->execute($params);
+
+        self::log($ctx, 'inquiry.draft_saved_by_admin', ['incomplete_inquiry_id' => $id]);
+    }
+
+    /**
+     * Finish an uncompleted form on the family's behalf: save whatever the
+     * admin corrected, then promote it to a lead exactly as the public flow's
+     * page 3 would, and record the page-4 answers if they collected any.
+     * Returns the new lead id.
+     */
+    public static function completeAsLead(
+        ?UserContext $ctx,
+        int $id,
+        array $contact,
+        array $address,
+        array $student,
+        array $details,
+        array $semesterOptions
+    ): int {
+        self::assertAdmin($ctx);
+        // Everything is checked before anything is written, so a form is never
+        // half-finished by a failed attempt.
+        $error = self::validateContact($contact, false)
+            ?? self::validateAddress($address, false)
+            ?? self::validateStudent($student)
+            ?? self::validateDetails($details, $semesterOptions, false);
+        if ($error !== null) {
+            throw new InvalidArgumentException($error);
+        }
+
+        self::saveContactAndAddress($ctx, $id, $contact, $address);
+        $leadId = self::promoteToLead($ctx, $id, $student);
+        if (self::hasDetails($details)) {
+            LeadManagement::updateInquiryDetails($ctx, $leadId, $details);
+        }
+
+        self::log($ctx, 'inquiry.draft_completed_by_admin', [
+            'incomplete_inquiry_id' => $id, 'lead_id' => $leadId,
+        ]);
+        return $leadId;
+    }
+
+    // ===== Notes =====
+
+    /**
+     * Append an internal note to an uncompleted form. Append-only, like
+     * lead_notes: two admins working the same callback cannot overwrite each
+     * other. Returns the new note id.
+     */
+    public static function addNote(?UserContext $ctx, int $id, string $body): int {
+        self::assertAdmin($ctx);
+        if (!self::find($id)) {
+            throw new InvalidArgumentException('That form is no longer here.');
+        }
+        $body = trim($body);
+        if ($body === '') {
+            throw new InvalidArgumentException('Write a note first.');
+        }
+        self::pdo()->prepare(
+            'INSERT INTO incomplete_inquiry_notes (incomplete_inquiry_id, created_by_user_id, body) VALUES (?,?,?)'
+        )->execute([$id, $ctx->id, $body]);
+        $noteId = (int)self::pdo()->lastInsertId();
+
+        self::log($ctx, 'inquiry.note_added', ['incomplete_inquiry_id' => $id, 'note_id' => $noteId]);
+        return $noteId;
+    }
+
+    /** An uncompleted form's notes, oldest first, with author names joined. */
+    public static function notesFor(int $id): array {
+        $st = self::pdo()->prepare(
+            'SELECT n.*, u.first_name AS author_first_name, u.last_name AS author_last_name
+             FROM incomplete_inquiry_notes n
+             LEFT JOIN users u ON u.id = n.created_by_user_id
+             WHERE n.incomplete_inquiry_id = ?
+             ORDER BY n.created_at, n.id'
+        );
+        $st->execute([$id]);
+        return $st->fetchAll();
+    }
+
+    /** Every note as one body, each keeping the date and author it was written under. */
+    public static function combinedNoteBody(array $notes): string {
+        $lines = ['Notes from the uncompleted form:'];
+        foreach ($notes as $note) {
+            $author = trim(($note['author_first_name'] ?? '') . ' ' . ($note['author_last_name'] ?? ''));
+            $lines[] = date('M j, Y g:i A', strtotime((string)$note['created_at']))
+                . ' — ' . ($author !== '' ? $author : 'Imported')
+                . ': ' . trim((string)$note['body']);
+        }
+        return implode("\n\n", $lines);
     }
 
     // ===== Validation =====
     // Pure functions: no database, no session, one message at a time — the
     // flow shows the first problem and sends the visitor back to a form that
     // still holds everything they typed.
+    //
+    // Each takes a flag for the admin path. An admin finishing a form on the
+    // phone is in a different position from a family typing it themselves:
+    // they cannot be asked to confirm an address they have not been given, and
+    // there is no typo to guard against in a field only they can see. What is
+    // filled in is still held to the same rules.
 
-    public static function validateContact(array $contact): ?string {
+    public static function validateContact(array $contact, bool $requireEmailConfirmation = true): ?string {
         if (trim((string)($contact['first_name'] ?? '')) === ''
             || trim((string)($contact['last_name'] ?? '')) === '') {
             return 'Please give your first and last name.';
@@ -169,7 +309,8 @@ class InquiryManagement {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return 'That email address does not look right.';
         }
-        if (strcasecmp($email, trim((string)($contact['confirm_email'] ?? ''))) !== 0) {
+        if ($requireEmailConfirmation
+            && strcasecmp($email, trim((string)($contact['confirm_email'] ?? ''))) !== 0) {
             return 'The two email addresses do not match.';
         }
         if (strlen(preg_replace('/\D/', '', (string)($contact['phone'] ?? '')) ?? '') < 10) {
@@ -184,8 +325,22 @@ class InquiryManagement {
      * ask for street, city and postal code and leave the province free text —
      * guessing at the world's address formats would only reject real people.
      */
-    public static function validateAddress(array $address): ?string {
+    public static function validateAddress(array $address, bool $required = true): ?string {
         $country = trim((string)($address['address_country'] ?? ''));
+
+        if (!$required) {
+            // An admin may be taking this down by phone and not have an
+            // address yet. Nothing filled in is fine; a half-filled one is not.
+            $filled = array_filter([
+                $address['address_street_1'] ?? '', $address['address_street_2'] ?? '',
+                $address['address_city'] ?? '', $address['address_state'] ?? '',
+                $address['address_province'] ?? '', $address['address_zip'] ?? '',
+            ], fn($v) => trim((string)$v) !== '');
+            if (!$filled) {
+                return null;
+            }
+        }
+
         if ($country === '') {
             return 'Please choose a country.';
         }
@@ -250,9 +405,12 @@ class InquiryManagement {
      * $semesterOptions is the admin-configured list (Settings), passed in so
      * this stays a pure function.
      */
-    public static function validateDetails(array $details, array $semesterOptions): ?string {
+    public static function validateDetails(array $details, array $semesterOptions, bool $requireSemester = true): ?string {
         $semester = (string)($details['semester_label'] ?? '');
-        if ($semester === '' || !in_array($semester, $semesterOptions, true)) {
+        if ($semester !== '' && !in_array($semester, $semesterOptions, true)) {
+            return 'Please choose a term from the list.';
+        }
+        if ($requireSemester && $semester === '') {
             return 'Please choose a term.';
         }
         $owned = array_values(array_intersect(
@@ -292,13 +450,16 @@ class InquiryManagement {
             $province = trim((string)($address['address_province'] ?? ''));
             $state = $province !== '' ? $province : trim((string)($address['address_state'] ?? ''));
         }
+        // Blank stays NULL rather than becoming an empty string: an admin may
+        // have no address to give yet, and "not asked" should not read as
+        // "answered with nothing".
         return [
             'address_country' => $country,
-            'address_street_1' => trim((string)($address['address_street_1'] ?? '')),
+            'address_street_1' => self::orNull($address['address_street_1'] ?? null),
             'address_street_2' => self::orNull($address['address_street_2'] ?? null),
-            'address_city' => trim((string)($address['address_city'] ?? '')),
+            'address_city' => self::orNull($address['address_city'] ?? null),
             'address_state' => self::orNull($state),
-            'address_zip' => trim((string)($address['address_zip'] ?? '')),
+            'address_zip' => self::orNull($address['address_zip'] ?? null),
         ];
     }
 
@@ -327,13 +488,6 @@ class InquiryManagement {
 
     // ===== Admin =====
 
-    public static function saveAdminNotes(?UserContext $ctx, int $id, string $notes): void {
-        self::assertAdmin($ctx);
-        self::pdo()->prepare('UPDATE incomplete_inquiries SET admin_notes = ? WHERE id = ?')
-            ->execute([trim($notes), $id]);
-        self::log($ctx, 'inquiry.draft_notes_saved', ['incomplete_inquiry_id' => $id]);
-    }
-
     public static function delete(?UserContext $ctx, int $id): void {
         self::assertAdmin($ctx);
         self::pdo()->prepare('DELETE FROM incomplete_inquiries WHERE id = ?')->execute([$id]);
@@ -351,6 +505,27 @@ class InquiryManagement {
             !empty($contact['newsletter_opt_in']) ? 1 : 0,
             !empty($contact['sms_consent']) ? 1 : 0,
         ];
+    }
+
+    /** Has anyone put anything in the address at all? */
+    private static function hasAddress(array $address): bool {
+        foreach (['address_street_1', 'address_street_2', 'address_city', 'address_state', 'address_province', 'address_zip'] as $key) {
+            if (trim((string)($address[$key] ?? '')) !== '') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Is there a page-4 answer worth writing to the lead? */
+    private static function hasDetails(array $details): bool {
+        foreach (['semester_label', 'owned_instruments_other', 'music_background',
+                  'theory_program_interest', 'theory_knowledge', 'comments', 'referral_source'] as $key) {
+            if (trim((string)($details[$key] ?? '')) !== '') {
+                return true;
+            }
+        }
+        return !empty($details['owned_instruments']);
     }
 
     private static function assertAdmin(?UserContext $ctx): void {

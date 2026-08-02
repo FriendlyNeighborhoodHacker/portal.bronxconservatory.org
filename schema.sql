@@ -667,13 +667,28 @@ CREATE TABLE incomplete_inquiries (
   address_state VARCHAR(100) DEFAULT NULL COMMENT 'US state code, or a free-text province',
   address_zip VARCHAR(20) DEFAULT NULL,
   last_step_completed TINYINT NOT NULL DEFAULT 1 COMMENT '1 = contact only, 2 = address too',
-  admin_notes TEXT DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
 CREATE INDEX idx_ii_created ON incomplete_inquiries(created_at);
 CREATE INDEX idx_ii_email ON incomplete_inquiries(email);
+
+-- Internal notes on an uncompleted form, on the same append-only terms as
+-- lead_notes: who said what, when, never overwritten. When the form is
+-- finished and becomes a lead these are carried across as a single note on
+-- that lead, so the record of the chase survives the conversion.
+CREATE TABLE incomplete_inquiry_notes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  incomplete_inquiry_id INT NOT NULL,
+  created_by_user_id INT DEFAULT NULL,
+  body TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_iin_inquiry FOREIGN KEY (incomplete_inquiry_id) REFERENCES incomplete_inquiries(id) ON DELETE CASCADE,
+  CONSTRAINT fk_iin_author FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_iin_inquiry ON incomplete_inquiry_notes(incomplete_inquiry_id, created_at);
 
 -- ===== Admin-editable email templates =====
 -- Transactional emails whose wording staff can change without a deploy

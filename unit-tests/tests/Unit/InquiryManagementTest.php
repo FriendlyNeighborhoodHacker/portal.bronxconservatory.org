@@ -298,30 +298,242 @@ final class InquiryManagementTest extends TestCase
         $id = InquiryManagement::startInquiry(null, $this->contact());
         $notAnAdmin = new UserContext(fx_user('Nel', 'Nobody'), false);
 
-        try {
-            InquiryManagement::saveAdminNotes($notAnAdmin, $id, 'sneaky');
-            $this->fail('Expected saveAdminNotes to refuse a non-admin');
-        } catch (RuntimeException $e) {
-            $this->assertSame('Admins only', $e->getMessage());
-        }
-        try {
-            InquiryManagement::delete($notAnAdmin, $id);
-            $this->fail('Expected delete to refuse a non-admin');
-        } catch (RuntimeException $e) {
-            $this->assertSame('Admins only', $e->getMessage());
+        foreach ([
+            'addNote' => fn() => InquiryManagement::addNote($notAnAdmin, $id, 'sneaky'),
+            'delete' => fn() => InquiryManagement::delete($notAnAdmin, $id),
+            'saveContactAndAddress' => fn() => InquiryManagement::saveContactAndAddress(
+                $notAnAdmin, $id, $this->contact(), $this->address()
+            ),
+            'completeAsLead' => fn() => InquiryManagement::completeAsLead(
+                $notAnAdmin, $id, $this->contact(), $this->address(), $this->student(), [], ['Fall 2026']
+            ),
+        ] as $label => $call) {
+            try {
+                $call();
+                $this->fail("Expected $label to refuse a non-admin");
+            } catch (RuntimeException $e) {
+                $this->assertSame('Admins only', $e->getMessage(), $label);
+            }
         }
         $this->assertNotNull(InquiryManagement::find($id));
+        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM leads')->fetchColumn());
     }
 
-    public function testAdminCanNoteAndDelete(): void
+    public function testAdminCanDelete(): void
     {
         $ctx = fx_admin_ctx();
         $id = InquiryManagement::startInquiry(null, $this->contact());
 
-        InquiryManagement::saveAdminNotes($ctx, $id, '  Left a voicemail 8/4.  ');
-        $this->assertSame('Left a voicemail 8/4.', InquiryManagement::find($id)['admin_notes']);
-
         InquiryManagement::delete($ctx, $id);
         $this->assertNull(InquiryManagement::find($id));
+    }
+
+    // ===== Notes =====
+
+    public function testNotesAppendWithAuthorAndTimestamp(): void
+    {
+        $ctx = fx_admin_ctx();
+        $id = InquiryManagement::startInquiry(null, $this->contact());
+
+        InquiryManagement::addNote($ctx, $id, 'Left a voicemail 8/4.');
+        InquiryManagement::addNote($ctx, $id, 'Reached Maria — calling back Monday.');
+
+        $notes = InquiryManagement::notesFor($id);
+        $this->assertCount(2, $notes, 'notes append, they never replace each other');
+        $this->assertSame('Left a voicemail 8/4.', $notes[0]['body']);
+        $this->assertSame('Reached Maria — calling back Monday.', $notes[1]['body']);
+        $this->assertSame($ctx->id, (int)$notes[0]['created_by_user_id']);
+        $this->assertNotSame('', trim((string)$notes[0]['author_first_name']));
+    }
+
+    public function testAddNoteRejectsAnEmptyBody(): void
+    {
+        $ctx = fx_admin_ctx();
+        $id = InquiryManagement::startInquiry(null, $this->contact());
+
+        $this->expectException(InvalidArgumentException::class);
+        InquiryManagement::addNote($ctx, $id, '   ');
+    }
+
+    public function testNotesTravelToTheLeadAsOneEntry(): void
+    {
+        $ctx = fx_admin_ctx();
+        $id = InquiryManagement::startInquiry(null, $this->contact());
+        InquiryManagement::addNote($ctx, $id, 'Left a voicemail 8/4.');
+        InquiryManagement::addNote($ctx, $id, 'Reached Maria — wants Saturdays.');
+
+        $leadId = InquiryManagement::promoteToLead($ctx, $id, $this->student());
+
+        $leadNotes = LeadManagement::notesForLead($leadId);
+        $this->assertCount(1, $leadNotes, 'the chase arrives as a single entry');
+        $this->assertStringContainsString('Left a voicemail 8/4.', $leadNotes[0]['body']);
+        $this->assertStringContainsString('Reached Maria — wants Saturdays.', $leadNotes[0]['body']);
+        $this->assertStringContainsString('Notes from the uncompleted form', $leadNotes[0]['body']);
+        // Each keeps the name it was written under.
+        $this->assertStringContainsString('Ada Admin', $leadNotes[0]['body']);
+        $this->assertSame($ctx->id, (int)$leadNotes[0]['created_by_user_id']);
+    }
+
+    public function testPromotingWithNoNotesLeavesTheLeadHistoryEmpty(): void
+    {
+        $id = InquiryManagement::startInquiry(null, $this->contact());
+        $leadId = InquiryManagement::promoteToLead(null, $id, $this->student());
+
+        $this->assertSame([], LeadManagement::notesForLead($leadId));
+    }
+
+    public function testNotesFromAdminsSurviveAFamilyFinishingTheFormThemselves(): void
+    {
+        // The public flow has nobody signed in, so the carried note has no
+        // author — but the original names are inside its body.
+        $ctx = fx_admin_ctx();
+        $id = InquiryManagement::startInquiry(null, $this->contact());
+        InquiryManagement::addNote($ctx, $id, 'Spoke to them at the open house.');
+
+        $leadId = InquiryManagement::promoteToLead(null, $id, $this->student());
+
+        $leadNotes = LeadManagement::notesForLead($leadId);
+        $this->assertCount(1, $leadNotes);
+        $this->assertNull($leadNotes[0]['created_by_user_id']);
+        $this->assertStringContainsString('Spoke to them at the open house.', $leadNotes[0]['body']);
+    }
+
+    // ===== Admin: finishing a form on the family's behalf =====
+
+    public function testSaveContactAndAddressKeepsEditsWithoutFinishing(): void
+    {
+        $ctx = fx_admin_ctx();
+        $id = InquiryManagement::startInquiry(null, $this->contact());
+
+        InquiryManagement::saveContactAndAddress(
+            $ctx, $id,
+            $this->contact(['first_name' => 'Mariana', 'phone' => '718-555-9999']),
+            $this->address()
+        );
+
+        $row = InquiryManagement::find($id);
+        $this->assertNotNull($row, 'saving is not finishing');
+        $this->assertSame('Mariana', $row['first_name']);
+        $this->assertSame('718-555-9999', $row['phone']);
+        $this->assertSame('Bronx', $row['address_city']);
+        $this->assertSame(2, (int)$row['last_step_completed']);
+        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM leads')->fetchColumn());
+    }
+
+    public function testAdminNeedsNoEmailConfirmationOrAddress(): void
+    {
+        $ctx = fx_admin_ctx();
+        $id = InquiryManagement::startInquiry(null, $this->contact());
+
+        // No confirm_email (an admin transcribing has no typo to guard) and no
+        // address at all (they may only have had a phone call).
+        $contact = $this->contact();
+        unset($contact['confirm_email']);
+        InquiryManagement::saveContactAndAddress($ctx, $id, $contact, []);
+
+        $row = InquiryManagement::find($id);
+        $this->assertNull($row['address_city']);
+        $this->assertSame(1, (int)$row['last_step_completed'], 'still contact-only');
+    }
+
+    public function testAHalfFilledAddressIsStillHeldToTheRules(): void
+    {
+        $ctx = fx_admin_ctx();
+        $id = InquiryManagement::startInquiry(null, $this->contact());
+
+        $this->expectException(InvalidArgumentException::class);
+        InquiryManagement::saveContactAndAddress($ctx, $id, $this->contact(), $this->address([
+            'address_zip' => '', // started an address, so it has to be a real one
+        ]));
+    }
+
+    public function testCompleteAsLeadFinishesTheFormAndCarriesEverything(): void
+    {
+        $ctx = fx_admin_ctx();
+        $id = InquiryManagement::startInquiry(null, $this->contact());
+        InquiryManagement::addNote($ctx, $id, 'Called back on 8/5.');
+
+        $leadId = InquiryManagement::completeAsLead(
+            $ctx, $id,
+            $this->contact(['first_name' => 'Mariana']),
+            $this->address(),
+            $this->student(),
+            [
+                'semester_label' => 'Fall 2026',
+                'owned_instruments' => ['Piano'],
+                'theory_knowledge' => 'beginner',
+                'referral_source' => 'Word of Mouth',
+            ],
+            ['Fall 2026', 'Spring 2027']
+        );
+
+        $lead = LeadManagement::findLead($leadId);
+        $this->assertSame('inquiry', $lead['source']);
+        $this->assertSame('Mariana', $lead['parent_first_name'], 'the edit made on the call carries across');
+        $this->assertSame('Bronx', $lead['address_city']);
+        $this->assertSame('Fall 2026', $lead['semester_label']);
+        $this->assertSame('beginner', $lead['theory_knowledge']);
+        $this->assertSame('Word of Mouth', $lead['referral_source']);
+
+        $this->assertCount(1, LeadManagement::studentsForLead($leadId));
+        $this->assertCount(1, LeadManagement::notesForLead($leadId));
+        $this->assertNull(InquiryManagement::find($id), 'the uncompleted form is gone');
+    }
+
+    public function testCompleteAsLeadWorksWithNothingButAStudent(): void
+    {
+        $ctx = fx_admin_ctx();
+        $id = InquiryManagement::startInquiry(null, $this->contact());
+
+        // No address, no page-4 answers — a short phone call is enough.
+        $leadId = InquiryManagement::completeAsLead(
+            $ctx, $id, $this->contact(), [], $this->student(), [], ['Fall 2026']
+        );
+
+        $lead = LeadManagement::findLead($leadId);
+        $this->assertNull($lead['address_city']);
+        $this->assertNull($lead['semester_label']);
+        $this->assertNull($lead['theory_knowledge']);
+        $this->assertNull(InquiryManagement::find($id));
+    }
+
+    public function testCompleteAsLeadWritesNothingWhenItCannotFinish(): void
+    {
+        $ctx = fx_admin_ctx();
+        $id = InquiryManagement::startInquiry(null, $this->contact());
+
+        $cases = [
+            'no student' => [$this->student(['first_name' => '']), []],
+            'bad term' => [$this->student(), ['semester_label' => 'Winter 3000']],
+            'unknown theory level' => [$this->student(), ['theory_knowledge' => 'expert']],
+        ];
+        foreach ($cases as $label => [$student, $details]) {
+            try {
+                InquiryManagement::completeAsLead(
+                    $ctx, $id,
+                    $this->contact(['first_name' => 'Edited']),
+                    $this->address(), $student, $details, ['Fall 2026']
+                );
+                $this->fail("Expected $label to be refused");
+            } catch (InvalidArgumentException $e) {
+                $this->assertNotSame('', $e->getMessage(), $label);
+            }
+        }
+
+        // Nothing was written by any of the failed attempts.
+        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM leads')->fetchColumn());
+        $row = InquiryManagement::find($id);
+        $this->assertNotNull($row);
+        $this->assertSame('Maria', $row['first_name'], 'a refused attempt does not half-save the edits');
+    }
+
+    public function testValidateDetailsCanSkipTheTermForAnAdmin(): void
+    {
+        $this->assertNotNull(InquiryManagement::validateDetails([], ['Fall 2026'], true));
+        $this->assertNull(InquiryManagement::validateDetails([], ['Fall 2026'], false));
+        // A term that is given still has to be one of ours.
+        $this->assertNotNull(
+            InquiryManagement::validateDetails(['semester_label' => 'Winter 3000'], ['Fall 2026'], false)
+        );
     }
 }

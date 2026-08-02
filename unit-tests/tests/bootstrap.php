@@ -73,7 +73,8 @@ function test_reset_all(): void {
     $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
     foreach ([
         'activity_log', 'emails_sent', 'stripe_webhook_events',
-        'lead_notes', 'lead_students', 'leads', 'incomplete_inquiries',
+        'lead_notes', 'lead_students', 'leads',
+        'incomplete_inquiry_notes', 'incomplete_inquiries',
         'ledger_entries', 'lesson_notes', 'lesson_resources', 'lessons',
         'semester_hold_blocks', 'semester_hold_block_reservations',
         'semester_lesson_reservations', 'semester_location_teachers',
