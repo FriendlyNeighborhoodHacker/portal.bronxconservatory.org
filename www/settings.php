@@ -34,6 +34,21 @@ class Settings {
         return self::get('timezone', date_default_timezone_get());
     }
 
+    /**
+     * A full https://host/path URL for somewhere in the portal — what Stripe
+     * needs to send a family back after paying. Falls back to the current
+     * request's host, which is what makes this work in local development
+     * before site_base_url has been set.
+     */
+    public static function absoluteUrl(string $path): string {
+        $base = rtrim(self::get('site_base_url', ''), '/');
+        if ($base === '') {
+            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $base = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        }
+        return $base . $path;
+    }
+
     // The conservatory's phone number, shown in the footer of every page and
     // prominently on the login/registration pages (warm, not institutional).
     public static function contactPhone(): string {

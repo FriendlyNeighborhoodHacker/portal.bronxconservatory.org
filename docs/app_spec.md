@@ -275,10 +275,23 @@ There should be a place in the admin menu that goes to a "Maintenance" section t
 1. Homepage - Parents
 - Announcements: Recent active announcements in chronological order
 - My children: shows childs' profile photo, name, instrument, teacher - clicking on this sees their child's schedule, recent teacher notes, materials.  (See the cub_scouts app for this homepage widget...)
+... When the next lesson is, is the loudest thing on the card - it is what a parent opens the portal to check.
+... A child who owes money shows "Balance due: $X", linking to Balance & Payments.  It is red only when the family has fallen behind the payment schedule below - a balance that is simply not due yet is not an alarm.
+- Upcoming Lessons: the family's next four lessons (date, time, child, location), each with Notes and Materials links that open that lesson in a modal.
 - Balance & Pahments: 
 ... "You are paid in full.  Thank you!"
 ... OR "You have a balance of $X.  Click here to pay the balance."
 - My Profile
+
+Money is tracked per term: every ledger entry carries the semester it belongs
+to, and a term's surplus credit rolls forward into the next one.  What families
+are asked to pay is
+... at least half the term's charges by two weeks before the term starts, and
+... the rest by the lesson before its half-way point (of 14 lessons, by the 6th).
+A balance that has missed either of those is "past due" and shows in red.  On
+Balance & Payments a parent can pay any amount up to what they owe, by card
+(Stripe Elements, so card details never reach our server); the payment is
+applied to the oldest debt first, child by child.
 
 The parents menu should be:
 [Calendar] [Billing] [Profile photo (to edit profile)]

@@ -142,6 +142,137 @@ final class BillingTest extends TestCase
         $this->assertSame(0, Billing::balanceForStudentCents($student));
     }
 
+    // ── Balances by semester, and being behind ────────────────────────────
+
+    public function testIsSemesterPaymentBehindFollowsTheTwoDeadlines(): void
+    {
+        $start = '2030-09-07';
+        // More than two weeks out: nothing is late, however little is paid.
+        $this->assertFalse(Billing::isSemesterPaymentBehind(37500, 37500, 0, $start, 0, 14, '2030-08-01'));
+        // Inside two weeks with nothing paid: behind.
+        $this->assertTrue(Billing::isSemesterPaymentBehind(37500, 37500, 0, $start, 0, 14, '2030-08-30'));
+        // Half paid by then: on schedule.
+        $this->assertFalse(Billing::isSemesterPaymentBehind(18750, 37500, 18750, $start, 0, 14, '2030-08-30'));
+        // Half paid, but the 6th of 14 lessons has come: the rest is due.
+        $this->assertTrue(Billing::isSemesterPaymentBehind(18750, 37500, 18750, $start, 6, 14, '2030-10-20'));
+        $this->assertFalse(Billing::isSemesterPaymentBehind(18750, 37500, 18750, $start, 5, 14, '2030-10-13'));
+        // Paid in full is never behind, whatever the date.
+        $this->assertFalse(Billing::isSemesterPaymentBehind(0, 37500, 37500, $start, 14, 14, '2031-01-01'));
+    }
+
+    public function testSemesterBalancesRollASurplusCreditForward(): void
+    {
+        $student = fx_student();
+        $spring = fx_semester($this->ctx, 'spring', 2030, '2030-01-10', '2030-05-30');
+        $fall = fx_semester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+
+        Billing::addCustomEntry($this->ctx, $student, 'debit', 10000, $spring, 'Spring tuition');
+        Billing::addCustomEntry($this->ctx, $student, 'debit', 30000, $fall, 'Fall tuition');
+        // Overpaying spring by $50 leaves nothing owed there and $250 in fall.
+        Billing::recordManualPayment($this->ctx, $student, 15000, '2030-02-01', $spring, 'Check #1');
+
+        $terms = Billing::semesterBalancesForStudent($student, '2030-10-01');
+        $this->assertSame(['Spring 2030', 'Fall 2030'], array_column($terms, 'label'));
+        $this->assertSame(0, $terms[0]['balance_cents']);
+        $this->assertSame(25000, $terms[1]['balance_cents']);
+        // The surplus counts as paid against fall, which is what decides
+        // whether the family is on schedule.
+        $this->assertSame(5000, $terms[1]['paid_cents']);
+
+        $summary = Billing::balanceSummaryForStudent($student, '2030-10-01');
+        $this->assertSame(25000, $summary['due_cents']);
+        $this->assertSame(25000, $summary['balance_cents']);
+        $this->assertSame($fall, Billing::oldestOwedSemesterIdForStudent($student, '2030-10-01'));
+    }
+
+    public function testABalanceIsBehindOnceHalfTheLessonsHaveBeenTaught(): void
+    {
+        $student = fx_student();
+        // A term of 14 weekly lessons that started 10 weeks ago.
+        $firstDate = date('Y-m-d', strtotime('-10 weeks'));
+        [$semesterId] = $this->confirmReservationFor($student, $firstDate, 14);
+
+        $summary = Billing::balanceSummaryForStudent($student);
+        $term = $summary['semesters'][0];
+        $this->assertSame(14, $term['lessons_total']);
+        $this->assertSame(11, $term['lessons_elapsed']); // the first plus ten weeks
+        $this->assertTrue($term['behind']);
+        $this->assertTrue($summary['behind']);
+
+        // Paying more than half no longer helps this far into the term.
+        Billing::recordManualPayment($this->ctx, $student, 20000, date('Y-m-d'), $semesterId, 'Check #2');
+        $this->assertTrue(Billing::balanceSummaryForStudent($student)['behind']);
+
+        // Paying it off does.
+        Billing::recordManualPayment($this->ctx, $student, 17500, date('Y-m-d'), $semesterId, 'Check #3');
+        $summary = Billing::balanceSummaryForStudent($student);
+        $this->assertSame(0, $summary['due_cents']);
+        $this->assertFalse($summary['behind']);
+    }
+
+    public function testABalanceForATermStillWeeksAwayIsNotBehind(): void
+    {
+        $student = fx_student();
+        [$semesterId] = $this->confirmReservationFor($student); // starts in 2030
+        $summary = Billing::balanceSummaryForStudent($student, date('Y-m-d'));
+
+        $this->assertSame(37500, $summary['due_cents']);
+        $this->assertFalse($summary['behind']);
+        $this->assertSame($semesterId, $summary['semesters'][0]['semester_id']);
+    }
+
+    public function testChargesWithNoTermAreListedButNeverCalledLate(): void
+    {
+        $student = fx_student();
+        Billing::addCustomEntry($this->ctx, $student, 'debit', 1000, null, 'Book fee');
+
+        $summary = Billing::balanceSummaryForStudent($student);
+        $this->assertSame('Other charges', $summary['semesters'][0]['label']);
+        $this->assertSame(1000, $summary['due_cents']);
+        $this->assertFalse($summary['behind']);
+        $this->assertNull(Billing::oldestOwedSemesterIdForStudent($student));
+    }
+
+    // ── Paying ─────────────────────────────────────────────────────────────
+
+    public function testOutstandingChildrenAreOrderedByTheirOldestDebt(): void
+    {
+        $childA = fx_student('Ann', 'Kid');
+        $childB = fx_student('Ben', 'Kid');
+        $childC = fx_student('Cal', 'Kid');
+        $parent = fx_parent_of($childA);
+        pdo()->exec("INSERT INTO parenthood (parent_user_id, child_user_id) VALUES ($parent, $childB), ($parent, $childC)");
+
+        $spring = fx_semester($this->ctx, 'spring', 2030, '2030-01-10', '2030-05-30');
+        $fall = fx_semester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+        Billing::addCustomEntry($this->ctx, $childA, 'debit', 10000, $fall, 'Fall tuition');
+        Billing::addCustomEntry($this->ctx, $childB, 'debit', 20000, $spring, 'Spring tuition');
+        // Cal owes nothing and is left out entirely.
+        Billing::addCustomEntry($this->ctx, $childC, 'debit', 5000, $fall, 'Fall tuition');
+        Billing::recordManualPayment($this->ctx, $childC, 5000, '2030-09-05', $fall, 'Paid up');
+
+        $rows = Billing::outstandingByChildForParent($parent, '2030-10-01');
+        $this->assertSame([$childB, $childA], array_column($rows, 'student_user_id'));
+        $this->assertSame([20000, 10000], array_column($rows, 'due_cents'));
+        $this->assertSame([$spring, $fall], array_column($rows, 'semester_id'));
+
+        // A part payment fills the oldest debt first and never overshoots.
+        $balances = array_column($rows, 'due_cents', 'student_user_id');
+        $this->assertSame([$childB => 15000], Billing::allocatePaymentAcrossStudents($balances, 15000));
+        $this->assertSame([$childB => 20000, $childA => 5000], Billing::allocatePaymentAcrossStudents($balances, 25000));
+        $this->assertSame([], Billing::allocatePaymentAcrossStudents($balances, 0));
+    }
+
+    public function testStripeIntentPaymentIsIdempotentPerIntentAndStudent(): void
+    {
+        $student = fx_student();
+        [$semesterId] = $this->confirmReservationFor($student);
+
+        $this->assertTrue(Billing::recordStripeIntentPayment($student, 37500, 'pi_test_1', $semesterId));
+        $this->assertFalse(Billing::recordStripeIntentPayment($student, 37500, 'pi_test_1', $semesterId));
+        $this->assertSame(0, Billing::balanceForStudentCents($student));
+    }
+
     public function testParentBalanceSumsChildren(): void
     {
         $childA = fx_student('Ann', 'Kid');

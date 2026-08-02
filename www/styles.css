@@ -1037,6 +1037,31 @@ body.auth .brand-logo {
   color: var(--color-text-muted);
 }
 
+/* When the next lesson is: the one thing a parent opens the portal to check,
+   so it carries weight on the child's card rather than hiding in fine print. */
+.next-lesson {
+  margin-top: 8px;
+  font-weight: 700;
+}
+
+/* A child's outstanding balance on their card. Red only when the family has
+   fallen behind the schedule they were asked to keep (Billing::
+   isSemesterPaymentBehind) — a balance that is simply not due yet is not an
+   alarm. */
+.balance-due {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.balance-due:hover {
+  text-decoration: underline;
+}
+
+.balance-behind,
+.balance-behind:hover {
+  color: var(--color-danger);
+}
+
 /* A hold block in the teacher's week list — their own time, not a lesson. */
 .lesson-row.lesson-hold {
   color: var(--color-text-muted);

@@ -9,11 +9,15 @@ require_once __DIR__ . '/Billing.php';
 require_once __DIR__ . '/UserManagement.php';
 
 /**
- * Stripe Checkout via the raw HTTPS API (no SDK): a parent's "Pay Now"
- * creates a Checkout Session with one line item per child; the webhook
- * (stripe_webhook.php) and the success-redirect fallback both record the
- * completed payment through Billing::recordStripePayment, whose unique key
- * makes the race harmless. Keys live in config.local.php
+ * Stripe via the raw HTTPS API (no SDK). Both places the portal takes money —
+ * the public registration form and a parent paying their balance — use an
+ * embedded card form (a PaymentIntent), so card details go straight from the
+ * browser to Stripe and never reach this server. Hosted Checkout Sessions are
+ * still understood for anything created before that.
+ *
+ * Whichever shape it arrives in, the webhook (stripe_webhook.php) and the
+ * browser's return trip both record the completed payment, and the ledger's
+ * unique keys make that race harmless. Keys live in config.local.php
  * (STRIPE_SECRET_KEY / STRIPE_PUBLISHABLE_KEY / STRIPE_WEBHOOK_SECRET).
  */
 class StripeCheckout {
@@ -129,6 +133,64 @@ class StripeCheckout {
         ];
     }
 
+    /**
+     * A PaymentIntent for a family paying their portal balance, so the card
+     * fields sit on Balance & Payments itself rather than sending the parent
+     * to a hosted page. As with registration, the card goes straight from the
+     * browser to Stripe and never reaches this server.
+     *
+     * $studentAmounts [studentUserId => cents] is what each child's ledger
+     * gets credited, and $studentSemesters [studentUserId => semesterId|null]
+     * says which term each credit belongs to. Both travel in metadata, which
+     * is what routes the completed payment back to the right ledgers (see
+     * handlePaymentIntentSucceeded).
+     */
+    public static function createFamilyPaymentIntent(
+        ?UserContext $ctx,
+        array $studentAmounts,
+        array $studentSemesters,
+        int $paidByUserId,
+        string $receiptEmail = '',
+        string $description = ''
+    ): array {
+        self::assertConfigured();
+        $studentAmounts = array_filter(array_map('intval', $studentAmounts), fn($cents) => $cents > 0);
+        if (!$studentAmounts) {
+            throw new InvalidArgumentException('Nothing to pay.');
+        }
+        $semesters = [];
+        foreach (array_keys($studentAmounts) as $studentUserId) {
+            $semesterId = (int)($studentSemesters[$studentUserId] ?? 0);
+            $semesters[$studentUserId] = $semesterId > 0 ? $semesterId : null;
+        }
+
+        $params = [
+            'amount' => (string)array_sum($studentAmounts),
+            'currency' => 'usd',
+            'automatic_payment_methods[enabled]' => 'true',
+            'metadata[paid_by_user_id]' => (string)$paidByUserId,
+            'metadata[student_amounts]' => json_encode($studentAmounts),
+            'metadata[student_semesters]' => json_encode($semesters),
+        ];
+        if ($receiptEmail !== '') {
+            $params['receipt_email'] = $receiptEmail;
+        }
+        if ($description !== '') {
+            $params['description'] = $description;
+        }
+
+        $intent = self::request('POST', self::API_BASE . '/payment_intents', $params);
+        self::log($ctx, 'stripe.family_payment_intent_created', [
+            'payment_intent_id' => $intent['id'] ?? null,
+            'paid_by_user_id' => $paidByUserId,
+            'total_cents' => array_sum($studentAmounts),
+        ]);
+        return [
+            'id' => (string)($intent['id'] ?? ''),
+            'client_secret' => (string)($intent['client_secret'] ?? ''),
+        ];
+    }
+
     public static function retrievePaymentIntent(string $paymentIntentId): array {
         self::assertConfigured();
         if (!preg_match('/^pi_[A-Za-z0-9_]+$/', $paymentIntentId)) {
@@ -138,22 +200,52 @@ class StripeCheckout {
     }
 
     /**
-     * Record a succeeded PaymentIntent against its registration lead.
-     * Idempotent, so the webhook and the browser's return trip can race.
-     * Returns 1 when this call recorded the payment, else 0.
+     * Record a succeeded PaymentIntent. Two shapes, told apart by metadata,
+     * exactly as for a Checkout Session: metadata[lead_id] → the payment is
+     * held on the registration lead; metadata[student_amounts] → one ledger
+     * credit per student (a family paying their balance in the portal). Both
+     * are idempotent, so the webhook and the browser's return trip can race.
+     * Returns how many payments were recorded.
      */
     public static function handlePaymentIntentSucceeded(array $intent): int {
         if ((string)($intent['status'] ?? '') !== 'succeeded') {
             return 0;
         }
         $intentId = (string)($intent['id'] ?? '');
-        $leadId = (int)($intent['metadata']['lead_id'] ?? 0);
-        if ($leadId <= 0 || $intentId === '') {
+        if ($intentId === '') {
             return 0;
         }
-        require_once __DIR__ . '/LeadManagement.php';
-        $amount = (int)($intent['amount_received'] ?? $intent['amount'] ?? 0);
-        return LeadManagement::recordLeadPayment($leadId, $amount, $intentId) ? 1 : 0;
+        $metadata = (array)($intent['metadata'] ?? []);
+
+        $leadId = (int)($metadata['lead_id'] ?? 0);
+        if ($leadId > 0) {
+            require_once __DIR__ . '/LeadManagement.php';
+            $amount = (int)($intent['amount_received'] ?? $intent['amount'] ?? 0);
+            return LeadManagement::recordLeadPayment($leadId, $amount, $intentId) ? 1 : 0;
+        }
+
+        $studentAmounts = json_decode((string)($metadata['student_amounts'] ?? ''), true);
+        if (!is_array($studentAmounts)) {
+            return 0;
+        }
+        $studentSemesters = json_decode((string)($metadata['student_semesters'] ?? ''), true);
+        if (!is_array($studentSemesters)) {
+            $studentSemesters = [];
+        }
+
+        $recorded = 0;
+        foreach ($studentAmounts as $studentUserId => $cents) {
+            $studentUserId = (int)$studentUserId;
+            $cents = (int)$cents;
+            if ($studentUserId <= 0 || $cents <= 0) {
+                continue;
+            }
+            $semesterId = (int)($studentSemesters[$studentUserId] ?? 0) ?: null;
+            if (Billing::recordStripeIntentPayment($studentUserId, $cents, $intentId, $semesterId)) {
+                $recorded++;
+            }
+        }
+        return $recorded;
     }
 
     public static function retrieveCheckoutSession(string $sessionId): array {

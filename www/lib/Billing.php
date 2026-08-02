@@ -168,6 +168,39 @@ class Billing {
     }
 
     /**
+     * Record a completed PaymentIntent (the embedded card form on Balance &
+     * Payments) as a credit. Idempotent via the (stripe_payment_intent_id,
+     * for_student_user_id) unique key — the webhook and the browser's return
+     * trip both try, and only the first one writes. Returns false when this
+     * intent's payment for this student was already recorded.
+     */
+    public static function recordStripeIntentPayment(int $studentUserId, int $amountCents, string $paymentIntentId, ?int $semesterId, string $description = 'Online payment (Stripe)'): bool {
+        self::assertPositive($amountCents);
+        if (trim($paymentIntentId) === '') {
+            throw new InvalidArgumentException('A Stripe payment intent id is required.');
+        }
+        $st = self::pdo()->prepare(
+            'INSERT IGNORE INTO ledger_entries
+               (for_student_user_id, entry_date, accounting_type, entry_type, amount_cents, semester_id,
+                description, stripe_payment_intent_id, created_by_user_id)
+             VALUES (?,?,?,?,?,?,?,?,NULL)'
+        );
+        $st->execute([
+            $studentUserId, date('Y-m-d'), 'credit', 'payment', $amountCents, $semesterId,
+            $description, $paymentIntentId,
+        ]);
+        $recorded = $st->rowCount() > 0;
+        if ($recorded) {
+            self::log(null, 'billing.stripe_payment_recorded', [
+                'student_user_id' => $studentUserId,
+                'amount_cents' => $amountCents,
+                'payment_intent_id' => $paymentIntentId,
+            ]);
+        }
+        return $recorded;
+    }
+
+    /**
      * One ledger row loaded from a CSV when the portal takes over an existing
      * roster: the charges a family already ran up and the payments they
      * already made, on the dates they actually happened. Unlike the other
@@ -344,6 +377,227 @@ class Billing {
         return $out;
     }
 
+    // ── Balances by semester, and whether they are behind ──────────────────
+
+    /**
+     * A student's balance broken out by the semester it belongs to, oldest
+     * term first, with any entry that belongs to no term last. Only terms the
+     * student has ledger entries in appear.
+     *
+     * A credit beyond what a term owes rolls forward to the next one, which is
+     * how money is applied in practice: a family who overpays in the spring is
+     * not shown a spring credit next to a fall bill. Each row carries what the
+     * card and the Billing page need to explain itself:
+     *
+     *   semester_id, label, start_date, end_date,
+     *   charged_cents, paid_cents (including credit rolled in from earlier),
+     *   balance_cents (never negative — a surplus moves on),
+     *   lessons_total, lessons_elapsed, behind
+     *
+     * The trailing surplus, if any, is the family credit and is not a row.
+     */
+    public static function semesterBalancesForStudent(int $studentUserId, ?string $today = null): array {
+        $st = self::pdo()->prepare(
+            "SELECT le.semester_id, s.season, s.year, s.start_date, s.end_date,
+                    COALESCE(SUM(CASE WHEN le.accounting_type='debit' THEN le.amount_cents ELSE 0 END), 0) AS charged_cents,
+                    COALESCE(SUM(CASE WHEN le.accounting_type='credit' THEN le.amount_cents ELSE 0 END), 0) AS paid_cents
+             FROM ledger_entries le
+             LEFT JOIN semesters s ON s.id = le.semester_id
+             WHERE le.for_student_user_id = ?
+             GROUP BY le.semester_id, s.season, s.year, s.start_date, s.end_date
+             ORDER BY s.start_date IS NULL, s.start_date, le.semester_id"
+        );
+        $st->execute([$studentUserId]);
+
+        $rows = [];
+        $surplus = 0; // credit carried out of the terms already walked, in cents
+        foreach ($st->fetchAll() as $row) {
+            $semesterId = $row['semester_id'] !== null ? (int)$row['semester_id'] : null;
+            $charged = (int)$row['charged_cents'];
+            $paid = (int)$row['paid_cents'] + $surplus;
+            $balance = $charged - $paid;
+            if ($balance < 0) {
+                $surplus = -$balance;
+                $paid = $charged;
+                $balance = 0;
+            } else {
+                $surplus = 0;
+            }
+
+            $counts = ($balance > 0 && $semesterId !== null)
+                ? self::lessonCountsForStudentInSemester($studentUserId, $semesterId, $today)
+                : ['total' => 0, 'elapsed' => 0];
+
+            $rows[] = [
+                'semester_id' => $semesterId,
+                'label' => $semesterId !== null
+                    ? ucfirst((string)$row['season']) . ' ' . (int)$row['year']
+                    : 'Other charges',
+                'start_date' => $row['start_date'] !== null ? (string)$row['start_date'] : null,
+                'end_date' => $row['end_date'] !== null ? (string)$row['end_date'] : null,
+                'charged_cents' => $charged,
+                'paid_cents' => $paid,
+                'balance_cents' => $balance,
+                'lessons_total' => $counts['total'],
+                'lessons_elapsed' => $counts['elapsed'],
+                'behind' => $row['start_date'] !== null && self::isSemesterPaymentBehind(
+                    $balance, $charged, $paid, (string)$row['start_date'],
+                    $counts['elapsed'], $counts['total'], $today
+                ),
+            ];
+        }
+        return $rows;
+    }
+
+    /**
+     * What a child's card shows: the balance, and whether any part of it has
+     * fallen behind the schedule families are asked to keep.
+     *   ['balance_cents', 'due_cents', 'behind', 'behind_labels', 'semesters']
+     * balance_cents is the all-time balance (negative = credit); due_cents is
+     * what is actually owed once credits have been applied forward.
+     */
+    public static function balanceSummaryForStudent(int $studentUserId, ?string $today = null): array {
+        $semesters = self::semesterBalancesForStudent($studentUserId, $today);
+        $due = 0;
+        $behindLabels = [];
+        foreach ($semesters as $row) {
+            $due += $row['balance_cents'];
+            if ($row['behind']) {
+                $behindLabels[] = $row['label'];
+            }
+        }
+        return [
+            'balance_cents' => self::balanceForStudentCents($studentUserId),
+            'due_cents' => $due,
+            'behind' => (bool)$behindLabels,
+            'behind_labels' => $behindLabels,
+            'semesters' => $semesters,
+        ];
+    }
+
+    /**
+     * Is an unpaid semester balance behind what the family was asked to pay?
+     *
+     * Families are asked for half the term's charges by two weeks before it
+     * starts, and the rest by the lesson before its half-way point (of 14
+     * lessons, by the 6th). So a balance is behind when the term is close
+     * enough to count and either of those two moments has passed unpaid.
+     *
+     * Pure on purpose — the caller supplies the term's totals and lesson
+     * counts, so the rule can be read (and tested) on its own.
+     */
+    public static function isSemesterPaymentBehind(
+        int $balanceCents,
+        int $chargedCents,
+        int $paidCents,
+        string $semesterStartDate,
+        int $lessonsElapsed,
+        int $lessonsTotal,
+        ?string $today = null
+    ): bool {
+        if ($balanceCents <= 0) {
+            return false;
+        }
+        $todayTs = strtotime($today ?? date('Y-m-d'));
+        $startTs = strtotime($semesterStartDate);
+        if ($startTs === false || $todayTs === false) {
+            return false;
+        }
+        // Still more than two weeks out: nothing is late yet.
+        if ($startTs > $todayTs + 14 * 86400) {
+            return false;
+        }
+        // Half the term should be paid for by now.
+        if ($chargedCents > 0 && $paidCents * 2 < $chargedCents) {
+            return true;
+        }
+        // And the rest by the lesson before the half-way point.
+        return $lessonsTotal > 0 && $lessonsElapsed >= ($lessonsTotal / 2) - 1;
+    }
+
+    /**
+     * The oldest term this student still owes for — where a payment should be
+     * credited. Null when nothing is outstanding or the debt belongs to no
+     * term.
+     */
+    public static function oldestOwedSemesterIdForStudent(int $studentUserId, ?string $today = null): ?int {
+        foreach (self::semesterBalancesForStudent($studentUserId, $today) as $row) {
+            if ($row['balance_cents'] > 0 && $row['semester_id'] !== null) {
+                return $row['semester_id'];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * What each of a parent's children still owes, the oldest debt first —
+     * which is both the order a payment is applied in and the order the
+     * Billing page reads in. Children who owe nothing are left out.
+     *
+     * Rows: student_user_id, first_name, last_name, due_cents,
+     *       semester_id / semester_label (the oldest term still owed for,
+     *       null when the debt belongs to no term).
+     */
+    public static function outstandingByChildForParent(int $parentUserId, ?string $today = null): array {
+        $st = self::pdo()->prepare(
+            'SELECT u.id, u.first_name, u.last_name
+             FROM parenthood ph
+             JOIN users u ON u.id = ph.child_user_id AND u.is_deleted = 0
+             WHERE ph.parent_user_id = ?
+             ORDER BY u.first_name, u.last_name, u.id'
+        );
+        $st->execute([$parentUserId]);
+
+        $rows = [];
+        foreach ($st->fetchAll() as $child) {
+            $summary = self::balanceSummaryForStudent((int)$child['id'], $today);
+            if ($summary['due_cents'] <= 0) {
+                continue;
+            }
+            $oldest = null;
+            foreach ($summary['semesters'] as $semesterRow) {
+                if ($semesterRow['balance_cents'] > 0) {
+                    $oldest = $semesterRow;
+                    break;
+                }
+            }
+            $rows[] = [
+                'student_user_id' => (int)$child['id'],
+                'first_name' => (string)$child['first_name'],
+                'last_name' => (string)$child['last_name'],
+                'due_cents' => $summary['due_cents'],
+                'semester_id' => $oldest['semester_id'] ?? null,
+                'semester_label' => $oldest['label'] ?? null,
+                // Sort key only: a debt with no term is applied last.
+                'oldest_start_date' => $oldest['start_date'] ?? '9999-12-31',
+            ];
+        }
+        usort($rows, fn($a, $b) => [$a['oldest_start_date'], $a['first_name'], $a['student_user_id']]
+                              <=> [$b['oldest_start_date'], $b['first_name'], $b['student_user_id']]);
+        return $rows;
+    }
+
+    /**
+     * Split one family payment across the children who owe, oldest debt first
+     * (the caller's order), giving each no more than their balance. Pure.
+     * Returns [studentUserId => cents], only the children who get something.
+     */
+    public static function allocatePaymentAcrossStudents(array $studentBalances, int $amountCents): array {
+        $remaining = max(0, $amountCents);
+        $allocation = [];
+        foreach ($studentBalances as $studentUserId => $balanceCents) {
+            if ($remaining <= 0) {
+                break;
+            }
+            $share = min($remaining, max(0, (int)$balanceCents));
+            if ($share > 0) {
+                $allocation[(int)$studentUserId] = $share;
+                $remaining -= $share;
+            }
+        }
+        return $allocation;
+    }
+
     /** The student's ledger line items (optionally one semester), oldest first. */
     public static function ledgerForStudent(int $studentUserId, ?int $semesterId = null): array {
         $sql = 'SELECT le.*, s.season, s.year
@@ -386,6 +640,26 @@ class Billing {
         );
         $st->execute([$studentUserId, $semesterId, 'Reversal: ' . str_replace('_', ' ', $entryType) . '%']);
         return (int)$st->fetchColumn();
+    }
+
+    /**
+     * How many lessons the term holds for this student and how many have
+     * happened: ['total' => n, 'elapsed' => k]. Cancelled lessons count as
+     * neither — the family was not taught, so they cannot be late for them.
+     */
+    private static function lessonCountsForStudentInSemester(int $studentUserId, int $semesterId, ?string $today = null): array {
+        $asOf = ($today ?? date('Y-m-d')) . ' 23:59:59';
+        $st = self::pdo()->prepare(
+            'SELECT COUNT(*) AS total, COALESCE(SUM(l.start_datetime <= ?), 0) AS elapsed
+             FROM lessons l
+             LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             WHERE COALESCE(r.student_user_id, l.student_user_id) = ?
+               AND COALESCE(r.semester_id, l.semester_id) = ?
+               AND l.cancelled_at IS NULL'
+        );
+        $st->execute([$asOf, $studentUserId, $semesterId]);
+        $row = $st->fetch() ?: [];
+        return ['total' => (int)($row['total'] ?? 0), 'elapsed' => (int)($row['elapsed'] ?? 0)];
     }
 
     private static function studentHasOccurredLessonInSemester(int $studentUserId, int $semesterId): bool {

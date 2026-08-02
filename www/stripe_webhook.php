@@ -2,8 +2,9 @@
 // Stripe webhook receiver. POST only; the Stripe-Signature header is the
 // authorization (no CSRF by design). Events are deduplicated in
 // stripe_webhook_events, so retries and the success-redirect fallback are
-// harmless. Handles checkout.session.completed -> ledger credits, and
-// payment_intent.succeeded -> registration lead payments.
+// harmless. Both event types are routed by their metadata: a registration
+// lead's payment is held on the lead, a family's payment becomes ledger
+// credits.
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/lib/Application.php';
 require_once __DIR__ . '/lib/StripeCheckout.php';
@@ -47,7 +48,7 @@ switch ((string)($event['type'] ?? '')) {
         StripeCheckout::handleCheckoutSessionCompleted((array)($event['data']['object'] ?? []));
         break;
     case 'payment_intent.succeeded':
-        // The registration form's embedded card fields.
+        // The embedded card fields: registration, and Balance & Payments.
         StripeCheckout::handlePaymentIntentSucceeded((array)($event['data']['object'] ?? []));
         break;
 }

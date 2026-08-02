@@ -214,6 +214,27 @@ class LessonManagement {
         return $st->fetchAll();
     }
 
+    /**
+     * The next lessons across a set of students, soonest first — a family's
+     * whole week in one list. Cancelled lessons are kept (the parent still
+     * wants to see the week was called off), as in the per-student view.
+     */
+    public static function upcomingLessonsForStudents(array $studentUserIds, string $fromDate, int $limit = 4): array {
+        $ids = array_values(array_map('intval', $studentUserIds));
+        if (!$ids) {
+            return [];
+        }
+        $limit = max(1, min(100, $limit));
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $st = self::pdo()->prepare(
+            self::LESSON_SELECT .
+            ' WHERE ' . self::F_STUDENT . " IN ($placeholders) AND DATE(l.start_datetime) >= ?
+              ORDER BY l.start_datetime LIMIT $limit"
+        );
+        $st->execute(array_merge($ids, [$fromDate]));
+        return $st->fetchAll();
+    }
+
     /** The student ids a lesson involves (the reservation's student). */
     public static function lessonStudentIds(int $lessonId): array {
         $lesson = self::getLesson($lessonId);

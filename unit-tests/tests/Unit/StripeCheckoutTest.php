@@ -101,6 +101,71 @@ final class StripeCheckoutTest extends TestCase
         $this->assertSame(0, StripeCheckout::handleCheckoutSessionCompleted($unpaid));
     }
 
+    public function testFamilyPaymentIntentCarriesTheSplitAcrossChildren(): void
+    {
+        $childA = fx_student('Ann', 'Kid');
+        $childB = fx_student('Ben', 'Kid');
+        $parent = fx_parent_of($childA);
+
+        $captured = null;
+        StripeCheckout::setHttpTransportForTesting(function ($method, $url, $params) use (&$captured) {
+            $captured = $params;
+            return [200, json_encode(['id' => 'pi_family_1', 'client_secret' => 'pi_family_1_secret_abc'])];
+        });
+
+        $intent = StripeCheckout::createFamilyPaymentIntent(
+            null,
+            [$childA => 10000, $childB => 2500, 999 => 0], // zero entries drop out
+            [$childA => 7, $childB => 0],                  // Ben's debt has no term
+            $parent,
+            'pat@example.org',
+            'BCM tuition — Pat Parent'
+        );
+
+        $this->assertSame('pi_family_1', $intent['id']);
+        $this->assertSame('pi_family_1_secret_abc', $intent['client_secret']);
+        $this->assertSame('12500', $captured['amount']);
+        $this->assertSame((string)$parent, $captured['metadata[paid_by_user_id]']);
+        $this->assertSame([(string)$childA => 10000, (string)$childB => 2500],
+            json_decode($captured['metadata[student_amounts]'], true));
+        $this->assertSame([(string)$childA => 7, (string)$childB => null],
+            json_decode($captured['metadata[student_semesters]'], true));
+        $this->assertSame('pat@example.org', $captured['receipt_email']);
+    }
+
+    public function testSucceededFamilyIntentCreditsEachChildOnceForTheRightTerm(): void
+    {
+        $ctx = fx_admin_ctx();
+        $childA = fx_student('Ann', 'Kid');
+        $childB = fx_student('Ben', 'Kid');
+        $semesterId = fx_semester($ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+
+        $intent = [
+            'id' => 'pi_family_2',
+            'status' => 'succeeded',
+            'amount_received' => 12500,
+            'metadata' => [
+                'paid_by_user_id' => '1',
+                'student_amounts' => json_encode([$childA => 10000, $childB => 2500]),
+                'student_semesters' => json_encode([$childA => $semesterId, $childB => null]),
+            ],
+        ];
+
+        $this->assertSame(2, StripeCheckout::handlePaymentIntentSucceeded($intent));
+        // Webhook retry racing the browser's return trip records nothing more.
+        $this->assertSame(0, StripeCheckout::handlePaymentIntentSucceeded($intent));
+
+        $this->assertSame(-10000, Billing::balanceForStudentCents($childA));
+        $this->assertSame(-2500, Billing::balanceForStudentCents($childB));
+        $this->assertSame(-10000, Billing::balanceForStudentSemesterCents($childA, $semesterId));
+
+        // A different payment for the same family is a different intent, so it
+        // records normally.
+        $second = $intent;
+        $second['id'] = 'pi_family_3';
+        $this->assertSame(2, StripeCheckout::handlePaymentIntentSucceeded($second));
+    }
+
     public function testApiErrorsSurfaceAsExceptions(): void
     {
         StripeCheckout::setHttpTransportForTesting(function () {

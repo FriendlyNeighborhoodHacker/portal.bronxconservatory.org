@@ -525,6 +525,12 @@ CREATE INDEX idx_a_valid_until ON announcements(valid_until);
 -- registration / lessons / recital_fee debits (idempotent per student +
 -- semester + entry_type); payments, scholarships, and adjustments are
 -- credits. Amounts are integer cents (exact math; matches Stripe's unit).
+--
+-- semester_id is what ties money to a term: it is what the parent portal
+-- groups a family's balance by, and what "are they on schedule?" is judged
+-- against (half the term's charges before it starts, the rest by its
+-- half-way lesson). Only entries that genuinely belong to no term — an old
+-- book fee, say — leave it NULL.
 CREATE TABLE ledger_entries (
   id INT AUTO_INCREMENT PRIMARY KEY,
   for_student_user_id INT NOT NULL,
@@ -539,6 +545,10 @@ CREATE TABLE ledger_entries (
   created_by_user_id INT DEFAULT NULL COMMENT 'NULL for webhook-recorded Stripe payments',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY unique_stripe_session_student (stripe_checkout_session_id, for_student_user_id),
+  -- The same guarantee for money taken through an embedded card form, where
+  -- there is a PaymentIntent but no Checkout Session: the webhook and the
+  -- browser's return trip can both try to record it, and only one wins.
+  UNIQUE KEY unique_stripe_intent_student (stripe_payment_intent_id, for_student_user_id),
   CONSTRAINT fk_le_student FOREIGN KEY (for_student_user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_le_semester FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE SET NULL,
   CONSTRAINT fk_le_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL

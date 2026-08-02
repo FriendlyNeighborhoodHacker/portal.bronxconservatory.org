@@ -1,7 +1,10 @@
 <?php
-// Landing page after Stripe Checkout. On success, verify the session with
-// Stripe and record the payment if the webhook hasn't already (both paths
-// are idempotent), then bounce back to Billing with a flash.
+// Landing page for a hosted Stripe Checkout session — how parents paid before
+// the card form on /parent/pay.php. Nothing starts one of these any more; this
+// stays so a family who was mid-checkout when that changed still lands
+// somewhere sensible. On success, verify the session with Stripe and record
+// the payment if the webhook hasn't already (both paths are idempotent), then
+// bounce back to Billing with a flash.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/StripeCheckout.php';
 Application::init();

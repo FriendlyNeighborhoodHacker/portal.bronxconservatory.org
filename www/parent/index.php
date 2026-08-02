@@ -1,10 +1,15 @@
 <?php
 // Parent home (docs/app_spec.md): Announcements, My Children cards (photo,
-// instrument, teacher, next lesson), Balance & Payments, My Profile. Simple
-// enough for a phone on the bus.
+// instrument, teacher, next lesson, balance), Upcoming Lessons, Balance &
+// Payments, My Profile. Simple enough for a phone on the bus.
+//
+// What a parent came here to find out is when the next lesson is, so it is
+// the loudest thing on each card and the family's next four lessons get a
+// section of their own.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
+require_once __DIR__ . '/../lib/LessonDetailUIManager.php';
 require_once __DIR__ . '/../lib/AnnouncementManagement.php';
 require_once __DIR__ . '/../lib/ReservationManagement.php';
 require_once __DIR__ . '/../lib/SemesterManagement.php';
@@ -16,9 +21,20 @@ require_login();
 $me = current_user();
 $children = StudentTeacherManagement::childrenOfParent((int)$me['id']);
 $announcements = AnnouncementManagement::listActive(3);
-$balance = Billing::balanceForParentCents((int)$me['id']);
 $semester = SemesterManagement::resolveDefaultSemester();
 $semesterId = $semester ? (int)$semester['id'] : null;
+$upcoming = LessonManagement::upcomingLessonsForStudents(
+    array_map(fn($child) => (int)$child['id'], $children), date('Y-m-d'), 4
+);
+
+// One balance summary per child — the cards and the family total below read
+// from these, so both say the same thing about what is owed.
+$summaries = [];
+$totalDue = 0;
+foreach ($children as $child) {
+    $summaries[(int)$child['id']] = Billing::balanceSummaryForStudent((int)$child['id']);
+    $totalDue += $summaries[(int)$child['id']]['due_cents'];
+}
 
 header_html('My Family');
 ?>
@@ -58,6 +74,7 @@ header_html('My Family');
       )));
       $photoUrl = Files::profilePhotoUrl($child['photo_public_file_id'] ?? null, 56);
       $initials = strtoupper(substr((string)$child['first_name'], 0, 1) . substr((string)$child['last_name'], 0, 1));
+      $childBalance = $summaries[(int)$child['id']];
     ?>
     <div class="card">
       <div style="display:flex;align-items:center;gap:10px;">
@@ -75,12 +92,19 @@ header_html('My Family');
         </div>
       </div>
       <?php if ($nextLesson): ?>
-        <div class="small" style="margin-top:8px;">Next: <?=lesson_time_html($nextLesson['start_datetime'], (int)$nextLesson['duration_minutes'])?>
+        <div class="next-lesson">Next: <?=lesson_time_html($nextLesson['start_datetime'], (int)$nextLesson['duration_minutes'])?>
           · <?=h($nextLesson['location_name'])?>
           <?php if (LessonManagement::isCancelled($nextLesson)): ?><span class="badge">Cancelled</span><?php endif; ?>
         </div>
       <?php else: ?>
         <div class="small" style="margin-top:8px;">No upcoming lessons scheduled.</div>
+      <?php endif; ?>
+      <?php if ($childBalance['due_cents'] > 0): ?>
+        <div style="margin-top:6px;">
+          <a class="balance-due<?=$childBalance['behind'] ? ' balance-behind' : ''?>"
+             href="/parent/billing.php#child-<?=(int)$child['id']?>">Balance due:
+            <?=h(Billing::formatCents($childBalance['due_cents']))?></a>
+        </div>
       <?php endif; ?>
       <div style="margin-top:8px;"><a class="btn-outline" style="padding:6px 14px;font-size:14px;" href="/parent/child.php?id=<?=(int)$child['id']?>">Schedule &amp; notes</a></div>
     </div>
@@ -88,13 +112,34 @@ header_html('My Family');
   </div>
 <?php endif; ?>
 
+<?php if ($upcoming): ?>
+<h3>Upcoming Lessons</h3>
+<div class="card">
+  <?php foreach ($upcoming as $lesson): ?>
+  <?php $cancelled = LessonManagement::isCancelled($lesson); ?>
+  <div class="lesson-row<?=$cancelled ? ' lesson-cancelled' : ''?>">
+    <span class="lesson-row-time"><?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?></span>
+    <?php if (count($children) > 1): ?>
+      <span><?=h((string)($lesson['student_preferred_name'] ?: $lesson['student_first_name']))?></span>
+    <?php endif; ?>
+    <span><?=h($lesson['location_name'])?></span>
+    <?php if ($cancelled): ?><span class="badge">Cancelled</span><?php endif; ?>
+    <span class="small">
+      <a href="#" data-lesson-detail="<?=(int)$lesson['id']?>">Notes</a> ·
+      <a href="#" data-lesson-detail="<?=(int)$lesson['id']?>">Materials</a>
+    </span>
+  </div>
+  <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
 <h3>Balance &amp; Payments</h3>
 <div class="card">
-  <?php if ($balance <= 0): ?>
+  <?php if ($totalDue <= 0): ?>
     <p style="margin:0;"><strong>You are paid in full. Thank you!</strong></p>
   <?php else: ?>
-    <p>You have a balance of <strong><?=h(Billing::formatCents($balance))?></strong>.</p>
-    <a class="btn-cta" href="/parent/billing.php">Pay the balance</a>
+    <p>You have a balance of <strong><?=h(Billing::formatCents($totalDue))?></strong>.</p>
+    <a class="btn-outline" style="padding:6px 14px;font-size:14px;" href="/parent/billing.php">Pay the balance</a>
   <?php endif; ?>
 </div>
 
@@ -105,4 +150,5 @@ header_html('My Family');
   <div style="margin-top:8px;"><a class="btn-outline" style="padding:6px 14px;font-size:14px;" href="/profile/">Update my info</a></div>
 </div>
 
+<?php LessonDetailUIManager::renderModal(); ?>
 <?php footer_html(); ?>

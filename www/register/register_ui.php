@@ -12,15 +12,8 @@ require_once __DIR__ . '/../lib/LeadManagement.php';
 const REGISTRATION_STEPS = ['Family', 'Students', 'Policies', 'Payment Plan', 'Review', 'Checkout'];
 
 // Absolute URL for a path on this site — Stripe needs a real return URL.
-// Prefers the configured site_base_url, falling back to the current request
-// so local development works without configuration.
 function registration_absolute_url(string $path): string {
-    $base = rtrim(Settings::get('site_base_url', ''), '/');
-    if ($base === '') {
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        $base = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
-    }
-    return $base . $path;
+    return Settings::absoluteUrl($path);
 }
 
 /**
