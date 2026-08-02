@@ -1,10 +1,12 @@
 <?php
 // Main configuration for the BCM Family Portal
 require_once __DIR__ . '/config.local.php';
+require_once __DIR__ . '/lib/session_path.php';
 require_once __DIR__ . '/lib/UserContext.php';
 
 // Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
+    app_prepare_session_save_path();
     session_start();
 }
 

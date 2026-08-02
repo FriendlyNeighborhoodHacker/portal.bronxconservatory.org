@@ -48,6 +48,15 @@ define('GIT_WEBHOOK_SECRET', '');
 // define('DEPLOY_SCRIPT', '/home/lillydebate/deploy_scripts/portal.bronxconservatory.org.sh');
 // define('DEPLOY_LOG',    '/home/lillydebate/deploy_scripts/logs/portal.bronxconservatory.org.webhook.log');
 
+// ===== PHP session storage =====
+// Absolute path to a directory THIS account owns, holding the PHP session
+// files. Leave undefined to use the server's default save_path. Set it when the
+// default is shared with other accounts or belongs to a different system user:
+// a save_path PHP cannot read back leaves $_SESSION empty on every request,
+// which looks like "CSRF token mismatch" on every POST and a logout that never
+// takes effect. The directory is created (0700) if missing.
+// define('SESSION_SAVE_PATH', '/home/lillydebate/var/sessions');
+
 // ===== Database migrations (Admin > Maintenance > Database Migrations) =====
 // Absolute path to this deployment's db_migrations directory. It lives OUTSIDE
 // the web root (top level of the repository), so the path is per-machine.

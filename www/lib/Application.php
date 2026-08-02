@@ -11,6 +11,8 @@ class Application {
         
         // Start session if not already started
         if (session_status() === PHP_SESSION_NONE) {
+            require_once __DIR__ . '/session_path.php';
+            app_prepare_session_save_path();
             session_start();
         }
 
