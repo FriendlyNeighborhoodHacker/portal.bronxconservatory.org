@@ -60,7 +60,7 @@ header_html('My Family');
   <p class="small">No students are linked to your account yet. If that seems wrong,
   call us at <a href="tel:+17188417415"><?=h(Settings::contactPhone())?></a>.</p>
 <?php else: ?>
-  <div class="card-grid">
+  <div class="card-grid"<?php if (count($children) === 1): ?> style="grid-template-columns:1fr;"<?php endif; ?>>
     <?php foreach ($children as $child): ?>
     <?php
       $next = LessonManagement::upcomingLessonsForStudent((int)$child['id'], date('Y-m-d'), 1);
@@ -117,17 +117,30 @@ header_html('My Family');
 <div class="card">
   <?php foreach ($upcoming as $lesson): ?>
   <?php $cancelled = LessonManagement::isCancelled($lesson); ?>
-  <div class="lesson-row<?=$cancelled ? ' lesson-cancelled' : ''?>">
-    <span class="lesson-row-time"><?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?></span>
-    <?php if (count($children) > 1): ?>
-      <span><?=h((string)($lesson['student_preferred_name'] ?: $lesson['student_first_name']))?></span>
-    <?php endif; ?>
-    <span><?=h($lesson['location_name'])?></span>
-    <?php if ($cancelled): ?><span class="badge">Cancelled</span><?php endif; ?>
-    <span class="small">
-      <a href="#" data-lesson-detail="<?=(int)$lesson['id']?>">Notes</a> ·
-      <a href="#" data-lesson-detail="<?=(int)$lesson['id']?>">Materials</a>
-    </span>
+  <div style="padding:12px 0;border-bottom:1px solid var(--color-border);<?=$cancelled ? 'opacity:0.6;' : ''?>">
+    <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;">
+      <div>
+        <div style="font-weight:500;margin-bottom:4px;">
+          <?php
+            $start = strtotime($lesson['start_datetime']);
+            $end = $start + ($lesson['duration_minutes'] * 60);
+            echo h(date('D, M j · g:i–g:i A', $start) . ' ' . date('g:i A', $end));
+          ?>
+        </div>
+        <div style="font-size:14px;color:var(--color-text-secondary);margin-bottom:4px;">
+          <?=h($lesson['location_name'])?>
+        </div>
+        <div style="font-size:14px;">
+          <?php if (count($children) > 1): ?>
+            <strong><?=h((string)($lesson['student_preferred_name'] ?: $lesson['student_first_name']))?></strong> ·
+          <?php endif; ?>
+          Teacher: <?=h(trim(($lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name']) . ' '
+            . ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])))?>
+          <?php if ($cancelled): ?><span class="badge">Cancelled</span><?php endif; ?>
+        </div>
+      </div>
+      <a href="#" data-lesson-detail="<?=(int)$lesson['id']?>" class="button" style="white-space:nowrap;margin-top:4px;">Notes & Materials</a>
+    </div>
   </div>
   <?php endforeach; ?>
 </div>

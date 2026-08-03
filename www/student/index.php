@@ -61,13 +61,10 @@ header_html('My Schedule');
     <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;">
       <div>
         <div style="font-weight:500;margin-bottom:4px;">
-          <?=h(date('D, M j · g:i–g:i A', strtotime($lesson['start_datetime'])) .
-               (date('A', strtotime($lesson['start_datetime'])) !== date('A', strtotime($lesson['start_datetime']) + ($lesson['duration_minutes'] * 60))
-                 ? ''
-                 : ''))?><?php
+          <?php
             $start = strtotime($lesson['start_datetime']);
             $end = $start + ($lesson['duration_minutes'] * 60);
-            echo h(date('g:i', $start) . '–' . date('g:i A', $end));
+            echo h(date('D, M j · g:i–g:i A', $start) . ' ' . date('g:i A', $end));
           ?>
         </div>
         <div style="font-size:14px;color:var(--color-text-secondary);margin-bottom:4px;">

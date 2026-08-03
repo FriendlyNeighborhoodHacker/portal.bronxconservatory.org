@@ -30,24 +30,7 @@ if (!$child) {
 $semester = SemesterManagement::resolveDefaultSemester();
 $semesterId = $semester ? (int)$semester['id'] : null;
 
-$rows = [];
-foreach (LessonManagement::upcomingLessonsForStudent($childId, date('Y-m-d')) as $lesson) {
-    $rows[] = ['type' => 'lesson', 'date' => date('Y-m-d', strtotime($lesson['start_datetime'])), 'lesson' => $lesson];
-}
-if ($semesterId !== null) {
-    foreach (ReservationManagement::reservationsForStudent($childId, $semesterId) as $reservation) {
-        foreach (SemesterManagement::inactiveDatesForLocationWeekday(
-            $semesterId, (int)$reservation['location_id'], (int)$reservation['day_of_week']
-        ) as $holiday) {
-            if ($holiday['date'] >= date('Y-m-d')) {
-                $rows[] = ['type' => 'holiday', 'date' => $holiday['date'],
-                    'title' => (string)($holiday['title'] ?: 'No lessons'),
-                    'location' => (string)$reservation['location_name']];
-            }
-        }
-    }
-}
-usort($rows, fn($a, $b) => strcmp($a['date'], $b['date']));
+$upcomingLessons = LessonManagement::upcomingLessonsForStudent($childId, date('Y-m-d'));
 
 $pastLessons = LessonManagement::recentLessonsForStudent($childId, date('Y-m-d'), 4);
 $notes = NotesManagement::recentLessonNotesForStudent($childId);
@@ -58,33 +41,74 @@ $resources = $semesterId !== null
 header_html($child['first_name'] . "'s lessons");
 ?>
 
-<h2><?=h($child['first_name'] . ' ' . $child['last_name'])?></h2>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+  <h2 style="margin:0;"><?=h($child['first_name'] . ' ' . $child['last_name'])?></h2>
+  <a href="/parent/child_edit.php?id=<?=(int)$childId?>" class="button">Edit profile</a>
+</div>
 
-<h3>Upcoming schedule</h3>
-<div class="card">
-  <?php if (!$rows): ?>
-    <p class="small">No upcoming lessons. Questions? Call
-      <a href="tel:+17188417415"><?=h(Settings::contactPhone())?></a>.</p>
+<?php if ($upcomingLessons): ?>
+<?php $nextLesson = $upcomingLessons[0]; $cancelled = LessonManagement::isCancelled($nextLesson); ?>
+<div class="card<?=$cancelled ? ' style="opacity:0.6;"' : ''?>">
+  <h3 style="margin-top:0;">Next Lesson</h3>
+  <div style="font-size:18px;font-weight:500;margin-bottom:4px;">
+    <?=h(date('l F j', strtotime($nextLesson['start_datetime'])))?>
+  </div>
+  <div style="font-size:16px;margin-bottom:12px;">
+    <?php
+      $start = strtotime($nextLesson['start_datetime']);
+      $end = $start + ($nextLesson['duration_minutes'] * 60);
+      echo h(date('g:i', $start) . ' – ' . date('g:i A', $end));
+    ?>
+  </div>
+  <div style="margin-bottom:4px;">
+    <strong><?=h($nextLesson['location_name'])?></strong>
+  </div>
+  <div style="margin-bottom:12px;">
+    Teacher: <?=h(trim(($nextLesson['substitute_first_name'] ?? null ?: $nextLesson['teacher_first_name']) . ' '
+      . ($nextLesson['substitute_last_name'] ?? null ?: $nextLesson['teacher_last_name'])))?>
+  </div>
+  <?php if ($cancelled): ?>
+    <div style="color:var(--color-text-secondary);">This lesson has been cancelled.</div>
+  <?php else: ?>
+    <a href="#" data-lesson-detail="<?=(int)$nextLesson['id']?>" class="button">Notes & Materials</a>
   <?php endif; ?>
-  <?php foreach ($rows as $row): ?>
-    <?php if ($row['type'] === 'holiday'): ?>
-    <div class="lesson-row lesson-cancelled">
-      <span class="lesson-row-time"><?=h(date('D, M j', strtotime($row['date'])))?></span>
-      <span>No lesson — <?=h($row['title'])?></span>
-      <span class="small"><?=h($row['location'])?></span>
+</div>
+
+<?php if (count($upcomingLessons) > 1): ?>
+<div class="card">
+  <h3 style="margin-top:0;">Other Upcoming Lessons</h3>
+  <?php foreach (array_slice($upcomingLessons, 1, 5) as $lesson): ?>
+  <?php $cancelled = LessonManagement::isCancelled($lesson); ?>
+  <div style="padding:12px 0;border-bottom:1px solid var(--color-border);<?=$cancelled ? 'opacity:0.6;' : ''?>">
+    <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;">
+      <div>
+        <div style="font-weight:500;margin-bottom:4px;">
+          <?php
+            $start = strtotime($lesson['start_datetime']);
+            $end = $start + ($lesson['duration_minutes'] * 60);
+            echo h(date('D, M j · g:i–g:i A', $start) . ' ' . date('g:i A', $end));
+          ?>
+        </div>
+        <div style="font-size:14px;color:var(--color-text-secondary);margin-bottom:4px;">
+          <?=h($lesson['location_name'])?>
+        </div>
+        <div style="font-size:14px;">
+          <?=h(trim(($lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name']) . ' '
+            . ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])))?>
+        </div>
+      </div>
+      <a href="#" data-lesson-detail="<?=(int)$lesson['id']?>" class="button" style="white-space:nowrap;margin-top:4px;">Notes & Materials</a>
     </div>
-    <?php else: $lesson = $row['lesson']; $cancelled = LessonManagement::isCancelled($lesson); ?>
-    <div class="lesson-row<?=$cancelled ? ' lesson-cancelled' : ''?>">
-      <span class="lesson-row-time"><?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?></span>
-      <span>Lesson with <?=h(trim(($lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name']) . ' '
-        . ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])))?></span>
-      <span><?=h($lesson['location_name'])?></span>
-      <?php if ($cancelled): ?><span class="badge">Cancelled</span><?php endif; ?>
-      <span class="small"><a href="#" data-lesson-detail="<?=(int)$lesson['id']?>">Notes &amp; materials</a></span>
-    </div>
-    <?php endif; ?>
+  </div>
   <?php endforeach; ?>
 </div>
+<?php endif; ?>
+<?php else: ?>
+<div class="card">
+  <p class="small">No upcoming lessons. Questions? Call
+    <a href="tel:+17188417415"><?=h(Settings::contactPhone())?></a>.</p>
+</div>
+<?php endif; ?>
 
 <?php if ($pastLessons): ?>
 <h3>Recent lessons</h3>
