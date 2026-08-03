@@ -53,7 +53,10 @@ $resources = $semesterId !== null
 header_html('My Schedule');
 ?>
 
-<h2>Hi, <?=h($me['preferred_name'] ?: $me['first_name'])?>! 🎵</h2>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+  <h2 style="margin:0;">Hi, <?=h($me['preferred_name'] ?: $me['first_name'])?>! 🎵</h2>
+  <a href="/student/billing.php" class="button">Billing</a>
+</div>
 
 <h3>My Schedule</h3>
 <div class="card">

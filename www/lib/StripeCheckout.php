@@ -191,6 +191,45 @@ class StripeCheckout {
         ];
     }
 
+    public static function createStudentPaymentIntent(
+        ?UserContext $ctx,
+        int $studentUserId,
+        int $amountCents,
+        int $semesterId = 0,
+        string $receiptEmail = '',
+        string $description = ''
+    ): array {
+        self::assertConfigured();
+        if ($amountCents <= 0) {
+            throw new InvalidArgumentException('Nothing to pay.');
+        }
+
+        $params = [
+            'amount' => (string)$amountCents,
+            'currency' => 'usd',
+            'automatic_payment_methods[enabled]' => 'true',
+            'metadata[student_user_id]' => (string)$studentUserId,
+            'metadata[semester_id]' => (string)($semesterId > 0 ? $semesterId : 0),
+        ];
+        if ($receiptEmail !== '') {
+            $params['receipt_email'] = $receiptEmail;
+        }
+        if ($description !== '') {
+            $params['description'] = $description;
+        }
+
+        $intent = self::request('POST', self::API_BASE . '/payment_intents', $params);
+        self::log($ctx, 'stripe.student_payment_intent_created', [
+            'payment_intent_id' => $intent['id'] ?? null,
+            'student_user_id' => $studentUserId,
+            'amount_cents' => $amountCents,
+        ]);
+        return [
+            'id' => (string)($intent['id'] ?? ''),
+            'client_secret' => (string)($intent['client_secret'] ?? ''),
+        ];
+    }
+
     public static function retrievePaymentIntent(string $paymentIntentId): array {
         self::assertConfigured();
         if (!preg_match('/^pi_[A-Za-z0-9_]+$/', $paymentIntentId)) {
