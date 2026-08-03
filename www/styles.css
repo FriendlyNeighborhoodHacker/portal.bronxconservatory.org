@@ -1105,6 +1105,50 @@ body.auth .brand-logo {
   color: var(--color-text-muted);
 }
 
+/* ===== Edit resources modal =====
+   One row per material already on the lesson, its Remove tickbox on the
+   right. A ticked row strikes itself through so what the save is about to
+   delete is obvious before the teacher commits to it. */
+.resource-edit-list {
+  display: flex;
+  flex-direction: column;
+  margin: 4px 0 8px;
+}
+
+.resource-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.resource-edit-row:last-child {
+  border-bottom: 0;
+}
+
+.resource-edit-title {
+  overflow-wrap: anywhere;
+}
+
+.resource-remove {
+  font-size: 13px;
+  color: var(--color-danger);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.resource-edit-row:has(input[name="remove[]"]:checked) .resource-edit-title {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+.resource-edit-row:has(input[name="remove[]"]:checked) .resource-remove {
+  font-weight: 700;
+}
+
 /* Taking a present/absent mark back off — quieter than the two buttons it
    follows, since it undoes rather than answers. */
 .attendance-unmark {

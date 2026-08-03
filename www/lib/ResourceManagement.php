@@ -73,6 +73,18 @@ class ResourceManagement {
         return $id;
     }
 
+    /**
+     * May this person remove this material? Its creator or an admin — the
+     * same rule deleteResource() enforces, exposed so the edit UI can offer
+     * a Remove control only where pressing it would actually work.
+     */
+    public static function canUserDelete(?UserContext $ctx, array $resource): bool {
+        if (!$ctx) {
+            return false;
+        }
+        return $ctx->admin || (int)($resource['created_by_user_id'] ?? 0) === $ctx->id;
+    }
+
     /** Remove a resource (its creator or an admin). The private file goes too. */
     public static function deleteResource(?UserContext $ctx, int $resourceId): void {
         if (!$ctx) {
@@ -82,7 +94,7 @@ class ResourceManagement {
         if (!$resource) {
             throw new InvalidArgumentException('Resource not found.');
         }
-        if (!$ctx->admin && (int)($resource['created_by_user_id'] ?? 0) !== $ctx->id) {
+        if (!self::canUserDelete($ctx, $resource)) {
             throw new RuntimeException('Only the person who added a material may remove it.');
         }
         self::pdo()->prepare('DELETE FROM lesson_resources WHERE id=?')->execute([$resourceId]);
@@ -106,9 +118,11 @@ class ResourceManagement {
 
     public static function resourcesForLesson(int $lessonId): array {
         $st = self::pdo()->prepare(
-            'SELECT lr.*, pf.original_filename, pf.content_type, pf.byte_length
+            'SELECT lr.*, pf.original_filename, pf.content_type, pf.byte_length,
+                    up.first_name AS uploader_first_name, up.last_name AS uploader_last_name
              FROM lesson_resources lr
              LEFT JOIN private_files pf ON pf.id = lr.private_file_id
+             LEFT JOIN users up ON up.id = lr.created_by_user_id
              WHERE lr.lesson_id = ? ORDER BY lr.created_at DESC, lr.id DESC'
         );
         $st->execute([$lessonId]);

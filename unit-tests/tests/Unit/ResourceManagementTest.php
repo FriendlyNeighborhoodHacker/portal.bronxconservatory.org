@@ -73,6 +73,41 @@ final class ResourceManagementTest extends TestCase
         ResourceManagement::addLinkResource(new UserContext($teacher, false), $lessonIds[0], 'X', 'javascript:alert(1)');
     }
 
+    /**
+     * canUserDelete() is what the Edit resources modal asks before drawing a
+     * Remove tickbox, so it has to agree with deleteResource() exactly —
+     * otherwise the UI offers a control that fails on save.
+     */
+    public function testCanUserDeleteMatchesWhoMayActuallyDelete(): void
+    {
+        [$teacher, , , $lessonIds] = $this->makeLesson();
+        $teacherCtx = new UserContext($teacher, false);
+        $resourceId = ResourceManagement::addLinkResource($teacherCtx, $lessonIds[0], 'X', 'https://example.org');
+        $resource = ResourceManagement::find($resourceId);
+
+        $other = fx_teacher('Olga', 'Other');
+        $this->assertTrue(ResourceManagement::canUserDelete($teacherCtx, $resource), 'its uploader may');
+        $this->assertTrue(ResourceManagement::canUserDelete($this->ctx, $resource), 'an admin may');
+        $this->assertFalse(ResourceManagement::canUserDelete(new UserContext($other, false), $resource));
+        $this->assertFalse(ResourceManagement::canUserDelete(null, $resource), 'logged out may not');
+
+        // Whoever canUserDelete() refuses, deleteResource() must refuse too.
+        $this->expectException(RuntimeException::class);
+        ResourceManagement::deleteResource(new UserContext($other, false), $resourceId);
+    }
+
+    /** The edit rows carry the uploader's name, so the query must join it. */
+    public function testResourcesForLessonIncludesUploaderName(): void
+    {
+        [$teacher, , , $lessonIds] = $this->makeLesson();
+        ResourceManagement::addLinkResource(new UserContext($teacher, false), $lessonIds[0], 'X', 'https://example.org');
+
+        $rows = ResourceManagement::resourcesForLesson($lessonIds[0]);
+        $this->assertCount(1, $rows);
+        $this->assertArrayHasKey('uploader_first_name', $rows[0]);
+        $this->assertNotSame('', trim((string)$rows[0]['uploader_first_name'] . (string)$rows[0]['uploader_last_name']));
+    }
+
     public function testDeleteResourceRules(): void
     {
         [$teacher, , , $lessonIds] = $this->makeLesson();

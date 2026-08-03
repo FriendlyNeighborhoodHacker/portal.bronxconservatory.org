@@ -83,15 +83,55 @@ class LessonDetailUIManager {
         return $html . '</div>';
     }
 
-    /** The materials list, plus the button that adds to it where allowed. */
-    public static function resourcesBlockHtml(int $lessonId, bool $canAdd): string {
+    /** The materials list, plus the button that edits it where allowed. */
+    public static function resourcesBlockHtml(int $lessonId, bool $canEdit): string {
         $html = self::resourcesListHtml($lessonId);
-        if ($canAdd) {
+        if ($canEdit) {
             $html .= '<div class="actions" style="margin-top:6px;">'
-                . '<button type="button" class="button" data-resource-add="' . $lessonId . '">Add a resource</button>'
+                . '<button type="button" class="button" data-resource-edit="' . $lessonId . '">Edit resources</button>'
                 . '</div>';
         }
         return $html;
+    }
+
+    /**
+     * The same materials, as the editable rows inside the Edit resources
+     * modal: each one with a Remove tickbox, ticked ones deleted on save.
+     *
+     * A Remove control appears only where pressing it would actually work —
+     * ResourceManagement lets you remove your own materials (an admin, any) —
+     * so a teacher sees who added the ones they cannot touch instead of a
+     * tickbox that would fail on save.
+     */
+    public static function resourcesEditRowsHtml(int $lessonId, ?UserContext $ctx): string {
+        $resources = ResourceManagement::resourcesForLesson($lessonId);
+        if (!$resources) {
+            return '<p class="small">No materials on this lesson yet — add one below.</p>';
+        }
+        $html = '<div class="resource-edit-list">';
+        foreach ($resources as $resource) {
+            $id = (int)$resource['id'];
+            if ($resource['resource_type'] === 'link') {
+                $label = '<a href="' . h((string)$resource['url']) . '" target="_blank" rel="noopener">&#128279; '
+                    . h((string)$resource['title']) . '</a>';
+            } else {
+                $label = '<a href="/resource_download.php?id=' . $id . '">' . h((string)$resource['title']) . '</a>'
+                    . ' <span class="small">' . h((string)($resource['original_filename'] ?? '')) . '</span>';
+            }
+
+            $html .= '<div class="resource-edit-row">'
+                . '<span class="resource-edit-title">' . $label . '</span>';
+            if (ResourceManagement::canUserDelete($ctx, $resource)) {
+                $html .= '<label class="inline resource-remove">'
+                    . '<input type="checkbox" name="remove[]" value="' . $id . '"> Remove'
+                    . '</label>';
+            } else {
+                $adder = trim((string)($resource['uploader_first_name'] ?? '') . ' ' . (string)($resource['uploader_last_name'] ?? ''));
+                $html .= '<span class="small">' . ($adder !== '' ? 'added by ' . h($adder) : 'added by someone else') . '</span>';
+            }
+            $html .= '</div>';
+        }
+        return $html . '</div>';
     }
 
     // ── The family's read/write modal ──────────────────────────────────────
@@ -219,44 +259,48 @@ class LessonDetailUIManager {
     }
 
     /**
-     * The "Add a resource" modal for a teacher's own lessons: a file or a
-     * link, each with a title. Openers are buttons carrying
-     * data-resource-add="<lessonId>". Render once per page.
+     * The "Edit resources" modal for a teacher's own lessons: the materials
+     * already on the lesson, each with a Remove tickbox, plus one file or
+     * link to add. Openers are buttons carrying data-resource-edit="<lessonId>".
+     * Render once per page.
+     *
+     * One form, one save: ticking Remove stages a deletion rather than firing
+     * it, so a teacher can clear out last week's recording and attach this
+     * week's in a single trip, and back out of the whole thing with Cancel.
      */
     public static function renderResourceModal(): void {
         ?>
-        <div id="lessonResourceModal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true">
+        <div id="lessonResourceModal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true"
+             aria-labelledby="lrTitle">
           <div class="modal-content">
             <button class="close" type="button" aria-label="Close">&times;</button>
-            <h3>Add a resource</h3>
-            <div class="actions" style="margin-bottom:12px;">
-              <button type="button" class="button primary" id="lrTabFile">Upload a file</button>
-              <button type="button" class="button" id="lrTabLink">Share a link</button>
-            </div>
+            <h3 id="lrTitle">Edit resources</h3>
             <div class="error small hidden" id="lrErr"></div>
 
-            <form id="lrPanelFile" class="stack" data-resource-form>
+            <form id="lrForm" class="stack">
               <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
               <input type="hidden" name="lesson_id" value="">
               <input type="hidden" name="resource_type" value="file">
-              <label>Title <input type="text" name="title" placeholder="Week 3 recording"></label>
-              <label>File (audio, PDF, image, or video)
-                <input type="file" name="resource" required></label>
-              <div class="actions">
-                <button type="submit" class="button primary">Upload</button>
-                <button type="button" class="button" data-modal-close>Cancel</button>
-              </div>
-            </form>
 
-            <form id="lrPanelLink" class="stack" style="display:none;" data-resource-form>
-              <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
-              <input type="hidden" name="lesson_id" value="">
-              <input type="hidden" name="resource_type" value="link">
-              <label>Title <input type="text" name="title" placeholder="Practice video"></label>
-              <label>Link (http/https) <input type="url" name="url" placeholder="https://..." required></label>
-              <div class="actions">
-                <button type="submit" class="button primary">Share Link</button>
-                <button type="button" class="button" data-modal-close>Cancel</button>
+              <div id="lrCurrent"><p class="small">Loading…</p></div>
+
+              <h4 style="margin-bottom:0;">Add a material</h4>
+              <p class="small" style="margin:0;">Optional — leave blank if you are only removing.</p>
+              <div class="modal-tabs">
+                <button type="button" class="modal-tab active" id="lrTabFile">Upload a file</button>
+                <button type="button" class="modal-tab" id="lrTabLink">Share a link</button>
+              </div>
+              <label>Title <input type="text" name="title" placeholder="Week 3 recording"></label>
+              <label id="lrFieldFile">File (audio, PDF, image, or video)
+                <input type="file" name="resource"></label>
+              <label id="lrFieldLink" style="display:none;">Link (http/https)
+                <input type="url" name="url" placeholder="https://..."></label>
+
+              <div class="actions actions-split">
+                <div class="actions-right">
+                  <button type="button" class="button" data-modal-close>Cancel</button>
+                  <button type="submit" class="button primary">Save changes</button>
+                </div>
               </div>
             </form>
           </div>
@@ -265,49 +309,84 @@ class LessonDetailUIManager {
         <script>
         document.addEventListener('DOMContentLoaded', function () {
           var modal = document.getElementById('lessonResourceModal');
-          var panelFile = document.getElementById('lrPanelFile');
-          var panelLink = document.getElementById('lrPanelLink');
+          if (!modal) return;
+          var form = document.getElementById('lrForm');
+          var current = document.getElementById('lrCurrent');
+          var fieldFile = document.getElementById('lrFieldFile');
+          var fieldLink = document.getElementById('lrFieldLink');
           var tabFile = document.getElementById('lrTabFile');
           var tabLink = document.getElementById('lrTabLink');
           var errEl = document.getElementById('lrErr');
-          if (!modal) return;
+          var typeInput = form.querySelector('input[name=resource_type]');
+          var fileInput = form.querySelector('input[name=resource]');
+          var urlInput = form.querySelector('input[name=url]');
 
+          // The inactive field is disabled, not just hidden, so the browser
+          // never submits it and never validates a url the teacher can't see.
           function switchTab(showFile) {
-            panelFile.style.display = showFile ? '' : 'none';
-            panelLink.style.display = showFile ? 'none' : '';
-            tabFile.classList.toggle('primary', showFile);
-            tabLink.classList.toggle('primary', !showFile);
+            fieldFile.style.display = showFile ? '' : 'none';
+            fieldLink.style.display = showFile ? 'none' : '';
+            tabFile.classList.toggle('active', showFile);
+            tabLink.classList.toggle('active', !showFile);
+            fileInput.disabled = !showFile;
+            urlInput.disabled = showFile;
+            typeInput.value = showFile ? 'file' : 'link';
             errEl.classList.add('hidden');
           }
           tabFile.addEventListener('click', function () { switchTab(true); });
           tabLink.addEventListener('click', function () { switchTab(false); });
 
-          // Opening remembers which lesson the resource is for.
+          // Opening loads that lesson's materials, so the list is never a
+          // stale copy of whichever lesson was edited last.
           document.addEventListener('click', function (e) {
-            var opener = e.target.closest ? e.target.closest('[data-resource-add]') : null;
+            var opener = e.target.closest ? e.target.closest('[data-resource-edit]') : null;
             if (!opener) return;
             e.preventDefault();
-            var lessonId = opener.getAttribute('data-resource-add');
-            panelFile.reset();
-            panelLink.reset();
-            modal.querySelectorAll('input[name=lesson_id]').forEach(function (input) { input.value = lessonId; });
+            var lessonId = opener.getAttribute('data-resource-edit');
+            form.reset();
+            form.querySelector('input[name=lesson_id]').value = lessonId;
             switchTab(true);
+            errEl.classList.add('hidden');
+            current.innerHTML = '<p class="small">Loading…</p>';
             modal.classList.remove('hidden');
             modal.setAttribute('aria-hidden', 'false');
+
+            fetch('/teacher/lesson_resources_edit.php?lesson_id=' + encodeURIComponent(lessonId),
+                  { credentials: 'same-origin' })
+              .then(function (r) { return r.text(); })
+              .then(function (html) { current.innerHTML = html; })
+              .catch(function () {
+                current.innerHTML = '<p class="error small">We could not load the current materials.</p>';
+              });
           });
 
-          document.addEventListener('submit', function (e) {
-            var form = e.target.closest ? e.target.closest('[data-resource-form]') : null;
-            if (!form) return;
+          form.addEventListener('submit', function (e) {
             e.preventDefault();
             var lessonId = form.querySelector('input[name=lesson_id]').value;
+            var button = form.querySelector('button[type=submit]');
             errEl.classList.add('hidden');
 
-            fetch('/teacher/lesson_resource_add.php', {
+            var removing = form.querySelectorAll('input[name="remove[]"]:checked').length;
+            var addingFile = !fileInput.disabled && fileInput.files && fileInput.files.length > 0;
+            var addingLink = !urlInput.disabled && urlInput.value.trim() !== '';
+            if (!removing && !addingFile && !addingLink) {
+              errEl.textContent = 'Nothing to save — tick a material to remove, or add one.';
+              errEl.classList.remove('hidden');
+              return;
+            }
+            if (removing && !window.confirm(removing === 1
+                ? 'Remove this material? This cannot be undone.'
+                : 'Remove ' + removing + ' materials? This cannot be undone.')) {
+              return;
+            }
+
+            button.disabled = true;
+            fetch('/teacher/lesson_resources_save.php', {
               method: 'POST', body: new FormData(form), credentials: 'same-origin'
             })
               .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, text: t }; }); })
               .then(function (res) {
+                button.disabled = false;
                 if (!res.ok) {
                   errEl.textContent = res.text;
                   errEl.classList.remove('hidden');
@@ -323,6 +402,7 @@ class LessonDetailUIManager {
                 modal.setAttribute('aria-hidden', 'true');
               })
               .catch(function () {
+                button.disabled = false;
                 errEl.textContent = 'Could not save — check your connection.';
                 errEl.classList.remove('hidden');
               });
