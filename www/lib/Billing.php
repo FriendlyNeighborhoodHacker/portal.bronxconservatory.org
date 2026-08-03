@@ -10,13 +10,14 @@ require_once __DIR__ . '/SemesterManagement.php';
 // Light accounting so balances are explainable. Every row is a ledger entry
 // in integer cents; a student's balance = SUM(debits) - SUM(credits).
 // Confirming a semester reservation posts the registration / lessons /
-// recital-fee debits; payments, scholarships, and adjustments are credits.
+// recital-fee / installment-plan-fee debits; payments, scholarships, and
+// adjustments are credits.
 class Billing {
 
-    public const ENTRY_TYPES = ['registration', 'lessons', 'recital_fee', 'payment', 'scholarship_application', 'other'];
+    public const ENTRY_TYPES = ['registration', 'lessons', 'recital_fee', 'installment_plan_fee', 'payment', 'scholarship_application', 'other'];
 
     /** The entry types auto-posted when a semester reservation is confirmed. */
-    private const CONFIRMATION_CHARGES = ['registration', 'lessons', 'recital_fee'];
+    private const CONFIRMATION_CHARGES = ['registration', 'lessons', 'recital_fee', 'installment_plan_fee'];
 
     private static function pdo(): PDO {
         return pdo();
@@ -25,11 +26,11 @@ class Billing {
     // ── Semester confirmation charges ─────────────────────────────────────
 
     /**
-     * Post the semester's charges (registration + lessons + recital fee, from
-     * the semester row) as debits on the student's ledger. Idempotent per
-     * (student, semester, entry_type): a student confirming a second
-     * reservation in the same semester (e.g. a second instrument) is not
-     * charged twice.
+     * Post the semester's charges (registration + lessons + recital fee +
+     * installment plan fee, from the semester row) as debits on the student's
+     * ledger. Idempotent per (student, semester, entry_type): a student
+     * confirming a second reservation in the same semester (e.g. a second
+     * instrument) is not charged twice.
      */
     public static function postSemesterConfirmationCharges(?UserContext $ctx, int $studentUserId, int $semesterId, int $durationMinutes = 30): void {
         self::assertAdmin($ctx);
@@ -41,6 +42,7 @@ class Billing {
             'registration' => [SemesterManagement::registrationFeeCents($semester), 'Semester registration'],
             'lessons' => [SemesterManagement::lessonFeeCents($semester, $durationMinutes), 'Semester lessons'],
             'recital_fee' => [SemesterManagement::recitalFeeCents($semester), 'Recital fee'],
+            'installment_plan_fee' => [SemesterManagement::installmentPlanFeeCents($semester), 'Installment plan fee'],
         ];
         foreach ($charges as $entryType => [$amountCents, $description]) {
             if ($amountCents <= 0) {
