@@ -32,6 +32,10 @@ DELETE FROM semester_location_dates;
 DELETE FROM semester_locations;
 DELETE FROM semesters;
 
+-- Leads and incomplete forms (cascade to lead_students, lead_notes, incomplete_inquiry_notes)
+DELETE FROM leads;
+DELETE FROM incomplete_inquiries;
+
 -- Money
 DELETE FROM ledger_entries;
 DELETE FROM stripe_webhook_events;
