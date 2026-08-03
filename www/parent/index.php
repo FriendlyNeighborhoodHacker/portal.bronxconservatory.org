@@ -123,8 +123,8 @@ header_html('My Family');
         <div style="font-weight:500;margin-bottom:4px;">
           <?php
             $start = strtotime($lesson['start_datetime']);
-            $end = $start + ($lesson['duration_minutes'] * 60);
-            echo h(date('D, M j · g:i–g:i A', $start) . ' ' . date('g:i A', $end));
+            $end = $start + ((int)$lesson['duration_minutes'] * 60);
+            echo h(date('D, M j · g:i', $start) . '–' . date('g:i A', $end));
           ?>
         </div>
         <div style="font-size:14px;color:var(--color-text-secondary);margin-bottom:4px;">
