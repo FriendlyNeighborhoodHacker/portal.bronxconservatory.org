@@ -175,8 +175,14 @@ header_html('Pay your balance');
       if (result.error) {
         showError(result.error.message || 'We could not process that card. Please check the details and try again.');
       }
-    }).catch(function () {
-      showError('Something went wrong reaching our payment processor. Please try again, or call us.');
+    }).catch(function (err) {
+      // An integration mistake rejects here rather than resolving with an
+      // error, and used to read as "the processor is down" — say what it
+      // actually was so the next one is diagnosable from the screen.
+      console.error('Stripe confirmPayment failed:', err);
+      var detail = err && err.message ? ' (' + err.message + ')' : '';
+      showError('Something went wrong reaching our payment processor' + detail
+        + '. Please try again, or call us.');
     });
   });
 })();

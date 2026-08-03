@@ -140,11 +140,18 @@ ApplicationUI::minimalHeaderHtml('Register — Checkout');
     }
   });
 
+  // 'never' is a promise to Stripe that we will supply these ourselves in
+  // confirmParams.payment_method_data.billing_details — name and address from
+  // the Address Element below, email from the lead. Break that promise and
+  // confirmPayment throws an IntegrationError before it ever reaches Stripe,
+  // which on screen is indistinguishable from a network fault.
+  // Name is 'never' rather than 'auto' so the card form doesn't render a
+  // second name field on top of the Address Element's own.
   elements.create('payment', {
-    fields: { billingDetails: { address: 'never', email: 'never', name: 'auto' } }
+    fields: { billingDetails: { address: 'never', email: 'never', name: 'never' } }
   }).mount('#payment-element');
 
-  elements.create('address', {
+  var addressElement = elements.create('address', {
     mode: 'billing',
     defaultValues: {
       name: <?=json_encode(trim($lead['parent_first_name'] . ' ' . $lead['parent_last_name']))?>,
@@ -157,7 +164,8 @@ ApplicationUI::minimalHeaderHtml('Register — Checkout');
         country: 'US'
       }
     }
-  }).mount('#address-element');
+  });
+  addressElement.mount('#address-element');
 
   var form = document.getElementById('payment-form');
   var button = document.getElementById('payment-submit');
@@ -176,20 +184,41 @@ ApplicationUI::minimalHeaderHtml('Register — Checkout');
     button.textContent = 'Processing…';
     message.classList.add('hidden');
 
-    stripe.confirmPayment({
-      elements: elements,
-      confirmParams: {
-        return_url: <?=json_encode(registration_absolute_url('/register/return.php'))?>,
-        receipt_email: <?=json_encode((string)$lead['email'])?>
+    // Hand the Address Element's value to confirmPayment, since the card
+    // form was told not to collect it.
+    addressElement.getValue().then(function (addr) {
+      if (!addr.complete) {
+        showError('Please complete your billing address.');
+        return null;
       }
+      return stripe.confirmPayment({
+        elements: elements,
+        confirmParams: {
+          return_url: <?=json_encode(registration_absolute_url('/register/return.php'))?>,
+          receipt_email: <?=json_encode((string)$lead['email'])?>,
+          payment_method_data: {
+            billing_details: {
+              name: addr.value.name,
+              email: <?=json_encode((string)$lead['email'])?>,
+              address: addr.value.address
+            }
+          }
+        }
+      });
     }).then(function (result) {
       // Only card errors and validation problems land here; on success the
-      // browser is redirected to return_url.
-      if (result.error) {
+      // browser is redirected to return_url. null = we bailed out above.
+      if (result && result.error) {
         showError(result.error.message || 'We could not process that card. Please check the details and try again.');
       }
-    }).catch(function () {
-      showError('Something went wrong reaching our payment processor. Please try again, or call us.');
+    }).catch(function (err) {
+      // An integration mistake rejects here rather than resolving with an
+      // error, and used to read as "the processor is down" — say what it
+      // actually was so the next one is diagnosable from the screen.
+      console.error('Stripe confirmPayment failed:', err);
+      var detail = err && err.message ? ' (' + err.message + ')' : '';
+      showError('Something went wrong reaching our payment processor' + detail
+        + '. Please try again, or call us.');
     });
   });
 })();
