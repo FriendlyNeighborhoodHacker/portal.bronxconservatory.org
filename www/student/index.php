@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
 require_once __DIR__ . '/../lib/LessonDetailUIManager.php';
+require_once __DIR__ . '/../lib/LessonUIHelper.php';
 Application::init();
 require_login();
 
@@ -55,31 +56,11 @@ header_html('My Schedule');
 <?php if (count($upcomingLessons) > 1): ?>
 <div class="card">
   <h3 style="margin-top:0;">Other Upcoming Lessons</h3>
-  <?php foreach (array_slice($upcomingLessons, 1, 5) as $lesson): ?>
-  <?php $cancelled = LessonManagement::isCancelled($lesson); ?>
-  <div style="padding:12px 0;border-bottom:1px solid var(--color-border);<?=$cancelled ? 'opacity:0.6;' : ''?>">
-    <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;">
-      <div>
-        <div style="font-weight:500;margin-bottom:4px;">
-          <?php
-            $start = strtotime($lesson['start_datetime']);
-            $end = $start + ((int)$lesson['duration_minutes'] * 60);
-            echo h(date('D, M j · g:i', $start) . '–' . date('g:i A', $end));
-          ?>
-        </div>
-        <div style="font-size:14px;color:var(--color-text-secondary);margin-bottom:4px;">
-          <?=h($lesson['location_name'])?>
-        </div>
-        <div style="font-size:14px;">
-          <?=h(trim(($lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name']) . ' '
-            . ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])))?>
-        </div>
-      </div>
-      <a href="#" data-lesson-detail="<?=(int)$lesson['id']?>" class="button" style="white-space:nowrap;margin-top:4px;">Notes & Materials</a>
-    </div>
-  </div>
-  <?php endforeach; ?>
+<div class="card">
+  <h3 style="margin-top:0;">Other Upcoming Lessons</h3>
+  <?php echo LessonUIHelper::renderOtherUpcomingLessons(array_slice($upcomingLessons, 1), showStudentName: false, includeWrapper: false); ?>
   <p class="small" style="margin-top:12px;margin-bottom:0;"><a href="/student/calendar.php">View full calendar</a></p>
+</div>
 </div>
 <?php endif; ?>
 <?php else: ?>

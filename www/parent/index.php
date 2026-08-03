@@ -15,6 +15,7 @@ require_once __DIR__ . '/../lib/ReservationManagement.php';
 require_once __DIR__ . '/../lib/SemesterManagement.php';
 require_once __DIR__ . '/../lib/Billing.php';
 require_once __DIR__ . '/../lib/Files.php';
+require_once __DIR__ . '/../lib/LessonUIHelper.php';
 Application::init();
 require_login();
 
@@ -114,36 +115,7 @@ header_html('My Family');
 
 <?php if ($upcoming): ?>
 <h3>Upcoming Lessons</h3>
-<div class="card">
-  <?php foreach ($upcoming as $lesson): ?>
-  <?php $cancelled = LessonManagement::isCancelled($lesson); ?>
-  <div style="padding:12px 0;border-bottom:1px solid var(--color-border);<?=$cancelled ? 'opacity:0.6;' : ''?>">
-    <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;">
-      <div>
-        <div style="font-weight:500;margin-bottom:4px;">
-          <?php
-            $start = strtotime($lesson['start_datetime']);
-            $end = $start + ((int)$lesson['duration_minutes'] * 60);
-            echo h(date('D, M j · g:i', $start) . '–' . date('g:i A', $end));
-          ?>
-        </div>
-        <div style="font-size:14px;color:var(--color-text-secondary);margin-bottom:4px;">
-          <?=h($lesson['location_name'])?>
-        </div>
-        <div style="font-size:14px;">
-          <?php if (count($children) > 1): ?>
-            <strong><?=h((string)($lesson['student_preferred_name'] ?: $lesson['student_first_name']))?></strong> ·
-          <?php endif; ?>
-          Teacher: <?=h(trim(($lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name']) . ' '
-            . ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])))?>
-          <?php if ($cancelled): ?><span class="badge">Cancelled</span><?php endif; ?>
-        </div>
-      </div>
-      <a href="#" data-lesson-detail="<?=(int)$lesson['id']?>" class="button" style="white-space:nowrap;margin-top:4px;">Notes & Materials</a>
-    </div>
-  </div>
-  <?php endforeach; ?>
-</div>
+<?php echo LessonUIHelper::renderOtherUpcomingLessons($upcoming, showStudentName: count($children) > 1); ?>
 <?php endif; ?>
 
 <h3>Balance &amp; Payments</h3>
