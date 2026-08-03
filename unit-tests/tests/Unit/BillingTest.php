@@ -293,4 +293,155 @@ final class BillingTest extends TestCase
         $this->assertSame(0, $balances[$childB]['semester_debit_cents']);
         $this->assertSame(1000, $balances[$childB]['total_balance_cents']);
     }
+
+    // ── Duration-change accounting ──────────────────────────────────────────
+
+    public function testLessonsUsedAndRemainingCountsCorrectly(): void
+    {
+        $student = fx_student();
+        [$semesterId, $reservationId, $setup] = $this->confirmReservationFor($student);
+
+        // With 4 weeks (4 lessons generated), none attended yet.
+        $result = Billing::lessonsUsedAndRemaining($reservationId, $semesterId);
+        $this->assertSame(4, $result['lessons_total']);
+        $this->assertSame(0, $result['lessons_used']);
+        $this->assertSame(4, $result['lessons_remaining']);
+
+        // Mark the first lesson as attended.
+        $st = pdo()->prepare(
+            'SELECT id FROM lessons WHERE semester_lesson_reservation_id = ? ORDER BY lesson_number LIMIT 1'
+        );
+        $st->execute([$reservationId]);
+        $lesson = $st->fetch();
+        if ($lesson) {
+            pdo()->prepare('UPDATE lessons SET attended = 1 WHERE id = ?')->execute([$lesson['id']]);
+            $result = Billing::lessonsUsedAndRemaining($reservationId, $semesterId);
+            $this->assertSame(1, $result['lessons_used']);
+            $this->assertSame(3, $result['lessons_remaining']);
+        }
+
+        // Cancel the second lesson (it counts as used).
+        $st = pdo()->prepare(
+            'SELECT id FROM lessons WHERE semester_lesson_reservation_id = ? ORDER BY lesson_number LIMIT 1 OFFSET 1'
+        );
+        $st->execute([$reservationId]);
+        $lesson = $st->fetch();
+        if ($lesson) {
+            pdo()->prepare('UPDATE lessons SET cancelled_at = NOW() WHERE id = ?')->execute([$lesson['id']]);
+            $result = Billing::lessonsUsedAndRemaining($reservationId, $semesterId);
+            $this->assertSame(2, $result['lessons_used']);
+            $this->assertSame(2, $result['lessons_remaining']);
+        }
+    }
+
+    public function testDurationChangeLedgerCalculationRefundsAndCharges(): void
+    {
+        $student = fx_student();
+        [$semesterId, $reservationId] = $this->confirmReservationFor($student);
+
+        // Changing from 30 min ($300 for semester) to 60 min ($600 for semester).
+        // With 4 weeks booked, no lessons attended yet. Semester has 15 lessons_per_semester.
+        //   - Lessons generated: 4, lessons used: 0, lessons remaining: 4
+        //   - Original fee: $300, per-lesson rate: $300/15 = $20/lesson
+        //   - Amount spent: 0 * $20 = $0, refund: $300 - $0 = $300
+        //   - New fee: $600, per-lesson rate: $600/15 = $40/lesson
+        //   - New charge: 4 * $40 = $160
+        $calc = Billing::durationChangeLedgerCalculation($reservationId, $semesterId, 30, 60);
+
+        $this->assertSame(4, $calc['lessons_total']);
+        $this->assertSame(0, $calc['lessons_used']);
+        $this->assertSame(4, $calc['lessons_remaining']);
+        $this->assertSame(30000, $calc['original_fee_cents']);
+        $this->assertSame(0, $calc['amount_spent_cents']);
+        $this->assertSame(30000, $calc['refund_cents']);
+        $this->assertSame(60000, $calc['new_fee_cents']);
+        // 60000 / 15 * 4 = 16000
+        $this->assertSame(16000, $calc['new_charge_cents']);
+    }
+
+    public function testDurationChangeLedgerCalculationWithPartialUsage(): void
+    {
+        $student = fx_student();
+        [$semesterId, $reservationId] = $this->confirmReservationFor($student);
+
+        // Mark first 2 lessons as attended.
+        $st = pdo()->prepare(
+            'SELECT id FROM lessons WHERE semester_lesson_reservation_id = ? ORDER BY lesson_number LIMIT 2'
+        );
+        $st->execute([$reservationId]);
+        while ($lesson = $st->fetch()) {
+            pdo()->prepare('UPDATE lessons SET attended = 1 WHERE id = ?')->execute([$lesson['id']]);
+        }
+
+        // Changing from 30 min ($300) to 60 min ($600).
+        // 2 lessons used out of 4, 2 remaining:
+        //   - Per-lesson rate (30 min): $300/15 = $20/lesson
+        //   - Amount spent: 2 * $20 = $40
+        //   - Refund: $300 - $40 = $260
+        //   - Per-lesson rate (60 min): $600/15 = $40/lesson
+        //   - New charge: 2 * $40 = $80
+        $calc = Billing::durationChangeLedgerCalculation($reservationId, $semesterId, 30, 60);
+
+        $this->assertSame(2, $calc['lessons_used']);
+        $this->assertSame(2, $calc['lessons_remaining']);
+        $this->assertSame(4000, $calc['amount_spent_cents']); // 2 * 2000
+        $this->assertSame(26000, $calc['refund_cents']); // 30000 - 4000
+        $this->assertSame(8000, $calc['new_charge_cents']); // 2 * 4000
+    }
+
+    public function testPostDurationChangeEntriesCreatesLedgerRows(): void
+    {
+        $student = fx_student();
+        [$semesterId, $reservationId] = $this->confirmReservationFor($student);
+
+        $initial = Billing::balanceForStudentCents($student);
+
+        // Post a 30-min → 60-min change with calculated amounts.
+        $calc = Billing::durationChangeLedgerCalculation($reservationId, $semesterId, 30, 60);
+        [$refundId, $chargeId] = Billing::postDurationChangeEntries(
+            $this->ctx, $student, $semesterId, $calc['refund_cents'], $calc['new_charge_cents'], 30, 60
+        );
+
+        $this->assertIsInt($refundId);
+        $this->assertIsInt($chargeId);
+
+        // Balance change: -refund + new_charge
+        $balanceChange = -$calc['refund_cents'] + $calc['new_charge_cents'];
+        $updated = Billing::balanceForStudentCents($student);
+        $this->assertSame($initial + $balanceChange, $updated);
+
+        $ledger = Billing::ledgerForStudent($student, $semesterId);
+        $entries = array_filter(
+            $ledger,
+            fn($e) => in_array($e['description'], [
+                'Duration change refund: 30→60 min',
+                'Duration change charge: 30→60 min'
+            ])
+        );
+        $this->assertCount(2, $entries);
+        foreach ($entries as $entry) {
+            if ($entry['accounting_type'] === 'credit') {
+                $this->assertSame($calc['refund_cents'], $entry['amount_cents']);
+            } else {
+                $this->assertSame($calc['new_charge_cents'], $entry['amount_cents']);
+            }
+        }
+    }
+
+    public function testPostDurationChangeEntriesWithZeroAmounts(): void
+    {
+        $student = fx_student();
+        [$semesterId] = $this->confirmReservationFor($student);
+
+        $initial = Billing::balanceForStudentCents($student);
+
+        // Post with $0 refund and charge (should not create entries).
+        [$refundId, $chargeId] = Billing::postDurationChangeEntries(
+            $this->ctx, $student, $semesterId, 0, 0, 30, 60
+        );
+
+        $this->assertNull($refundId);
+        $this->assertNull($chargeId);
+        $this->assertSame($initial, Billing::balanceForStudentCents($student));
+    }
 }

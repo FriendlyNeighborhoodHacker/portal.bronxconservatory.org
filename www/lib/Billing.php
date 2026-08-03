@@ -100,6 +100,161 @@ class Billing {
         return $reversed;
     }
 
+    // ── Duration-change accounting ────────────────────────────────────────
+
+    /**
+     * Calculate lessons used and remaining for a reservation duration change.
+     *
+     * Returns: ['lessons_total', 'lessons_used', 'lessons_remaining']
+     *   - lessons_total: count of all lessons generated for this reservation
+     *   - lessons_used: lessons_total - lessons_remaining
+     *   - lessons_remaining: count of future lessons (not yet occurred or cancelled)
+     *
+     * Cancelled lessons are counted as "used" for the purposes of this calculation
+     * (since the student was still charged for them).
+     */
+    public static function lessonsUsedAndRemaining(int $reservationId, int $semesterId): array {
+        // Total lessons created for this reservation
+        $st = self::pdo()->prepare(
+            "SELECT COUNT(*) FROM lessons
+             WHERE semester_lesson_reservation_id = ? AND lesson_number > 0"
+        );
+        $st->execute([$reservationId]);
+        $lessonsTotal = (int)$st->fetchColumn();
+
+        // Remaining lessons: not yet occurred (attended IS NULL or 0) and not cancelled
+        $st = self::pdo()->prepare(
+            "SELECT COUNT(*) FROM lessons
+             WHERE semester_lesson_reservation_id = ? AND lesson_number > 0
+               AND cancelled_at IS NULL
+               AND (attended IS NULL OR attended = 0)"
+        );
+        $st->execute([$reservationId]);
+        $lessonsRemaining = (int)$st->fetchColumn();
+
+        $lessonsUsed = $lessonsTotal - $lessonsRemaining;
+        return [
+            'lessons_total' => $lessonsTotal,
+            'lessons_used' => max(0, $lessonsUsed),
+            'lessons_remaining' => $lessonsRemaining,
+        ];
+    }
+
+    /**
+     * Calculate the default refund and new charge for a duration change.
+     *
+     * The semester's lesson fee is priced for a full "lessons_per_semester" package,
+     * but only some lessons may have been generated for this specific reservation.
+     * We calculate per-lesson cost using lessons_per_semester (for consistency with
+     * the original charge), but track used/remaining against actual lessons generated.
+     *
+     * Returns: [
+     *   'lessons_total', 'lessons_used', 'lessons_remaining',
+     *   'lessons_per_semester',
+     *   'original_fee_cents', 'amount_spent_cents', 'refund_cents',
+     *   'new_fee_cents', 'new_charge_cents'
+     * ]
+     *
+     * Refund = (original payment) - (original fee per lesson × lessons used)
+     * New charge = (new fee per lesson) × lessons remaining
+     */
+    public static function durationChangeLedgerCalculation(
+        int $reservationId,
+        int $semesterId,
+        int $originalDurationMinutes,
+        int $newDurationMinutes
+    ): array {
+        $semester = SemesterManagement::find($semesterId);
+        if (!$semester) {
+            throw new InvalidArgumentException('Semester not found.');
+        }
+
+        $lessons = self::lessonsUsedAndRemaining($reservationId, $semesterId);
+        $lessonsTotal = $lessons['lessons_total'];
+        $lessonsUsed = $lessons['lessons_used'];
+        $lessonsRemaining = $lessons['lessons_remaining'];
+        $lessonsPerSemester = SemesterManagement::lessonsPerSemester($semester);
+
+        // Original fee for the full semester at original duration
+        $originalFeeCents = SemesterManagement::lessonFeeCents($semester, $originalDurationMinutes);
+
+        // Fee per lesson based on the semester's lessons_per_semester (for consistent accounting)
+        $feePerLesson = $lessonsPerSemester > 0 ? intdiv($originalFeeCents, $lessonsPerSemester) : 0;
+        $amountSpentCents = $feePerLesson * $lessonsUsed;
+
+        // Refund = original payment - amount spent
+        $refundCents = max(0, $originalFeeCents - $amountSpentCents);
+
+        // New fee for the full semester at new duration
+        $newFeeCents = SemesterManagement::lessonFeeCents($semester, $newDurationMinutes);
+
+        // New charge = fee per lesson (at new rate) × lessons remaining
+        $newFeePerLesson = $lessonsPerSemester > 0 ? intdiv($newFeeCents, $lessonsPerSemester) : 0;
+        $newChargeCents = $newFeePerLesson * $lessonsRemaining;
+
+        return [
+            'lessons_total' => $lessonsTotal,
+            'lessons_used' => $lessonsUsed,
+            'lessons_remaining' => $lessonsRemaining,
+            'lessons_per_semester' => $lessonsPerSemester,
+            'original_fee_cents' => $originalFeeCents,
+            'amount_spent_cents' => $amountSpentCents,
+            'refund_cents' => $refundCents,
+            'new_fee_cents' => $newFeeCents,
+            'new_charge_cents' => $newChargeCents,
+        ];
+    }
+
+    /**
+     * Post the ledger entries for a reservation duration change.
+     * Creates a credit for the refund and a debit for the new charge.
+     *
+     * Returns: [refund_entry_id, new_charge_entry_id]
+     */
+    public static function postDurationChangeEntries(
+        ?UserContext $ctx,
+        int $studentUserId,
+        int $semesterId,
+        int $refundCents,
+        int $newChargeCents,
+        int $originalDurationMinutes,
+        int $newDurationMinutes
+    ): array {
+        self::assertAdmin($ctx);
+
+        $refundId = null;
+        $chargeId = null;
+
+        if ($refundCents > 0) {
+            $refundId = self::insertEntry(
+                $ctx, $studentUserId, date('Y-m-d'), 'credit', 'other',
+                $refundCents, $semesterId,
+                "Duration change refund: {$originalDurationMinutes}→{$newDurationMinutes} min"
+            );
+        }
+
+        if ($newChargeCents > 0) {
+            $chargeId = self::insertEntry(
+                $ctx, $studentUserId, date('Y-m-d'), 'debit', 'lessons',
+                $newChargeCents, $semesterId,
+                "Duration change charge: {$originalDurationMinutes}→{$newDurationMinutes} min"
+            );
+        }
+
+        if ($refundId || $chargeId) {
+            self::log($ctx, 'billing.duration_change_posted', [
+                'student_user_id' => $studentUserId,
+                'semester_id' => $semesterId,
+                'original_duration_minutes' => $originalDurationMinutes,
+                'new_duration_minutes' => $newDurationMinutes,
+                'refund_cents' => $refundCents,
+                'new_charge_cents' => $newChargeCents,
+            ]);
+        }
+
+        return [$refundId, $chargeId];
+    }
+
     // ── Manual entries ─────────────────────────────────────────────────────
 
     /** Record a payment taken outside Stripe (check, cash, Zelle, ...). */

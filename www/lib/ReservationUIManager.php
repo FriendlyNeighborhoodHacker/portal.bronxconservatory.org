@@ -213,6 +213,17 @@ class ReservationUIManager {
               .then(function (r) { return r.json(); })
               .then(function (json) {
                 if (json && json.ok) { window.location.reload(); }
+                else if (json && json.needs_accounting) {
+                  // Duration change on confirmed reservation: redirect to accounting screen
+                  var calculation = JSON.stringify(json.calculation);
+                  var csrf = form.elements.csrf ? form.elements.csrf.value : '';
+                  var url = '/admin/duration_change_accounting.php?'
+                    + 'reservation_id=' + encodeURIComponent(json.reservation_id)
+                    + '&new_duration_minutes=' + encodeURIComponent(form.elements.duration_minutes.value)
+                    + '&calculation=' + encodeURIComponent(calculation)
+                    + '&csrf=' + encodeURIComponent(csrf);
+                  window.location.href = url;
+                }
                 else { showError(errEl, (json && json.error) || 'Something went wrong.'); }
               })
               .catch(function () { showError(errEl, 'Network error.'); });
