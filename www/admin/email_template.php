@@ -17,10 +17,10 @@ if (!$template) {
 $old = $_SESSION['email_template_old'] ?? [];
 unset($_SESSION['email_template_old']);
 $subject = (string)($old['subject'] ?? $template['subject']);
-$bodyHtml = (string)($old['body_html'] ?? $template['body_html']);
+$bodyMarkdown = (string)($old['body_markdown'] ?? $template['body_markdown']);
 
 $variables = EmailTemplateManagement::availableVariables($key);
-$unknown = EmailTemplateManagement::unknownPlaceholders($key, $subject, $bodyHtml);
+$unknown = EmailTemplateManagement::unknownPlaceholders($key, $subject, $bodyMarkdown);
 $preview = EmailTemplateManagement::render($key, EmailTemplateManagement::sampleVariables($key));
 
 $flash = $_SESSION['email_template_flash'] ?? null;
@@ -52,9 +52,14 @@ header_html('Edit — ' . $template['name'], ['wide' => true]);
       <label>Subject
         <input type="text" name="subject" maxlength="255" required value="<?=h($subject)?>">
       </label>
-      <label>Body (HTML)
-        <textarea name="body_html" rows="20" required style="font-family:monospace;"><?=h($bodyHtml)?></textarea>
+      <label>Body (Markdown)
+        <textarea name="body_markdown" rows="20" required style="font-family:monospace;"><?=h($bodyMarkdown)?></textarea>
       </label>
+      <p class="small" style="margin-top:-8px;color:var(--color-text-secondary);">
+        Use <strong>**text**</strong> for bold, <em>*text*</em> for italic, <strong>[text](url)</strong> for links,
+        <strong>### Heading</strong> for headings, and <strong>- item</strong> for lists.
+        Blank lines separate paragraphs. Raw HTML is also supported if needed.
+      </p>
       <div class="actions">
         <button type="submit" class="button primary">Save</button>
         <a class="button" href="/admin/email_templates.php">Cancel</a>

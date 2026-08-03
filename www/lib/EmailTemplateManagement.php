@@ -6,6 +6,7 @@ require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/UserContext.php';
 require_once __DIR__ . '/ActivityLog.php';
 require_once __DIR__ . '/LeadManagement.php';
+require_once __DIR__ . '/MarkdownToHtml.php';
 
 /**
  * Transactional email wording that admins can change without a deploy
@@ -13,9 +14,10 @@ require_once __DIR__ . '/LeadManagement.php';
  *
  * The split of ownership is deliberate: the code owns template_key, name and
  * available_variables — they describe what the calling code actually passes —
- * while the admin owns the subject and the body. Rendering escapes every
- * substituted value and offers no raw-HTML escape hatch, so no wording an
- * admin types and no value a family submits can inject markup into an email.
+ * while the admin owns the subject and the body. Bodies are written in markdown
+ * and converted to HTML at send time. Rendering escapes every substituted value,
+ * so no wording an admin types and no value a family submits can inject markup
+ * into an email.
  */
 class EmailTemplateManagement {
 
@@ -61,7 +63,7 @@ class EmailTemplateManagement {
 
     // ===== Admin write =====
 
-    public static function update(?UserContext $ctx, string $templateKey, string $subject, string $bodyHtml): void {
+    public static function update(?UserContext $ctx, string $templateKey, string $subject, string $bodyMarkdown): void {
         self::assertAdmin($ctx);
         if (!self::find($templateKey)) {
             throw new InvalidArgumentException('Unknown email template: ' . $templateKey);
@@ -70,13 +72,13 @@ class EmailTemplateManagement {
         if ($subject === '') {
             throw new InvalidArgumentException('An email needs a subject line.');
         }
-        if (trim($bodyHtml) === '') {
+        if (trim($bodyMarkdown) === '') {
             throw new InvalidArgumentException('An email needs a body.');
         }
 
         self::pdo()->prepare(
-            'UPDATE email_templates SET subject = ?, body_html = ?, updated_by_user_id = ? WHERE template_key = ?'
-        )->execute([$subject, $bodyHtml, $ctx->id, $templateKey]);
+            'UPDATE email_templates SET subject = ?, body_markdown = ?, updated_by_user_id = ? WHERE template_key = ?'
+        )->execute([$subject, $bodyMarkdown, $ctx->id, $templateKey]);
 
         self::log($ctx, 'email_template.updated', ['template_key' => $templateKey]);
     }
@@ -88,18 +90,20 @@ class EmailTemplateManagement {
      * null when the template row is missing — callers then skip the send
      * rather than mailing something half-built.
      *
-     * Every value is escaped on the way in. A placeholder with no supplied
-     * value renders as an empty string, so a typo'd {{varible}} shows as a gap
-     * rather than leaking template syntax to a family.
+     * Markdown body is converted to HTML at render time. Every value is escaped
+     * on the way in. A placeholder with no supplied value renders as an empty
+     * string, so a typo'd {{varible}} shows as a gap rather than leaking
+     * template syntax to a family.
      */
     public static function render(string $templateKey, array $variables): ?array {
         $template = self::find($templateKey);
         if (!$template) {
             return null;
         }
+        $markdown = self::substitute((string)$template['body_markdown'], $variables, true, isMarkdown: true);
         return [
             'subject' => self::substitute((string)$template['subject'], $variables, false),
-            'body_html' => self::substitute((string)$template['body_html'], $variables, true),
+            'body_html' => MarkdownToHtml::convert($markdown),
         ];
     }
 
@@ -212,22 +216,25 @@ class EmailTemplateManagement {
     // ===== Internals =====
 
     /**
-     * In the body, a value is HTML-escaped and its newlines become <br>, so
-     * neither an admin's wording nor a family's answer can inject markup.
+     * In the body, a value is HTML-escaped. For HTML bodies, newlines become <br>;
+     * for markdown bodies, newlines are preserved for markdown processing.
+     * Neither an admin's wording nor a family's answer can inject markup.
      *
      * The subject is a plain-text header, so it is NOT HTML-escaped — that
      * would put a literal "&amp;" in front of a family. What it does get is
      * every CR/LF collapsed to a space: a header cannot span lines, and
      * letting one would be header injection.
      */
-    private static function substitute(string $template, array $variables, bool $isHtmlBody): string {
+    private static function substitute(string $template, array $variables, bool $isHtmlBody, bool $isMarkdown = false): string {
         return (string)preg_replace_callback(
             '/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/',
-            function (array $m) use ($variables, $isHtmlBody): string {
+            function (array $m) use ($variables, $isHtmlBody, $isMarkdown): string {
                 $value = (string)($variables[$m[1]] ?? '');
-                return $isHtmlBody
-                    ? nl2br(htmlspecialchars($value, ENT_QUOTES, 'UTF-8'))
-                    : trim((string)preg_replace('/[\r\n]+/', ' ', $value));
+                if (!$isHtmlBody) {
+                    return trim((string)preg_replace('/[\r\n]+/', ' ', $value));
+                }
+                $escaped = htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+                return $isMarkdown ? $escaped : nl2br($escaped);
             },
             $template
         );

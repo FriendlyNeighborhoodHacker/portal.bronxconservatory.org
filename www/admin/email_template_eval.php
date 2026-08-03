@@ -19,7 +19,7 @@ try {
         $ctx,
         $key,
         (string)($_POST['subject'] ?? ''),
-        (string)($_POST['body_html'] ?? '')
+        (string)($_POST['body_markdown'] ?? '')
     );
     $_SESSION['email_template_flash'] = 'Template saved.';
     header('Location: /admin/email_templates.php');
@@ -28,7 +28,7 @@ try {
     // Their wording, not the saved copy, comes back on the edit page.
     $_SESSION['email_template_old'] = [
         'subject' => (string)($_POST['subject'] ?? ''),
-        'body_html' => (string)($_POST['body_html'] ?? ''),
+        'body_markdown' => (string)($_POST['body_markdown'] ?? ''),
     ];
     header('Location: /admin/email_template.php?key=' . urlencode($key));
 }
