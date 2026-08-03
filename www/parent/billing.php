@@ -7,6 +7,7 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../lib/Billing.php';
 require_once __DIR__ . '/../lib/StripeCheckout.php';
+require_once __DIR__ . '/../lib/SemesterManagement.php';
 Application::init();
 require_login();
 
@@ -22,11 +23,23 @@ unset($_SESSION['billing_flash'], $_SESSION['billing_flash_error']);
 $summaries = [];
 $totalDue = 0;
 $behind = false;
+$currentSemester = SemesterManagement::resolveDefaultSemester();
+$hasPaidCurrentSemester = false;
+
 foreach ($children as $child) {
     $summary = Billing::balanceSummaryForStudent((int)$child['id']);
     $summaries[(int)$child['id']] = $summary;
     $totalDue += $summary['due_cents'];
     $behind = $behind || $summary['behind'];
+
+    // Check if they've paid anything toward the current/upcoming semester
+    if ($currentSemester && isset($summary['semesters'])) {
+        foreach ($summary['semesters'] as $term) {
+            if ($term['semester_id'] === $currentSemester['id'] && $term['paid_cents'] > 0) {
+                $hasPaidCurrentSemester = true;
+            }
+        }
+    }
 }
 
 header_html('Billing');
@@ -49,19 +62,89 @@ header_html('Billing');
     <?php endif; ?>
 
     <?php if (StripeCheckout::isConfigured()): ?>
-      <form method="get" action="/parent/pay.php" class="stack" style="max-width:320px;">
-        <label>Amount to pay
-          <input type="number" name="amount" step="0.01" min="1" required
-                 max="<?=h(number_format($totalDue / 100, 2, '.', ''))?>"
-                 value="<?=h(number_format($totalDue / 100, 2, '.', ''))?>">
-        </label>
-        <div class="actions">
+      <form id="payment-amount-form" method="get" action="/parent/pay.php" class="stack" style="max-width:320px;">
+        <fieldset>
+          <legend>Amount to pay</legend>
+          <?php
+            $fullAmount = $totalDue / 100;
+            $halfAmount = round($totalDue / 200, 2);
+          ?>
+          <?php if (!$hasPaidCurrentSemester): ?>
+            <label>
+              <input type="radio" name="payment_option" value="full" checked>
+              Pay balance in full: <?=h(Billing::formatCents($totalDue))?>
+            </label>
+            <label>
+              <input type="radio" name="payment_option" value="half">
+              Pay half: <?=h(Billing::formatCents((int)($totalDue / 2)))?>
+            </label>
+            <label>
+              <input type="radio" name="payment_option" value="custom">
+              Pay another amount:
+              <input type="number" id="custom_amount" name="custom_amount" step="0.01" min="1"
+                     max="<?=h(number_format($fullAmount, 2, '.', ''))?>"
+                     style="width:100px;margin-left:8px;">
+            </label>
+          <?php else: ?>
+            <label>
+              <input type="radio" name="payment_option" value="full" checked>
+              Pay balance in full: <?=h(Billing::formatCents($totalDue))?>
+            </label>
+            <label>
+              <input type="radio" name="payment_option" value="custom">
+              Pay another amount:
+              <input type="number" id="custom_amount" name="custom_amount" step="0.01" min="1"
+                     max="<?=h(number_format($fullAmount, 2, '.', ''))?>"
+                     style="width:100px;margin-left:8px;">
+            </label>
+          <?php endif; ?>
+          <input type="hidden" id="amount" name="amount" value="<?=h(number_format($fullAmount, 2, '.', ''))?>">
+        </fieldset>
+        <div class="actions" style="margin-top:16px;">
           <button type="submit" class="btn-cta">Pay by card</button>
         </div>
       </form>
-      <p class="small" style="margin-top:8px;">You'll enter your card on the next page —
-        it goes straight to Stripe and the conservatory never sees it. Paying by check or
-        cash instead? Call us at <a href="tel:+17188417415"><?=h(Settings::contactPhone())?></a>.</p>
+      <script>
+        (function() {
+          const form = document.getElementById('payment-amount-form');
+          const amountInput = document.getElementById('amount');
+          const customAmountInput = document.getElementById('custom_amount');
+          const fullAmount = <?=json_encode($fullAmount)?>;
+          const halfAmount = <?=json_encode($halfAmount)?>;
+
+          function updateAmount() {
+            const checked = form.querySelector('input[name="payment_option"]:checked');
+            if (checked.value === 'full') {
+              amountInput.value = fullAmount.toString();
+            } else if (checked.value === 'half') {
+              amountInput.value = halfAmount.toString();
+            } else if (checked.value === 'custom') {
+              amountInput.value = customAmountInput.value || '';
+            }
+          }
+
+          form.querySelectorAll('input[name="payment_option"]').forEach(radio => {
+            radio.addEventListener('change', updateAmount);
+          });
+
+          if (customAmountInput) {
+            customAmountInput.addEventListener('input', function() {
+              if (form.querySelector('input[name="payment_option"][value="custom"]').checked) {
+                updateAmount();
+              }
+            });
+          }
+
+          // Set initial value
+          updateAmount();
+        })();
+      </script>
+      <div class="small" style="margin-top:12px;">
+        <p style="margin-top:0;">You'll enter your card on the next page — it goes straight to Stripe and the conservatory never sees it. Paying by check or cash instead? Call us at <a href="tel:+17188417415"><?=h(Settings::contactPhone())?></a>.</p>
+        <?php if (!$hasPaidCurrentSemester): ?>
+          <p style="margin-bottom:0;"><strong>Remember:</strong> At least half of the balance must be paid before two weeks before the first lesson to reserve your place. Accounts not paid in full before the first class will incur a $20 installment fee.</p>
+        <?php endif; ?>
+      </div>
     <?php else: ?>
       <p class="small">To pay, call us at <a href="tel:+17188417415"><?=h(Settings::contactPhone())?></a>.</p>
     <?php endif; ?>
