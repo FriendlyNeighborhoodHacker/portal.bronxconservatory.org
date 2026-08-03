@@ -28,6 +28,8 @@
   --color-spice: #FF724C;       /* a little warmth where it earns it */
   --color-spice-soft: #ffe9e2;
   --color-spice-text: #b3421d; /* the coral, darkened enough to read as text */
+  --color-callout: #1F9D5C;      /* the friendly asides ("Questions? Call us…") */
+  --color-callout-soft: #e9f6ef;
   --color-accent: #0062DC;
   --color-accent-soft: #e6f0fd;
   --color-danger: #c0392b;
@@ -985,14 +987,16 @@ body.auth .brand-logo {
 
 /* The phone number, said out loud: a real person is one call away. Shown on
    the login page and at the top of the registration wizard (docs/app_spec.md
-   — "a visible phone number on every page"; the footer carries the rest). */
+   — "a visible phone number on every page"; the footer carries the rest).
+   Green rather than the coral accent — these asides are an invitation, and
+   the coral is doing louder work elsewhere (the focus ring, the footer rule). */
 .contact-callout {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 8px;
-  background: var(--color-spice-soft);
-  border-left: 4px solid var(--color-spice);
+  background: var(--color-callout-soft);
+  border-left: 4px solid var(--color-callout);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   padding: 10px 14px;
   margin: 16px 0;
