@@ -49,6 +49,8 @@
   --res-balance-half-bg: #e9dcf7;  /* confirmed, half semester due — purple pastel */
   --res-balance-custom-bg: #1e3a5f;/* confirmed, custom balance — dark blue */
   --res-hold-bg: #e4e6ea;          /* hold block (lunch, errand) — neutral grey */
+  --res-class-ensemble-bg: #d9f0de;     /* Guitar Ensemble class — green pastel */
+  --res-class-musicianship-bg: #fbe2ec; /* Musicianship Skills class — rose pastel */
   --res-substitute-bg: #fde4cc;    /* someone else is covering this week — pastel orange */
   /* Semester-wide date list: the left rule that marks each date's status */
   --sem-date-active-line: #2e9e63;   /* a class day — green */
@@ -1612,6 +1614,8 @@ body.auth .brand-logo {
 .cell-item.res-balance-half { background: var(--res-balance-half-bg); }
 .cell-item.res-balance-custom { background: var(--res-balance-custom-bg); color: #fff; }
 .cell-item.res-hold { background: var(--res-hold-bg); color: var(--color-text-muted); }
+.cell-item.res-class-ensemble { background: var(--res-class-ensemble-bg); }
+.cell-item.res-class-musicianship { background: var(--res-class-musicianship-bg); }
 
 /* Hold blocks: the teacher's own time, no student, deliberately drab so it
    reads as "not bookable" rather than as another reservation state. */
@@ -1622,6 +1626,12 @@ body.auth .brand-logo {
   );
   color: var(--color-text-muted);
 }
+
+/* Paid group classes held in a slot (Guitar Ensemble, Musicianship Skills):
+   their own colors, without the hold's drab hatching — this is teaching
+   time, not the teacher's own. */
+.grid-cell.res-class-ensemble { background: var(--res-class-ensemble-bg); }
+.grid-cell.res-class-musicianship { background: var(--res-class-musicianship-bg); }
 
 /* Condensed mode: narrower columns, short names, status by color only */
 .schedule-grid.compact th,
@@ -1870,6 +1880,10 @@ label .label-prose {
   padding: 8px 12px;
   border-radius: 8px;
   background: var(--res-balance-full-bg);
+}
+
+.schedule-edit-mode td.grid-cell[draggable="true"] {
+  cursor: grab;
 }
 
 .schedule-edit-mode .cell-item[draggable="true"] {

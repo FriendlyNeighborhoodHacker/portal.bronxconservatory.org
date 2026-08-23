@@ -24,6 +24,18 @@ class HoldBlockManagement {
     public const DURATION_OPTIONS = [30, 60, 90, 120];
     public const MAX_DURATION_MINUTES = 240;
 
+    /**
+     * What kind of time the block holds. 'hold' is the teacher's own unpaid
+     * time (lunch, an errand); the others are paid group classes taught in
+     * the slot — the distinction accounting and attendance care about, and
+     * each type has its own color on the schedule grids.
+     */
+    public const BLOCK_TYPES = [
+        'hold' => 'Hold — unpaid (lunch, errand)',
+        'guitar_ensemble' => 'Guitar Ensemble — paid class',
+        'musicianship' => 'Musicianship Skills — paid class',
+    ];
+
     /** The reservation + its teacher/location names, for the grid and modals. */
     private const RESERVATION_SELECT = "
         SELECT hr.*,
@@ -51,6 +63,7 @@ class HoldBlockManagement {
                hr.day_of_week, hr.status AS reservation_status, hr.title,
                (b.semester_hold_block_reservation_id IS NULL) AS is_ad_hoc,
                COALESCE(b.title_override, hr.title) AS effective_title,
+               COALESCE(hr.block_type, b.block_type, 'hold') AS effective_block_type,
                tu.first_name AS teacher_first_name, tu.last_name AS teacher_last_name,
                tu.preferred_name AS teacher_preferred_name,
                l.name AS location_name
@@ -74,7 +87,8 @@ class HoldBlockManagement {
     /**
      * Create a hold block reservation and immediately materialize its blocks.
      * $fields: semester_id, teacher_user_id, location_id, day_of_week
-     * (0=Sun..6=Sat), start_time ("HH:MM"), duration_minutes, title.
+     * (0=Sun..6=Sat), start_time ("HH:MM"), duration_minutes, title,
+     * block_type (optional, defaults to 'hold').
      */
     public static function createHoldBlockReservation(?UserContext $ctx, array $fields): int {
         self::assertAdmin($ctx);
@@ -86,6 +100,7 @@ class HoldBlockManagement {
         $startTime = self::normalizeTime((string)($fields['start_time'] ?? ''));
         $durationMinutes = (int)($fields['duration_minutes'] ?? 30);
         $title = self::normalizeTitle((string)($fields['title'] ?? ''));
+        $blockType = self::normalizeBlockType((string)($fields['block_type'] ?? 'hold'));
 
         if ($semesterId <= 0 || !SemesterManagement::find($semesterId)) {
             throw new InvalidArgumentException('A valid semester is required.');
@@ -95,11 +110,11 @@ class HoldBlockManagement {
         self::pdo()->prepare(
             'INSERT INTO semester_hold_block_reservations
                (semester_id, teacher_user_id, location_id, day_of_week, start_time,
-                duration_minutes, title, created_by_user_id)
-             VALUES (?,?,?,?,?,?,?,?)'
+                duration_minutes, title, block_type, created_by_user_id)
+             VALUES (?,?,?,?,?,?,?,?,?)'
         )->execute([
             $semesterId, $teacherUserId, $locationId, $dayOfWeek, $startTime,
-            $durationMinutes, $title, $ctx?->id,
+            $durationMinutes, $title, $blockType, $ctx?->id,
         ]);
         $id = (int)self::pdo()->lastInsertId();
 
@@ -130,6 +145,7 @@ class HoldBlockManagement {
         $startTime = self::normalizeTime((string)($fields['start_time'] ?? $r['start_time']));
         $durationMinutes = (int)($fields['duration_minutes'] ?? $r['duration_minutes']);
         $title = self::normalizeTitle((string)($fields['title'] ?? $r['title']));
+        $blockType = self::normalizeBlockType((string)($fields['block_type'] ?? $r['block_type']));
 
         $semesterId = (int)$r['semester_id'];
         $previousStartTime = (string)$r['start_time'];
@@ -149,9 +165,9 @@ class HoldBlockManagement {
 
         self::pdo()->prepare(
             'UPDATE semester_hold_block_reservations
-             SET teacher_user_id=?, location_id=?, day_of_week=?, start_time=?, duration_minutes=?, title=?
+             SET teacher_user_id=?, location_id=?, day_of_week=?, start_time=?, duration_minutes=?, title=?, block_type=?
              WHERE id=?'
-        )->execute([$teacherUserId, $locationId, $dayOfWeek, $startTime, $durationMinutes, $title, $reservationId]);
+        )->execute([$teacherUserId, $locationId, $dayOfWeek, $startTime, $durationMinutes, $title, $blockType, $reservationId]);
 
         if ($dayChanged) {
             self::reconcileFutureBlocks($ctx, $reservationId);
@@ -340,7 +356,8 @@ class HoldBlockManagement {
      * behind it — the single afternoon out, not the every-week lunch.
      *
      * $fields: semester_id, teacher_user_id, location_id, start_datetime,
-     * duration_minutes, title. Returns the new block id.
+     * duration_minutes, title, block_type (optional, defaults to 'hold').
+     * Returns the new block id.
      */
     public static function createAdHocHoldBlock(?UserContext $ctx, array $fields): int {
         self::assertAdmin($ctx);
@@ -350,6 +367,7 @@ class HoldBlockManagement {
         $locationId = (int)($fields['location_id'] ?? 0);
         $duration = (int)($fields['duration_minutes'] ?? 30);
         $title = trim((string)($fields['title'] ?? ''));
+        $blockType = self::normalizeBlockType((string)($fields['block_type'] ?? 'hold'));
 
         $start = strtotime((string)($fields['start_datetime'] ?? ''));
         if ($start === false) {
@@ -377,11 +395,11 @@ class HoldBlockManagement {
         self::pdo()->prepare(
             'INSERT INTO semester_hold_blocks
                (semester_hold_block_reservation_id, semester_id, teacher_user_id, location_id,
-                start_datetime, duration_minutes, title_override, created_by_user_id)
-             VALUES (NULL,?,?,?,?,?,?,?)'
+                start_datetime, duration_minutes, title_override, block_type, created_by_user_id)
+             VALUES (NULL,?,?,?,?,?,?,?,?)'
         )->execute([
             $semesterId, $teacherUserId, $locationId,
-            $startDatetime, $duration, $title, $ctx->id,
+            $startDatetime, $duration, $title, $blockType, $ctx->id,
         ]);
         $blockId = (int)self::pdo()->lastInsertId();
 
@@ -609,6 +627,31 @@ class HoldBlockManagement {
             'DELETE FROM semester_hold_blocks
              WHERE semester_hold_block_reservation_id=? AND start_datetime > NOW()'
         )->execute([$reservationId]);
+    }
+
+    /**
+     * The block type a title implies — how the CSV import and the migration
+     * backfill classify blocks that only say what they are in words.
+     */
+    public static function blockTypeFromTitle(string $title): string {
+        if (stripos($title, 'ensemble') !== false) {
+            return 'guitar_ensemble';
+        }
+        if (stripos($title, 'musicianship') !== false) {
+            return 'musicianship';
+        }
+        return 'hold';
+    }
+
+    private static function normalizeBlockType(string $blockType): string {
+        $blockType = trim($blockType);
+        if ($blockType === '') {
+            return 'hold';
+        }
+        if (!isset(self::BLOCK_TYPES[$blockType])) {
+            throw new InvalidArgumentException('That is not a kind of hold block we know.');
+        }
+        return $blockType;
     }
 
     private static function normalizeTitle(string $title): string {

@@ -59,6 +59,17 @@ function schedule_day_grids_html(array $bands, callable $cellFn, string $keyPref
     return $html;
 }
 
+/**
+ * The grid color class for a hold block's type: plain holds stay grey, the
+ * paid group classes each get their own color (see the --res-class-* tokens).
+ */
+function hold_block_type_class(?string $blockType): string {
+    return [
+        'guitar_ensemble' => 'res-class-ensemble',
+        'musicianship' => 'res-class-musicianship',
+    ][$blockType ?? ''] ?? 'res-hold';
+}
+
 /** "Lucia Ramos" -> "Lucia R.", single word unchanged. */
 function schedule_short_person_name(string $full): string {
     $parts = preg_split('/\s+/', trim($full)) ?: [];

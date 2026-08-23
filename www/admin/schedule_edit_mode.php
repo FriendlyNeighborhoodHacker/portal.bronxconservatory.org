@@ -50,7 +50,8 @@ function render_schedule_edit_mode(array $config): void {
     ?>
     <div class="edit-mode-bar hidden" id="scheduleEditBar">
       <span><strong>Edit mode.</strong> Drag a <?=h($config['noun'])?> to an empty slot to move it.
-        Press <strong>Done</strong> when you have finished.</span>
+        Press <strong>&#8984;Z</strong> (Ctrl+Z) to undo a move,
+        <strong>Done</strong> when you have finished.</span>
       <span class="small hidden" id="scheduleEditSaved">Moved.</span>
       <span class="error small hidden" id="scheduleEditErr"></span>
     </div>
@@ -74,11 +75,43 @@ function render_schedule_edit_mode(array $config): void {
 
       if (!toggle) return;
 
+      var savedEl = document.getElementById('scheduleEditSaved');
+
       function showError(message) {
         errEl.textContent = message;
         errEl.classList.remove('hidden');
       }
       function clearError() { errEl.classList.add('hidden'); }
+      function showStatus(message) {
+        savedEl.textContent = message;
+        savedEl.classList.remove('hidden');
+      }
+
+      // Each successful move records the POST that would put the box back
+      // where it came from — an undo is just another move, checked by the
+      // server like any other. The stack lives in sessionStorage because a
+      // successful move reloads the page; it is emptied on pressing Edit, so
+      // Ctrl+Z never replays moves from an earlier editing session.
+      var undoKey = 'scheduleEditUndo:' + location.pathname;
+      function readUndoStack() {
+        try { return JSON.parse(sessionStorage.getItem(undoKey) || '[]') || []; }
+        catch (e) { return []; }
+      }
+      function writeUndoStack(stack) {
+        try { sessionStorage.setItem(undoKey, JSON.stringify(stack.slice(-20))); }
+        catch (e) { /* private mode: moves simply are not undoable */ }
+      }
+
+      // Every draggable box in this cell, across all kinds. When there is
+      // exactly one, the whole cell is its drag handle — grabbing the box's
+      // padding or the cell's whitespace must work, not just the text. A
+      // double-booked cell keeps per-box dragging so you can pick which one.
+      function draggablesIn(cell) {
+        var selector = kinds.map(function (kind) {
+          return '.cell-item[data-' + dashed(kind.itemAttr) + ']';
+        }).join(', ');
+        return cell.querySelectorAll(selector);
+      }
 
       function setEditMode(on) {
         document.body.classList.toggle('schedule-edit-mode', on);
@@ -91,21 +124,27 @@ function render_schedule_edit_mode(array $config): void {
           document.querySelectorAll('.cell-item[data-' + dashed(kind.itemAttr) + ']').forEach(function (item) {
             if (on) { item.setAttribute('draggable', 'true'); }
             else { item.removeAttribute('draggable'); }
+            var cell = item.closest('td.grid-cell');
+            if (cell && draggablesIn(cell).length === 1) {
+              if (on) { cell.setAttribute('draggable', 'true'); }
+              else { cell.removeAttribute('draggable'); }
+            }
           });
         });
       }
 
-      function reloadStayingInEditMode() {
-        try { sessionStorage.setItem(resumeKey, '1'); } catch (e) { /* private mode: just reload */ }
+      function reloadStayingInEditMode(message) {
+        try { sessionStorage.setItem(resumeKey, message); } catch (e) { /* private mode: just reload */ }
         window.location.reload();
       }
 
       // Coming back from a move: pick edit mode up where it was left.
       try {
-        if (sessionStorage.getItem(resumeKey)) {
+        var resumeMessage = sessionStorage.getItem(resumeKey);
+        if (resumeMessage) {
           sessionStorage.removeItem(resumeKey);
           setEditMode(true);
-          document.getElementById('scheduleEditSaved').classList.remove('hidden');
+          showStatus(resumeMessage);
         }
       } catch (e) { /* no sessionStorage: edit mode simply starts off */ }
 
@@ -116,7 +155,10 @@ function render_schedule_edit_mode(array $config): void {
       }
 
       toggle.addEventListener('click', function () {
-        setEditMode(!document.body.classList.contains('schedule-edit-mode'));
+        var turningOn = !document.body.classList.contains('schedule-edit-mode');
+        // A fresh editing session starts with nothing to undo.
+        if (turningOn) writeUndoStack([]);
+        setEditMode(turningOn);
       });
 
       // Would the box fit here? Every half-hour row it would cover has to
@@ -140,6 +182,13 @@ function render_schedule_edit_mode(array $config): void {
       document.addEventListener('dragstart', function (e) {
         if (!document.body.classList.contains('schedule-edit-mode')) return;
         var item = e.target.closest ? e.target.closest('.cell-item') : null;
+        if (!item && e.target.closest) {
+          // The drag began on the cell itself (its padding, or beside the
+          // box) — resolve to the cell's sole draggable occupant.
+          var startCell = e.target.closest('td.grid-cell');
+          var boxes = startCell ? draggablesIn(startCell) : [];
+          if (boxes.length === 1) item = boxes[0];
+        }
         if (!item) return;
         var kind = null;
         for (var i = 0; i < kinds.length; i++) {
@@ -150,7 +199,7 @@ function render_schedule_edit_mode(array $config): void {
         draggedKind = kind;
         item.classList.add('dragging');
         clearError();
-        document.getElementById('scheduleEditSaved').classList.add('hidden');
+        savedEl.classList.add('hidden');
         e.dataTransfer.effectAllowed = 'move';
         // Firefox will not start a drag without data on the transfer.
         e.dataTransfer.setData('text/plain', item.dataset[kind.itemAttr]);
@@ -191,6 +240,17 @@ function render_schedule_edit_mode(array $config): void {
         var problem = fits(cell, parseInt(item.dataset.duration || '30', 10));
         if (problem) { showError(problem); return; }
 
+        // The move that would put this box back where it sits right now,
+        // recorded before anything changes. The box carries its own position
+        // under the same dataset keys the target cells use, so one mapping
+        // serves both directions.
+        var reverse = { endpoint: kind.endpoint, fields: {} };
+        reverse.fields[kind.idField] = item.dataset[kind.itemAttr];
+        var reversible = Object.keys(kind.fields).every(function (field) {
+          reverse.fields[field] = item.dataset[kind.fields[field]];
+          return reverse.fields[field] !== undefined;
+        });
+
         var body = new FormData();
         body.append('csrf', csrf);
         body.append(kind.idField, item.dataset[kind.itemAttr]);
@@ -204,7 +264,14 @@ function render_schedule_edit_mode(array $config): void {
         fetch(kind.endpoint, { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .then(function (json) {
-            if (json && json.ok) { reloadStayingInEditMode(); }
+            if (json && json.ok) {
+              var stack = readUndoStack();
+              // A box whose origin could not be read leaves the stack empty
+              // rather than letting Ctrl+Z skip past it to an older move.
+              if (reversible) { stack.push(reverse); } else { stack = []; }
+              writeUndoStack(stack);
+              reloadStayingInEditMode('Moved.');
+            }
             else {
               item.classList.remove('saving');
               showError((json && json.error) || 'That move could not be made.');
@@ -213,6 +280,51 @@ function render_schedule_edit_mode(array $config): void {
           .catch(function () {
             item.classList.remove('saving');
             showError('Network error — nothing was changed.');
+          });
+      });
+
+      // Ctrl+Z / Cmd+Z: undo the most recent move by posting it back where it
+      // came from. The server applies the same rules as any other move, so an
+      // undo whose slot has since been taken is refused with its reason
+      // rather than forced through.
+      var undoInFlight = false;
+      document.addEventListener('keydown', function (e) {
+        if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+        if (e.key !== 'z' && e.key !== 'Z') return;
+        if (!document.body.classList.contains('schedule-edit-mode')) return;
+        var t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        e.preventDefault(); // in edit mode the grid owns undo, not the browser
+        if (undoInFlight) return;
+        var stack = readUndoStack();
+        if (!stack.length) { showStatus('Nothing to undo.'); return; }
+        var last = stack.pop();
+        writeUndoStack(stack);
+        undoInFlight = true;
+        clearError();
+        savedEl.classList.add('hidden');
+        var body = new FormData();
+        body.append('csrf', csrf);
+        Object.keys(last.fields).forEach(function (field) {
+          body.append(field, last.fields[field]);
+        });
+        function restore(message) {
+          // A failed undo keeps its record: losing it would silently orphan
+          // the move it stands for.
+          undoInFlight = false;
+          var s = readUndoStack();
+          s.push(last);
+          writeUndoStack(s);
+          showError(message);
+        }
+        fetch(last.endpoint, { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (json) {
+            if (json && json.ok) { reloadStayingInEditMode('Move undone.'); }
+            else { restore((json && json.error) || 'That move could not be undone.'); }
+          })
+          .catch(function () {
+            restore('Network error — nothing was changed.');
           });
       });
     });

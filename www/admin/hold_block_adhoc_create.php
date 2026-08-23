@@ -28,6 +28,7 @@ try {
         'start_datetime' => $date . ' ' . $startTime,
         'duration_minutes' => (int)($_POST['duration_minutes'] ?? 30),
         'title' => (string)($_POST['title'] ?? ''),
+        'block_type' => (string)($_POST['block_type'] ?? 'hold'),
     ]);
     echo json_encode(['ok' => true, 'hold_block_id' => $blockId]);
 } catch (\Throwable $e) {

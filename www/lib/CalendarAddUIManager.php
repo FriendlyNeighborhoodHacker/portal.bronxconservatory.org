@@ -83,6 +83,13 @@ class CalendarAddUIManager {
                 <label>What is this time for?
                   <input type="text" id="calAddHoldTitle" maxlength="200" placeholder="Away for the afternoon">
                 </label>
+                <label>Kind
+                  <select id="calAddHoldBlockType">
+                    <?php foreach (HoldBlockManagement::BLOCK_TYPES as $value => $label): ?>
+                      <option value="<?=h($value)?>"><?=h($label)?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </label>
                 <label>Duration
                   <select id="calAddHoldDuration">
                     <?php foreach (HoldBlockManagement::DURATION_OPTIONS as $minutes): ?>
@@ -150,6 +157,7 @@ class CalendarAddUIManager {
             document.getElementById('calAddStudent_id').value = '';
             document.getElementById('calAddStudent_input').value = '';
             document.getElementById('calAddHoldTitle').value = '';
+            document.getElementById('calAddHoldBlockType').value = 'hold';
             clearErrors();
             selectTab('calAddLessonPanel');
             modal.classList.remove('hidden');
@@ -192,6 +200,7 @@ class CalendarAddUIManager {
             post('/admin/hold_block_adhoc_create.php', {
               title: title,
               duration_minutes: val('calAddHoldDuration'),
+              block_type: val('calAddHoldBlockType'),
             }, 'calAddHoldErr');
           });
         });

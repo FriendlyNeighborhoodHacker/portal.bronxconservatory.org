@@ -171,12 +171,13 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $weekStartTs) {
                 . ' · ' . $duration . ' min'
                 . ' · ' . $occupant['location_name'];
             $contexts[] = $context;
-            $soleClass = 'res-hold';
+            $holdClass = hold_block_type_class($occupant['effective_block_type'] ?? null);
+            $soleClass = $holdClass;
             $items .= schedule_cell_item_html((string)$occupant['effective_title'], 'Held', [
                 'data-hold-block-id' => $occupant['id'],
                 'data-hold-title' => $occupant['effective_title'],
                 'data-context' => $context,
-            ], $multi ? 'res-hold' : '');
+            ], $multi ? $holdClass : '');
             continue;
         }
 
@@ -223,6 +224,11 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $weekStartTs) {
             'data-location-name' => (string)$lesson['location_name'],
             'data-duration' => $duration,
             'data-context' => $context,
+            // Where this box currently sits — edit mode records it before a
+            // drag so Ctrl+Z can move the box straight back.
+            'data-teacher-id' => (int)$lesson['effective_teacher_user_id'],
+            'data-date' => date('Y-m-d', strtotime((string)$lesson['start_datetime'])),
+            'data-time' => date('H:i', strtotime((string)$lesson['start_datetime'])),
         ], $multi ? $soleClass : ($missed ? 'lesson-cancelled' : ''));
     }
 
@@ -266,6 +272,8 @@ header_html('Calendar Week', ['wide' => true]);
     <span><span class="swatch" style="background:var(--res-substitute-bg);"></span>Substitute teacher</span>
     <span><span class="swatch" style="background:#fff;"></span><em class="small">Missed</em></span>
     <span><span class="swatch" style="background:var(--res-hold-bg);"></span>Hold block</span>
+    <span><span class="swatch" style="background:var(--res-class-ensemble-bg);"></span>Guitar Ensemble</span>
+    <span><span class="swatch" style="background:var(--res-class-musicianship-bg);"></span>Musicianship Skills</span>
   </div>
   <p class="small" style="margin-top:10px;">Click an empty cell to add a one-off lesson or hold
   this time. Click a lesson to mark it missed, assign a substitute, change its location, cancel

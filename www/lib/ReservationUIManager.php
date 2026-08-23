@@ -98,6 +98,13 @@ class ReservationUIManager {
                 <label>What is this time for?
                   <input type="text" name="title" id="holdAddTitle" maxlength="200" placeholder="Lunch">
                 </label>
+                <label>Kind
+                  <select name="block_type" id="holdAddBlockType">
+                    <?php foreach (HoldBlockManagement::BLOCK_TYPES as $value => $label): ?>
+                      <option value="<?=h($value)?>"><?=h($label)?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </label>
                 <label>Duration
                   <select name="duration_minutes">
                     <?php foreach (HoldBlockManagement::DURATION_OPTIONS as $minutes): ?>
@@ -172,6 +179,13 @@ class ReservationUIManager {
               <input type="hidden" name="hold_block_reservation_id" id="holdEditId">
               <label>What is this time for?
                 <input type="text" name="title" id="holdEditTitle" maxlength="200">
+              </label>
+              <label>Kind
+                <select name="block_type" id="holdEditBlockType">
+                  <?php foreach (HoldBlockManagement::BLOCK_TYPES as $value => $label): ?>
+                    <option value="<?=h($value)?>"><?=h($label)?></option>
+                  <?php endforeach; ?>
+                </select>
               </label>
               <label>Duration
                 <select name="duration_minutes" id="holdEditDuration">
@@ -286,6 +300,7 @@ class ReservationUIManager {
               document.getElementById('holdEditHeading').textContent = item.dataset.holdTitle || 'Hold block';
               document.getElementById('holdEditContext').textContent = item.dataset.context || '';
               document.getElementById('holdEditTitle').value = item.dataset.holdTitle || '';
+              document.getElementById('holdEditBlockType').value = item.dataset.blockType || 'hold';
               document.getElementById('holdEditDuration').value = item.dataset.duration || '30';
               document.getElementById('holdEditErr').classList.add('hidden');
               openModal(holdEditModal);
@@ -306,6 +321,7 @@ class ReservationUIManager {
               document.getElementById('resAddStudent_id').value = '';
               document.getElementById('resAddStudent_input').value = '';
               document.getElementById('holdAddTitle').value = '';
+              document.getElementById('holdAddBlockType').value = 'hold';
               document.getElementById('resAddErr').classList.add('hidden');
               document.getElementById('holdAddErr').classList.add('hidden');
               selectTab('resAddLessonPanel');

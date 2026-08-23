@@ -21,6 +21,7 @@ try {
         'start_time' => (string)($_POST['start_time'] ?? ''),
         'duration_minutes' => (int)($_POST['duration_minutes'] ?? 30),
         'title' => (string)($_POST['title'] ?? ''),
+        'block_type' => (string)($_POST['block_type'] ?? 'hold'),
     ]);
     echo json_encode(['ok' => true, 'hold_block_reservation_id' => $id]);
 } catch (\Throwable $e) {

@@ -579,4 +579,78 @@ final class HoldBlockManagementTest extends TestCase
             'start_datetime' => '2030-09-10 13:00', 'duration_minutes' => 30, 'title' => 'Away',
         ]);
     }
+
+    // ── Block types ────────────────────────────────────────────────────────
+
+    public function testBlockTypeDefaultsToHoldAndItsBlocksInheritIt(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 2);
+        $holdId = $this->makeHold($setup);
+
+        $this->assertSame('hold', HoldBlockManagement::findHoldBlockReservation($holdId)['block_type']);
+        foreach ($this->blockRows($holdId) as $block) {
+            $this->assertSame('hold', HoldBlockManagement::getBlock((int)$block['id'])['effective_block_type']);
+        }
+    }
+
+    public function testClassBlockTypeIsStoredAndInheritedByItsBlocks(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 2);
+        [$semesterId, $locationId, $teacherId, $dayOfWeek] = $setup;
+        $holdId = HoldBlockManagement::createHoldBlockReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacherId, 'location_id' => $locationId,
+            'day_of_week' => $dayOfWeek, 'start_time' => '12:00', 'duration_minutes' => 60,
+            'title' => 'Guitar Ensemble', 'block_type' => 'guitar_ensemble',
+        ]);
+
+        $this->assertSame('guitar_ensemble', HoldBlockManagement::findHoldBlockReservation($holdId)['block_type']);
+        foreach ($this->blockRows($holdId) as $block) {
+            $this->assertSame('guitar_ensemble', HoldBlockManagement::getBlock((int)$block['id'])['effective_block_type']);
+        }
+    }
+
+    public function testUpdateChangesBlockTypeAndLeavesItAloneWhenAbsent(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 2);
+        $holdId = $this->makeHold($setup, '12:00', 30, 'Musicianship Skills');
+
+        HoldBlockManagement::updateHoldBlockReservation($this->ctx, $holdId, ['block_type' => 'musicianship']);
+        $this->assertSame('musicianship', HoldBlockManagement::findHoldBlockReservation($holdId)['block_type']);
+
+        // An update that says nothing about the type keeps it.
+        HoldBlockManagement::updateHoldBlockReservation($this->ctx, $holdId, ['duration_minutes' => 60]);
+        $this->assertSame('musicianship', HoldBlockManagement::findHoldBlockReservation($holdId)['block_type']);
+    }
+
+    public function testUnknownBlockTypeIsRejected(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 2);
+        [$semesterId, $locationId, $teacherId, $dayOfWeek] = $setup;
+        $this->expectException(InvalidArgumentException::class);
+        HoldBlockManagement::createHoldBlockReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacherId, 'location_id' => $locationId,
+            'day_of_week' => $dayOfWeek, 'start_time' => '12:00', 'duration_minutes' => 30,
+            'title' => 'Karate', 'block_type' => 'karate',
+        ]);
+    }
+
+    public function testAdHocBlockCarriesItsOwnType(): void
+    {
+        $teacher = fx_teacher('Ada', 'Adhoc');
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 3);
+        $blockId = HoldBlockManagement::createAdHocHoldBlock($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 13:00', 'duration_minutes' => 60,
+            'title' => 'Guitar Ensemble make-up', 'block_type' => 'guitar_ensemble',
+        ]);
+        $this->assertSame('guitar_ensemble', HoldBlockManagement::getBlock($blockId)['effective_block_type']);
+    }
+
+    public function testBlockTypeFromTitleClassifiesTheClassesByName(): void
+    {
+        $this->assertSame('guitar_ensemble', HoldBlockManagement::blockTypeFromTitle('Guitar Ensemble'));
+        $this->assertSame('guitar_ensemble', HoldBlockManagement::blockTypeFromTitle('ensemble rehearsal'));
+        $this->assertSame('musicianship', HoldBlockManagement::blockTypeFromTitle('Musicianship Skills'));
+        $this->assertSame('hold', HoldBlockManagement::blockTypeFromTitle('Lunch'));
+    }
 }

@@ -223,6 +223,9 @@ class HoldBlocksCsvImport {
                 'start_time' => substr((string)$row['_start_time'], 0, 5),
                 'duration_minutes' => (int)$row['_duration_minutes'],
                 'title' => (string)$row['_title'],
+                // The file has no type column; a title naming a paid class
+                // ("Guitar Ensemble", "Musicianship Skills") is that class.
+                'block_type' => HoldBlockManagement::blockTypeFromTitle((string)$row['_title']),
             ]);
             $added++;
         }

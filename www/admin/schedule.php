@@ -81,9 +81,16 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $balances) {
             $items .= schedule_cell_item_html((string)$occupant['title'], 'Held', [
                 'data-hold-reservation-id' => $occupant['id'],
                 'data-hold-title' => $occupant['title'],
+                'data-block-type' => $occupant['block_type'] ?? 'hold',
                 'data-duration' => $duration,
                 'data-context' => $context,
-            ], $multi ? 'res-hold' : '');
+                // Where this box currently sits — edit mode records it before a
+                // drag so Ctrl+Z can move the box straight back.
+                'data-location-id' => $column['location_id'],
+                'data-teacher-id' => $column['teacher_user_id'],
+                'data-day' => $occupant['day_of_week'],
+                'data-time' => substr((string)$occupant['start_time'], 0, 5),
+            ], $multi ? hold_block_type_class($occupant['block_type'] ?? null) : '');
             continue;
         }
 
@@ -103,6 +110,12 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $balances) {
             'data-duration' => $duration,
             'data-context' => $context,
             'data-balance-text' => $balanceText,
+            // Where this box currently sits — edit mode records it before a
+            // drag so Ctrl+Z can move the box straight back.
+            'data-location-id' => $column['location_id'],
+            'data-teacher-id' => $column['teacher_user_id'],
+            'data-day' => $occupant['day_of_week'],
+            'data-time' => substr((string)$occupant['start_time'], 0, 5),
         ], $multi ? $presentation['class'] : '');
     }
 
@@ -117,7 +130,7 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $balances) {
 
     $only = $cellOccupants[0];
     $stateClass = $only['kind'] === 'hold'
-        ? 'res-hold'
+        ? hold_block_type_class($only['block_type'] ?? null)
         : reservation_cell_presentation($only, $balances[(int)$only['student_user_id']] ?? null)['class'];
 
     return [
@@ -144,6 +157,8 @@ header_html('Semester Schedule', ['wide' => true]);
   <span><span class="swatch" style="background:var(--res-balance-half-bg);"></span>Half balance due</span>
   <span><span class="swatch" style="background:var(--res-balance-custom-bg);"></span>Custom balance due</span>
   <span><span class="swatch" style="background:var(--res-hold-bg);"></span>Hold block</span>
+  <span><span class="swatch" style="background:var(--res-class-ensemble-bg);"></span>Guitar Ensemble</span>
+  <span><span class="swatch" style="background:var(--res-class-musicianship-bg);"></span>Musicianship Skills</span>
 </div>
 
 <?=schedule_day_grids_html($grid['bands'], $cellFn, 'schedule')?>

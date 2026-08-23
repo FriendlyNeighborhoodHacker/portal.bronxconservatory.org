@@ -65,6 +65,14 @@ reservation** (lunch, a standing errand) generates dated **hold blocks**. Hold
 blocks have no confirmation state and no billing — they materialize immediately
 — and they occupy the slot in every conflict check.
 
+Every hold block carries a **block type**. A plain `hold` is the teacher's own
+unpaid time (lunch, an errand). The other types — `guitar_ensemble` and
+`musicianship` — mark **paid group classes** taught in the slot: the teacher is
+working, families pay a class fee at registration, and (unlike a lunch break)
+the distinction matters to accounting. Structurally all types behave the same
+today; the type drives the grid color and is the hook for future class
+attendance and accounting features.
+
 Consequences that matter constantly:
 
 - Editing the **plan** reshapes only the **future**. Past lessons are never
@@ -365,7 +373,9 @@ Cell colors are the point of the page — they encode who has paid:
 | Yellow pastel | Confirmed, owes the full term |
 | Purple pastel | Confirmed, owes half the term |
 | Dark blue | Confirmed, owes some other amount |
-| Gray | Hold block |
+| Gray | Hold block (unpaid teacher time) |
+| Green pastel | Guitar Ensemble class |
+| Rose pastel | Musicianship Skills class |
 
 ### Calendar
 
