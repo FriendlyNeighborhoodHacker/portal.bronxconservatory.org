@@ -80,7 +80,9 @@ header_html('My Schedule');
   <?php if ($cancelled): ?>
     <div style="color:var(--color-text-secondary);">This lesson has been cancelled.</div>
   <?php else: ?>
-    <a href="#" data-lesson-detail="<?=(int)$nextLesson['id']?>" class="button notes">Notes & Materials</a>
+    <h4 style="margin-bottom:4px;">Notes &amp; Materials</h4>
+    <?=LessonDetailUIManager::notesBlockHtml((int)$nextLesson['id'], true, 'Add a note — a question for the teacher, or how practice went…')?>
+    <?=LessonDetailUIManager::resourcesEditButtonHtml((int)$nextLesson['id'])?>
   <?php endif; ?>
 </div>
 

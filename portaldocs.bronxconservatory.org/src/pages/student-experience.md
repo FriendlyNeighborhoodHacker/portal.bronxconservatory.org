@@ -24,7 +24,9 @@ students, who are simply users with a student profile of their own.
    the student experience, so they lead the page.
 2. **Next Lesson / Upcoming Lessons** — when and where, *including breaks*:
    inactive `semester_location_dates` on the student's weekday surface as
-   "Holiday Week" instead of a silent gap.
+   "Holiday Week" instead of a silent gap. The Next Lesson card carries its
+   notes-and-materials thread **inline** — the chat bubbles, the add-a-note
+   box, and the materials button sit right on the card, no modal needed.
 3. **My Materials** — every resource attached to this semester's lessons, in
    chronological order of the lesson it came from — the semester's
    accumulated sheet music, recordings, and links in one place.
