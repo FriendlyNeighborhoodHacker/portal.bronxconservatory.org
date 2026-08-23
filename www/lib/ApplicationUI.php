@@ -64,7 +64,7 @@ class ApplicationUI {
             $adminItems[] = ['path' => '/admin/leads.php', 'label' => 'Leads',
                 'prefixes' => ['/admin/lead', '/admin/incomplete_inquir']];
             $adminItems[] = ['path' => '/admin/students.php', 'label' => 'Students',
-                'prefixes' => ['/admin/students', '/admin/student_', '/admin/parent_']];
+                'prefixes' => ['/admin/student', '/admin/parent_']];
             $adminItems[] = ['path' => '/admin/teachers.php', 'label' => 'Teachers',
                 'prefixes' => ['/admin/teachers', '/admin/teacher_']];
             $adminItems[] = ['path' => '/admin/announcements.php', 'label' => 'Admin',

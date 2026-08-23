@@ -11,6 +11,7 @@ require_once __DIR__ . '/../lib/StripeCheckout.php';
 Application::init();
 registration_require_open();
 
+
 $leadId = (int)($_SESSION['registration_lead_id'] ?? 0);
 $lead = $leadId ? LeadManagement::findLead($leadId) : null;
 if (!$lead) {
@@ -27,6 +28,8 @@ $students = LeadManagement::studentsForLead($leadId);
 $quoteLines = json_decode((string)$lead['quote_json'], true) ?: [];
 $dueNow = (int)$lead['amount_due_now_cents'];
 $installment = !empty($lead['installment_plan']);
+$leadSemester = SemesterManagement::find((int)$lead['semester_id']);
+$secondDueDate = $leadSemester ? SemesterManagement::secondInstallmentDueDate($leadSemester) : null;
 
 $error = registration_flash_error();
 
@@ -83,12 +86,16 @@ ApplicationUI::minimalHeaderHtml('Register — Checkout');
         <?php if ($installment): ?>
         <tr class="checkout-total">
           <td><strong>Due today</strong> <span class="small">(installment plan: all fees + 50% of tuition;
-            the remaining tuition is due by week 4 of the semester)</span></td>
+            the remaining tuition is due
+            <?=$secondDueDate !== null ? 'by ' . h(date('M j, Y', strtotime($secondDueDate))) : 'by week 4 of the semester'?>)</span></td>
           <td style="text-align:right;"><strong><?=registration_dollars($dueNow)?></strong></td>
         </tr>
         <?php endif; ?>
       </tbody>
     </table>
+    <?php if ($leadSemester && ($feeNotice = SemesterManagement::installmentFeeNotice($leadSemester))): ?>
+      <p class="small"><?=h($feeNotice)?></p>
+    <?php endif; ?>
   </div>
 
   <div class="card">

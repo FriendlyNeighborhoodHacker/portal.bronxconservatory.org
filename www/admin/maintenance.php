@@ -39,6 +39,12 @@ $tools = [
         'blurb' => 'Every email the portal has sent, with delivery status.',
         'note' => null,
     ],
+    [
+        'path' => '/admin/installment_fees.php',
+        'label' => 'Installment Fee Sweep',
+        'blurb' => 'Preview and run the daily job that charges the installment plan fee to unpaid accounts.',
+        'note' => null,
+    ],
 ];
 
 header_html('Maintenance');

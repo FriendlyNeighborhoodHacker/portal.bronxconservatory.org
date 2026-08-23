@@ -47,6 +47,9 @@ ApplicationUI::minimalHeaderHtml('Register — Review');
         <?php endif; ?>
       </tbody>
     </table>
+    <?php if ($feeNotice = SemesterManagement::installmentFeeNotice($semester)): ?>
+      <p class="small"><?=h($feeNotice)?></p>
+    <?php endif; ?>
   </div>
 
   <div class="card">

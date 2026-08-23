@@ -21,21 +21,22 @@ class SemesterManagement {
 
     // ── Semesters ─────────────────────────────────────────────────────────
 
-    public static function createSemester(?UserContext $ctx, string $season, int $year, string $startDate, string $endDate, array $pricing = []): int {
+    public static function createSemester(?UserContext $ctx, string $season, int $year, string $startDate, string $endDate, array $pricing = [], ?string $secondInstallmentDueDate = null): int {
         self::assertAdmin($ctx);
         [$season, $year, $start, $end] = self::validateSemesterFields($season, $year, $startDate, $endDate);
         $pricing = self::validatePricingFields($pricing);
+        $secondDue = self::validateSecondInstallmentDueDate($secondInstallmentDueDate, $start, $end);
         try {
             self::pdo()->prepare(
-                'INSERT INTO semesters (season, year, start_date, end_date, registration_fee, lesson_fee_30_minutes, lesson_fee_60_minutes, guitar_ensemble_fee, lesson_fee_30_minutes_nonresident, lesson_fee_60_minutes_nonresident, guitar_ensemble_fee_nonresident, recital_fee, installment_plan_fee, lessons_per_semester, created_by_user_id)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                'INSERT INTO semesters (season, year, start_date, end_date, registration_fee, lesson_fee_30_minutes, lesson_fee_60_minutes, guitar_ensemble_fee, lesson_fee_30_minutes_nonresident, lesson_fee_60_minutes_nonresident, guitar_ensemble_fee_nonresident, recital_fee, installment_plan_fee, lessons_per_semester, second_installment_due_date, created_by_user_id)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
             )->execute([
                 $season, $year, $start, $end,
                 $pricing['registration_fee'], $pricing['lesson_fee_30_minutes'], $pricing['lesson_fee_60_minutes'],
                 $pricing['guitar_ensemble_fee'], $pricing['lesson_fee_30_minutes_nonresident'],
                 $pricing['lesson_fee_60_minutes_nonresident'], $pricing['guitar_ensemble_fee_nonresident'],
                 $pricing['recital_fee'], $pricing['installment_plan_fee'],
-                $pricing['lessons_per_semester'], $ctx?->id
+                $pricing['lessons_per_semester'], $secondDue, $ctx?->id
             ]);
         } catch (PDOException $e) {
             if ((string)$e->getCode() === '23000') {
@@ -61,7 +62,8 @@ class SemesterManagement {
         int $year,
         string $startDate,
         string $endDate,
-        array $pricing = []
+        array $pricing = [],
+        ?string $secondInstallmentDueDate = null
     ): void {
         self::assertAdmin($ctx);
         if (!self::find($semesterId)) {
@@ -69,16 +71,17 @@ class SemesterManagement {
         }
         [$season, $year, $start, $end] = self::validateSemesterFields($season, $year, $startDate, $endDate);
         $pricing = self::validatePricingFields($pricing);
+        $secondDue = self::validateSecondInstallmentDueDate($secondInstallmentDueDate, $start, $end);
         try {
             self::pdo()->prepare(
-                'UPDATE semesters SET season=?, year=?, start_date=?, end_date=?, registration_fee=?, lesson_fee_30_minutes=?, lesson_fee_60_minutes=?, guitar_ensemble_fee=?, lesson_fee_30_minutes_nonresident=?, lesson_fee_60_minutes_nonresident=?, guitar_ensemble_fee_nonresident=?, recital_fee=?, installment_plan_fee=?, lessons_per_semester=? WHERE id=?'
+                'UPDATE semesters SET season=?, year=?, start_date=?, end_date=?, registration_fee=?, lesson_fee_30_minutes=?, lesson_fee_60_minutes=?, guitar_ensemble_fee=?, lesson_fee_30_minutes_nonresident=?, lesson_fee_60_minutes_nonresident=?, guitar_ensemble_fee_nonresident=?, recital_fee=?, installment_plan_fee=?, lessons_per_semester=?, second_installment_due_date=? WHERE id=?'
             )->execute([
                 $season, $year, $start, $end,
                 $pricing['registration_fee'], $pricing['lesson_fee_30_minutes'], $pricing['lesson_fee_60_minutes'],
                 $pricing['guitar_ensemble_fee'], $pricing['lesson_fee_30_minutes_nonresident'],
                 $pricing['lesson_fee_60_minutes_nonresident'], $pricing['guitar_ensemble_fee_nonresident'],
                 $pricing['recital_fee'], $pricing['installment_plan_fee'],
-                $pricing['lessons_per_semester'], $semesterId
+                $pricing['lessons_per_semester'], $secondDue, $semesterId
             ]);
         } catch (PDOException $e) {
             if ((string)$e->getCode() === '23000') {
@@ -151,6 +154,31 @@ class SemesterManagement {
         }
         $out['lessons_per_semester'] = $lessons;
         return $out;
+    }
+
+    /**
+     * Normalize the second-installment due date; null/blank stays null (the
+     * legacy half-way-lesson rule). The date must fall inside the semester.
+     */
+    private static function validateSecondInstallmentDueDate(?string $date, string $start, string $end): ?string {
+        if ($date === null || trim($date) === '') {
+            return null;
+        }
+        $normalized = self::normalizeDate($date, 'Second installment due date');
+        if ($normalized < $start || $normalized > $end) {
+            throw new InvalidArgumentException('Second installment due date must fall within the semester.');
+        }
+        return $normalized;
+    }
+
+    /** The midpoint of a date range — the default second-installment due date. */
+    public static function midpointDate(string $startDate, string $endDate): string {
+        $start = strtotime($startDate);
+        $end = strtotime($endDate);
+        if ($start === false || $end === false) {
+            throw new InvalidArgumentException('Invalid date range.');
+        }
+        return date('Y-m-d', (int)(($start + $end) / 2));
     }
 
     public static function find(int $semesterId): ?array {
@@ -275,6 +303,32 @@ class SemesterManagement {
     public static function lessonsPerSemester(array $semester): int {
         $weeks = (int)($semester['lessons_per_semester'] ?? 15);
         return $weeks > 0 ? $weeks : 15;
+    }
+
+    /** Installment plan: the date the remaining balance is due, or null (legacy rule). */
+    public static function secondInstallmentDueDate(array $semester): ?string {
+        $date = (string)($semester['second_installment_due_date'] ?? '');
+        return $date !== '' ? $date : null;
+    }
+
+    /**
+     * The disclosure shown wherever fees are presented: what the installment
+     * fee is and when it kicks in. Null when the semester has no such fee.
+     */
+    public static function installmentFeeNotice(array $semester): ?string {
+        $feeCents = self::installmentPlanFeeCents($semester);
+        if ($feeCents <= 0) {
+            return null;
+        }
+        $fee = '$' . number_format($feeCents / 100, 2);
+        $firstDay = date('M j, Y', strtotime((string)$semester['start_date']));
+        $notice = 'An installment fee of ' . $fee . ' will be charged if the full balance'
+            . " isn't paid by the end of the first day of the semester (" . $firstDay . ').';
+        $secondDue = self::secondInstallmentDueDate($semester);
+        if ($secondDue !== null) {
+            $notice .= ' The remaining balance is then due by ' . date('M j, Y', strtotime($secondDue)) . '.';
+        }
+        return $notice;
     }
 
     // ── Active locations (wizard step 2) ──────────────────────────────────

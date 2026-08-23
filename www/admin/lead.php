@@ -53,7 +53,7 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
   <?php foreach ($students as $student): ?>
     <?php if (!empty($student['converted_student_user_id'])): ?>
       <p class="small">Student:
-        <a href="/admin/student_edit.php?id=<?=(int)$student['converted_student_user_id']?>"><?=h($student['first_name'] . ' ' . $student['last_name'])?></a></p>
+        <a href="/admin/student.php?id=<?=(int)$student['converted_student_user_id']?>"><?=h($student['first_name'] . ' ' . $student['last_name'])?></a></p>
     <?php endif; ?>
   <?php endforeach; ?>
   <?php if (!empty($convertedParent['email']) && (string)$convertedParent['password_hash'] === ''): ?>
@@ -172,7 +172,7 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
           <td><?=h($student['shirt_size'] ?: '—')?></td>
         <?php endif; ?>
         <td class="small"><?=!empty($student['converted_student_user_id'])
-            ? '<a href="/admin/student_edit.php?id=' . (int)$student['converted_student_user_id'] . '">view student</a>'
+            ? '<a href="/admin/student.php?id=' . (int)$student['converted_student_user_id'] . '">view student</a>'
             : '—'?></td>
       </tr>
       <?php endforeach; ?>

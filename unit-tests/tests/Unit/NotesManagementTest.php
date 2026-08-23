@@ -97,4 +97,51 @@ final class NotesManagementTest extends TestCase
         $this->assertSame('Week one.', $notes[2]['body']);
         $this->assertSame('Tess', $notes[0]['author_first_name']);
     }
+
+    public function testAllNotesForStudentHasNoLimitAndFiltersBySemester(): void
+    {
+        [$teacher, $student, $lessonIds] = $this->makeLessons();
+        $teacherCtx = new UserContext($teacher, false);
+        // 12 notes on the first lesson — past recentLessonNotesForStudent's
+        // default limit of 10.
+        for ($i = 1; $i <= 12; $i++) {
+            NotesManagement::addLessonNote($teacherCtx, $lessonIds[0], 'Note ' . $i);
+        }
+
+        $notes = NotesManagement::allLessonNotesForStudent($student);
+        $this->assertCount(12, $notes);
+        $this->assertSame('Note 12', $notes[0]['body']); // newest first
+        $this->assertSame('Tess', $notes[0]['author_first_name']);
+
+        // The semester filter keeps this semester's notes and excludes others.
+        $semesterId = (int)pdo()->query('SELECT semester_id FROM semester_lesson_reservations LIMIT 1')->fetchColumn();
+        $this->assertCount(12, NotesManagement::allLessonNotesForStudent($student, $semesterId));
+        $this->assertCount(0, NotesManagement::allLessonNotesForStudent($student, $semesterId + 999));
+    }
+
+    public function testLessonNoteSummaryCountsAndNamesTheLastNotedLesson(): void
+    {
+        [$teacher, $student, $lessonIds] = $this->makeLessons();
+        $teacherCtx = new UserContext($teacher, false);
+
+        // No notes yet: an empty summary.
+        $summary = NotesManagement::lessonNoteSummaryForStudent($student);
+        $this->assertSame(['count' => 0, 'last_lesson_date' => null], $summary);
+
+        NotesManagement::addLessonNote($teacherCtx, $lessonIds[0], 'Week one.');
+        NotesManagement::addLessonNote($teacherCtx, $lessonIds[1], 'Week two.');
+
+        $summary = NotesManagement::lessonNoteSummaryForStudent($student);
+        $this->assertSame(2, $summary['count']);
+        // The most recent NOTED lesson's date — lesson 2's start.
+        $lastStart = (string)pdo()->query(
+            'SELECT start_datetime FROM lessons WHERE id = ' . $lessonIds[1]
+        )->fetchColumn();
+        $this->assertSame($lastStart, $summary['last_lesson_date']);
+
+        // The semester filter applies here too.
+        $semesterId = (int)pdo()->query('SELECT semester_id FROM semester_lesson_reservations LIMIT 1')->fetchColumn();
+        $this->assertSame(2, NotesManagement::lessonNoteSummaryForStudent($student, $semesterId)['count']);
+        $this->assertSame(0, NotesManagement::lessonNoteSummaryForStudent($student, $semesterId + 999)['count']);
+    }
 }

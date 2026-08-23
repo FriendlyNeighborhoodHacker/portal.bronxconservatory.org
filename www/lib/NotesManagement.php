@@ -139,6 +139,56 @@ class NotesManagement {
         return $st->fetchAll();
     }
 
+    /**
+     * Every lesson note for a student, newest lesson first (several notes on
+     * one lesson come back newest first among themselves) — the admin's
+     * all-notes page. $semesterId narrows to one semester.
+     */
+    public static function allLessonNotesForStudent(int $studentUserId, ?int $semesterId = null): array {
+        $sql = "SELECT ln.*, l.start_datetime,
+                    a.first_name AS author_first_name, a.last_name AS author_last_name
+             FROM lesson_notes ln
+             JOIN lessons l ON l.id = ln.lesson_id
+             LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             JOIN users a ON a.id = ln.created_by_user_id
+             WHERE ln.body <> '' AND COALESCE(r.student_user_id, l.student_user_id) = ?";
+        $args = [$studentUserId];
+        if ($semesterId !== null) {
+            $sql .= ' AND COALESCE(r.semester_id, l.semester_id) = ?';
+            $args[] = $semesterId;
+        }
+        $st = self::pdo()->prepare($sql . ' ORDER BY l.start_datetime DESC, ln.created_at DESC, ln.id DESC');
+        $st->execute($args);
+        return $st->fetchAll();
+    }
+
+    /**
+     * The one-line summary the student page shows: how many lesson notes the
+     * student has (optionally within one semester) and the date of the most
+     * recent noted lesson. ['count' => int, 'last_lesson_date' => ?string].
+     */
+    public static function lessonNoteSummaryForStudent(int $studentUserId, ?int $semesterId = null): array {
+        $sql = "SELECT COUNT(*) AS n, MAX(l.start_datetime) AS last_lesson_date
+             FROM lesson_notes ln
+             JOIN lessons l ON l.id = ln.lesson_id
+             LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             WHERE ln.body <> '' AND COALESCE(r.student_user_id, l.student_user_id) = ?";
+        $args = [$studentUserId];
+        if ($semesterId !== null) {
+            $sql .= ' AND COALESCE(r.semester_id, l.semester_id) = ?';
+            $args[] = $semesterId;
+        }
+        $st = self::pdo()->prepare($sql);
+        $st->execute($args);
+        $row = $st->fetch() ?: [];
+        $count = (int)($row['n'] ?? 0);
+        return [
+            'count' => $count,
+            'last_lesson_date' => $count > 0 && $row['last_lesson_date'] !== null
+                ? (string)$row['last_lesson_date'] : null,
+        ];
+    }
+
     private static function log(?UserContext $ctx, string $action, array $meta): void {
         try {
             ActivityLog::log($ctx, $action, $meta);

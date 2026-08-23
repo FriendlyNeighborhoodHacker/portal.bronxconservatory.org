@@ -79,20 +79,25 @@ The status change is where the schedule meets the money
   past dates *are* generated when confirming mid-semester) — and the
   semester's **charges post** to the student's ledger: registration,
   lessons (priced by duration; 90/120-minute lessons prorate off the
-  30-minute rate), recital fee, and installment plan fee, each skipped if
-  zero **or already live for this student+semester** — so a second
-  instrument never double-charges the per-student fees.
+  30-minute rate), and recital fee, each skipped if zero **or already live
+  for this student+semester** — so a second instrument never double-charges
+  the per-student fees. The **installment plan fee** posts only if the admin
+  checks "include installment fee" in the confirmation dialog (otherwise the
+  daily sweep applies it later if the balance goes unpaid). Before anything
+  posts, a **charge-review dialog** itemizes the lines; the endpoint refuses
+  the change without its acknowledgement.
   (The guitar ensemble fee is *not* posted automatically — see
   [ledger entries](/admin-experience/accept-a-check).)
 - **Confirmed → pending:** future lessons are deleted (past ones stay) and
   the charges are **reversed** — offsetting credits described "Reversal:
   lessons (registration unconfirmed)"; the original debits remain for the
-  audit trail. The reversal quietly declines if the student has already had
-  a lesson this semester or still holds another confirmed reservation —
-  in that case adjust the ledger by hand.
+  audit trail. The same review dialog shows the credits first — or warns
+  that none will be issued when the student has already had a lesson this
+  semester or still holds another confirmed reservation, in which case
+  adjust the ledger by hand.
 - **Delete** soft-deletes the reservation (terminal — it can't be
   un-deleted), removes future lessons, and reverses charges on the same
-  terms.
+  terms (with the same review dialog when the reservation was confirmed).
 
 ## Edit mode: drag a weekly slot
 

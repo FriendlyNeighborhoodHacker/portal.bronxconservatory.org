@@ -52,20 +52,16 @@ round it to what's fair.
 
 **Post Entries & Update Duration** then:
 
-1. Posts up to two ledger rows, dated today: a **credit** ("Duration change
+1. Updates the reservation's duration, which re-runs the full conflict sweep
+   and moves the future lessons to the new length in place. If the new,
+   longer duration collides with the next booking, the change is refused
+   here — before any money moves.
+2. Posts up to two ledger rows, dated today: a **credit** ("Duration change
    refund: 30→60 min", entry type `other`) and a **debit** ("Duration change
    charge: 30→60 min", entry type `lessons`). Zero amounts post nothing.
-2. Updates the reservation's duration, which re-runs the full conflict sweep
-   and moves the future lessons to the new length in place.
 
 ## Things to watch
 
-- **Post-then-update ordering:** if the new, longer duration collides with
-  the next booking, the duration update fails *after* the ledger rows are
-  already posted. The error is shown, but the adjustment is on the ledger for
-  a change that didn't happen — reverse it with a
-  [custom ledger entry](/admin-experience/accept-a-check), fix the schedule,
-  and retry.
 - **No dedupe:** re-submitting the accounting screen posts a second pair of
   entries.
 - **A status change made in the same modal save as a length change is

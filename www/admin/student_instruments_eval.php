@@ -12,6 +12,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 require_csrf();
 
 $userId = (int)($_POST['id'] ?? 0);
+$returnTo = validate_relative_next_path($_POST['return_to'] ?? '');
+if ($returnTo === '') {
+    $returnTo = '/admin/student.php?id=' . $userId;
+}
 try {
     InstrumentCatalog::setStudentInstruments(
         UserContext::getLoggedInUserContext(),
@@ -22,5 +26,5 @@ try {
 } catch (\Throwable $e) {
     $_SESSION['people_flash_error'] = $e->getMessage();
 }
-header('Location: /admin/student_edit.php?id=' . $userId);
+header('Location: ' . $returnTo);
 exit;

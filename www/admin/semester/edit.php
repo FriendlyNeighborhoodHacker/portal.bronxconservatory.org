@@ -97,6 +97,11 @@ header_html('Edit Semester');
       <label>Installment plan fee ($)
         <input type="text" name="pricing[installment_plan_fee]" value="<?=h((string)($old['pricing']['installment_plan_fee'] ?? $semester['installment_plan_fee']))?>">
       </label>
+      <label>Second installment due date
+        <input type="date" name="second_installment_due_date"
+               value="<?=h((string)($old['second_installment_due_date'] ?? ($semester['second_installment_due_date'] ?? '')))?>">
+        <span class="small">When the remaining balance is due for families on the installment plan.</span>
+      </label>
       <label>Lessons per semester
         <input type="number" name="pricing[lessons_per_semester]" min="1" value="<?=h((string)($old['pricing']['lessons_per_semester'] ?? $semester['lessons_per_semester']))?>">
       </label>

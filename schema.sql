@@ -279,6 +279,7 @@ CREATE TABLE semesters (
   recital_fee DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Charged per lesson block',
   installment_plan_fee DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'One-time fee for paying tuition in two installments',
   lessons_per_semester INT NOT NULL DEFAULT 15 COMMENT 'Used for per-lesson price display on registration form',
+  second_installment_due_date DATE DEFAULT NULL COMMENT 'Installment plan: date the remaining balance is due; NULL = legacy half-way-lesson rule',
   UNIQUE KEY unique_season_year (season, year),
   CONSTRAINT fk_sem_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;

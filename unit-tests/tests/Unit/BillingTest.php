@@ -14,7 +14,7 @@ final class BillingTest extends TestCase
         // Pricing is now configured per-semester via fx_semester_with_dates fixture.
     }
 
-    private function confirmReservationFor(int $studentId, string $firstDate = '2030-09-07', int $weeks = 4): array
+    private function confirmReservationFor(int $studentId, string $firstDate = '2030-09-07', int $weeks = 4, bool $includeInstallmentFee = false): array
     {
         $setup = fx_semester_with_dates($this->ctx, fx_teacher(), $firstDate, $weeks);
         [$semesterId, $locationId, $teacherId, $dayOfWeek] = $setup;
@@ -26,7 +26,7 @@ final class BillingTest extends TestCase
             'day_of_week' => $dayOfWeek,
             'start_time' => '10:00',
             'status' => 'confirmed',
-        ]);
+        ], ['include_installment_fee' => $includeInstallmentFee]);
         return [$semesterId, $reservationId, $setup];
     }
 
@@ -41,17 +41,33 @@ final class BillingTest extends TestCase
         $this->assertSame(2500, SemesterManagement::recitalFeeCents($semester));
     }
 
-    public function testConfirmationPostsAllFourChargesOnce(): void
+    public function testConfirmationPostsBaseChargesOnce(): void
     {
         $student = fx_student();
         [$semesterId] = $this->confirmReservationFor($student);
 
-        // Registration 5000 + lessons 30000 + recital 2500 + installment 2500.
-        $this->assertSame(40000, Billing::balanceForStudentCents($student));
-        $this->assertSame(40000, Billing::balanceForStudentSemesterCents($student, $semesterId));
+        // Registration 5000 + lessons 30000 + recital 2500. The installment
+        // plan fee is NOT posted unless the admin opts the family in.
+        $this->assertSame(37500, Billing::balanceForStudentCents($student));
+        $this->assertSame(37500, Billing::balanceForStudentSemesterCents($student, $semesterId));
 
         // Idempotent — reposting (e.g. a second instrument confirmed) adds nothing.
         Billing::postSemesterConfirmationCharges($this->ctx, $student, $semesterId, 30);
+        $this->assertSame(37500, Billing::balanceForStudentCents($student));
+        $this->assertCount(3, Billing::ledgerForStudent($student, $semesterId));
+    }
+
+    public function testConfirmationWithInstallmentOptInAddsTheFee(): void
+    {
+        $student = fx_student();
+        [$semesterId] = $this->confirmReservationFor($student, '2030-09-07', 4, true);
+
+        // Registration 5000 + lessons 30000 + recital 2500 + installment 2500.
+        $this->assertSame(40000, Billing::balanceForStudentCents($student));
+        $this->assertCount(4, Billing::ledgerForStudent($student, $semesterId));
+
+        // The fee is idempotent too — opting in again posts nothing new.
+        Billing::postSemesterConfirmationCharges($this->ctx, $student, $semesterId, 30, true);
         $this->assertSame(40000, Billing::balanceForStudentCents($student));
         $this->assertCount(4, Billing::ledgerForStudent($student, $semesterId));
     }
@@ -65,7 +81,7 @@ final class BillingTest extends TestCase
 
         $this->assertSame(0, Billing::balanceForStudentCents($student));
         $ledger = Billing::ledgerForStudent($student, $semesterId);
-        $this->assertCount(8, $ledger); // 4 debits + 4 offsetting credits
+        $this->assertCount(6, $ledger); // 3 debits + 3 offsetting credits
         $credits = array_filter($ledger, fn($e) => $e['accounting_type'] === 'credit');
         foreach ($credits as $credit) {
             $this->assertSame('other', $credit['entry_type']);
@@ -76,7 +92,18 @@ final class BillingTest extends TestCase
         // fully reversed, so hasDebit still short-circuits... it must NOT:
         // the balance must come back).
         ReservationManagement::setStatus($this->ctx, $reservationId, 'confirmed');
+        $this->assertSame(37500, Billing::balanceForStudentCents($student));
+    }
+
+    public function testUnconfirmAlsoReversesAnOptedInInstallmentFee(): void
+    {
+        $student = fx_student();
+        [$semesterId, $reservationId] = $this->confirmReservationFor($student, '2030-09-07', 4, true);
         $this->assertSame(40000, Billing::balanceForStudentCents($student));
+
+        ReservationManagement::setStatus($this->ctx, $reservationId, 'pending_confirmation');
+        $this->assertSame(0, Billing::balanceForStudentCents($student));
+        $this->assertCount(8, Billing::ledgerForStudent($student, $semesterId)); // 4 debits + 4 credits
     }
 
     public function testUnconfirmAfterALessonOccurredPostsNothing(): void
@@ -88,8 +115,8 @@ final class BillingTest extends TestCase
         ReservationManagement::setStatus($this->ctx, $reservationId, 'pending_confirmation');
 
         // No reversal: the student already had lessons this semester.
-        $this->assertSame(40000, Billing::balanceForStudentCents($student));
-        $this->assertCount(4, Billing::ledgerForStudent($student, $semesterId));
+        $this->assertSame(37500, Billing::balanceForStudentCents($student));
+        $this->assertCount(3, Billing::ledgerForStudent($student, $semesterId));
     }
 
     public function testAnotherConfirmedReservationBlocksReversal(): void
@@ -108,10 +135,10 @@ final class BillingTest extends TestCase
             'start_time' => '11:00',
             'status' => 'confirmed',
         ]);
-        $this->assertSame(40000, Billing::balanceForStudentCents($student)); // charged once
+        $this->assertSame(37500, Billing::balanceForStudentCents($student)); // charged once
 
         ReservationManagement::setStatus($this->ctx, $reservationId, 'pending_confirmation');
-        $this->assertSame(40000, Billing::balanceForStudentCents($student)); // still owed
+        $this->assertSame(37500, Billing::balanceForStudentCents($student)); // still owed
     }
 
     public function testManualPaymentScholarshipAndCustomEntry(): void
@@ -120,12 +147,12 @@ final class BillingTest extends TestCase
         [$semesterId] = $this->confirmReservationFor($student);
 
         Billing::recordManualPayment($this->ctx, $student, 20000, '2030-09-10', $semesterId, 'Check #123');
-        $this->assertSame(20000, Billing::balanceForStudentCents($student));
+        $this->assertSame(17500, Billing::balanceForStudentCents($student));
 
         Billing::applyScholarship($this->ctx, $student, $semesterId, 10000, 'Sliding scale');
-        $this->assertSame(10000, Billing::balanceForStudentCents($student));
+        $this->assertSame(7500, Billing::balanceForStudentCents($student));
 
-        Billing::addCustomEntry($this->ctx, $student, 'credit', 10000, $semesterId, 'Recital opt-out adjustment');
+        Billing::addCustomEntry($this->ctx, $student, 'credit', 7500, $semesterId, 'Recital opt-out adjustment');
         $this->assertSame(0, Billing::balanceForStudentCents($student));
 
         $this->expectException(InvalidArgumentException::class);
@@ -137,8 +164,8 @@ final class BillingTest extends TestCase
         $student = fx_student();
         [$semesterId] = $this->confirmReservationFor($student);
 
-        $this->assertTrue(Billing::recordStripePayment($student, 40000, 'cs_test_1', 'pi_1', $semesterId));
-        $this->assertFalse(Billing::recordStripePayment($student, 40000, 'cs_test_1', 'pi_1', $semesterId));
+        $this->assertTrue(Billing::recordStripePayment($student, 37500, 'cs_test_1', 'pi_1', $semesterId));
+        $this->assertFalse(Billing::recordStripePayment($student, 37500, 'cs_test_1', 'pi_1', $semesterId));
         $this->assertSame(0, Billing::balanceForStudentCents($student));
     }
 
@@ -148,35 +175,52 @@ final class BillingTest extends TestCase
     {
         $start = '2030-09-07';
         // More than two weeks out: nothing is late, however little is paid.
-        $this->assertFalse(Billing::isSemesterPaymentBehind(37500, 37500, 0, $start, 0, 14, '2030-08-01'));
+        $this->assertFalse(Billing::isSemesterPaymentBehind(37500, 37500, 0, $start, 0, 14, null, '2030-08-01'));
         // Inside two weeks with nothing paid: behind.
-        $this->assertTrue(Billing::isSemesterPaymentBehind(37500, 37500, 0, $start, 0, 14, '2030-08-30'));
+        $this->assertTrue(Billing::isSemesterPaymentBehind(37500, 37500, 0, $start, 0, 14, null, '2030-08-30'));
         // Half paid by then: on schedule.
-        $this->assertFalse(Billing::isSemesterPaymentBehind(18750, 37500, 18750, $start, 0, 14, '2030-08-30'));
+        $this->assertFalse(Billing::isSemesterPaymentBehind(18750, 37500, 18750, $start, 0, 14, null, '2030-08-30'));
         // Half paid, but the 6th of 14 lessons has come: the rest is due.
-        $this->assertTrue(Billing::isSemesterPaymentBehind(18750, 37500, 18750, $start, 6, 14, '2030-10-20'));
-        $this->assertFalse(Billing::isSemesterPaymentBehind(18750, 37500, 18750, $start, 5, 14, '2030-10-13'));
+        $this->assertTrue(Billing::isSemesterPaymentBehind(18750, 37500, 18750, $start, 6, 14, null, '2030-10-20'));
+        $this->assertFalse(Billing::isSemesterPaymentBehind(18750, 37500, 18750, $start, 5, 14, null, '2030-10-13'));
         // Paid in full is never behind, whatever the date.
-        $this->assertFalse(Billing::isSemesterPaymentBehind(0, 37500, 37500, $start, 14, 14, '2031-01-01'));
+        $this->assertFalse(Billing::isSemesterPaymentBehind(0, 37500, 37500, $start, 14, 14, null, '2031-01-01'));
+        // With an explicit second-installment date, the date decides — not the
+        // lesson count.
+        $this->assertFalse(Billing::isSemesterPaymentBehind(18750, 37500, 18750, $start, 6, 14, '2030-10-25', '2030-10-20'));
+        $this->assertTrue(Billing::isSemesterPaymentBehind(18750, 37500, 18750, $start, 3, 14, '2030-10-01', '2030-10-02'));
     }
 
     public function testSemesterPaymentBehindReasonNamesTheMissedDeadline(): void
     {
         $start = '2030-09-07';
         // The deposit deadline names its date, two weeks before the start.
-        $reason = Billing::semesterPaymentBehindReason(37500, 37500, 0, $start, 0, 14, true, '2030-08-30');
+        $reason = Billing::semesterPaymentBehindReason(37500, 37500, 0, $start, 0, 14, true, null, '2030-08-30');
         $this->assertStringContainsString('half of the semester balance', $reason);
         $this->assertStringContainsString('Aug 24, 2030', $reason);
         // Without the installment plan, the rest was due before the first lesson…
-        $reason = Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 1, 14, false, '2030-09-10');
+        $reason = Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 1, 14, false, null, '2030-09-10');
         $this->assertStringContainsString('before the first lesson', $reason);
         // …but until that lesson, half paid is on schedule.
-        $this->assertNull(Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 0, 14, false, '2030-09-05'));
-        // The installment plan extends the deadline to the half-way lesson.
-        $this->assertNull(Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 5, 14, true, '2030-10-13'));
-        $reason = Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 6, 14, true, '2030-10-20');
+        $this->assertNull(Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 0, 14, false, null, '2030-09-05'));
+        // The installment plan with no explicit date falls back to the
+        // half-way lesson rule (legacy semesters).
+        $this->assertNull(Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 5, 14, true, null, '2030-10-13'));
+        $reason = Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 6, 14, true, null, '2030-10-20');
         $this->assertStringContainsString('installment plan', $reason);
         $this->assertStringContainsString('6th lesson', $reason);
+    }
+
+    public function testSemesterPaymentBehindReasonUsesTheExplicitSecondInstallmentDate(): void
+    {
+        $start = '2030-09-07';
+        $due = '2030-10-15';
+        // On or before the due date: on schedule, whatever the lesson count says.
+        $this->assertNull(Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 10, 14, true, $due, '2030-10-15'));
+        // The day after: behind, and the reason names the date.
+        $reason = Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 10, 14, true, $due, '2030-10-16');
+        $this->assertStringContainsString('installment plan', $reason);
+        $this->assertStringContainsString('Oct 15, 2030', $reason);
     }
 
     public function testABehindTermCarriesTheReasonForItsMissedDeadline(): void
@@ -184,11 +228,11 @@ final class BillingTest extends TestCase
         $student = fx_student();
         // 14 weekly lessons; ten weeks in, well past the half-way lesson.
         $firstDate = date('Y-m-d', strtotime('-10 weeks'));
-        [$semesterId] = $this->confirmReservationFor($student, $firstDate, 14);
+        [$semesterId] = $this->confirmReservationFor($student, $firstDate, 14, true);
 
-        // Confirmation posted the installment plan fee, so this family is on
-        // the installment schedule; with less than half paid, the deposit
-        // deadline is the one named.
+        // The admin opted this family into the installment plan at
+        // confirmation, so they follow the installment schedule; with less
+        // than half paid, the deposit deadline is the one named.
         $term = Billing::balanceSummaryForStudent($student)['semesters'][0];
         $this->assertTrue($term['behind']);
         $this->assertStringContainsString('half of the semester balance', $term['behind_reason']);
@@ -269,7 +313,7 @@ final class BillingTest extends TestCase
         [$semesterId] = $this->confirmReservationFor($student); // starts in 2030
         $summary = Billing::balanceSummaryForStudent($student, date('Y-m-d'));
 
-        $this->assertSame(40000, $summary['due_cents']);
+        $this->assertSame(37500, $summary['due_cents']);
         $this->assertFalse($summary['behind']);
         $this->assertSame($semesterId, $summary['semesters'][0]['semester_id']);
     }
@@ -321,8 +365,8 @@ final class BillingTest extends TestCase
         $student = fx_student();
         [$semesterId] = $this->confirmReservationFor($student);
 
-        $this->assertTrue(Billing::recordStripeIntentPayment($student, 40000, 'pi_test_1', $semesterId));
-        $this->assertFalse(Billing::recordStripeIntentPayment($student, 40000, 'pi_test_1', $semesterId));
+        $this->assertTrue(Billing::recordStripeIntentPayment($student, 37500, 'pi_test_1', $semesterId));
+        $this->assertFalse(Billing::recordStripeIntentPayment($student, 37500, 'pi_test_1', $semesterId));
         $this->assertSame(0, Billing::balanceForStudentCents($student));
     }
 
@@ -336,16 +380,179 @@ final class BillingTest extends TestCase
         [$semesterId] = $this->confirmReservationFor($childA);
         Billing::addCustomEntry($this->ctx, $childB, 'debit', 1000, null, 'Book fee');
 
-        $this->assertSame(41000, Billing::balanceForParentCents($parent));
+        $this->assertSame(38500, Billing::balanceForParentCents($parent));
         $byChild = Billing::balancesForParentChildren($parent);
-        $this->assertSame(40000, $byChild[$childA]);
+        $this->assertSame(37500, $byChild[$childA]);
         $this->assertSame(1000, $byChild[$childB]);
 
         $balances = Billing::semesterBalancesByStudent($semesterId, [$childA, $childB]);
-        $this->assertSame(40000, $balances[$childA]['semester_debit_cents']);
-        $this->assertSame(40000, $balances[$childA]['total_balance_cents']);
+        $this->assertSame(37500, $balances[$childA]['semester_debit_cents']);
+        $this->assertSame(37500, $balances[$childA]['total_balance_cents']);
         $this->assertSame(0, $balances[$childB]['semester_debit_cents']);
         $this->assertSame(1000, $balances[$childB]['total_balance_cents']);
+    }
+
+    // ── Charge previews (the confirmation dialog's data) ───────────────────
+
+    public function testConfirmationChargesPreviewShowsWhatWouldPost(): void
+    {
+        $student = fx_student();
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 4);
+        [$semesterId] = $setup;
+
+        // Fresh student: all three base lines will post; installment available.
+        $preview = Billing::confirmationChargesPreview($student, $semesterId, 30);
+        $this->assertCount(3, $preview['lines']);
+        $this->assertSame([true, true, true], array_column($preview['lines'], 'will_post'));
+        $this->assertSame(37500, $preview['total_cents']);
+        $this->assertSame(2500, $preview['installment_fee_cents']);
+        $this->assertTrue($preview['installment_available']);
+        $this->assertStringContainsString('$25.00', (string)$preview['installment_note']);
+
+        // After charges exist, everything shows as already charged.
+        Billing::postSemesterConfirmationCharges($this->ctx, $student, $semesterId, 30, true);
+        $preview = Billing::confirmationChargesPreview($student, $semesterId, 30);
+        $this->assertSame([false, false, false], array_column($preview['lines'], 'will_post'));
+        $this->assertSame(0, $preview['total_cents']);
+        $this->assertFalse($preview['installment_available']);
+    }
+
+    public function testReversalPreviewMirrorsTheReversalGuards(): void
+    {
+        $student = fx_student();
+        [$semesterId, $reservationId] = $this->confirmReservationFor($student, '2030-09-07', 4, true);
+
+        // The reservation being unconfirmed must not block its own preview.
+        $preview = Billing::reversalPreview($student, $semesterId, $reservationId);
+        $this->assertTrue($preview['will_reverse']);
+        $this->assertNull($preview['blocked_reason']);
+        $this->assertSame(40000, $preview['total_cents']);
+        $this->assertCount(4, $preview['lines']);
+
+        // Without the exclusion the confirmed reservation blocks it.
+        $preview = Billing::reversalPreview($student, $semesterId, null);
+        $this->assertFalse($preview['will_reverse']);
+        $this->assertStringContainsString('another confirmed reservation', (string)$preview['blocked_reason']);
+    }
+
+    public function testReversalPreviewBlockedByAnOccurredLesson(): void
+    {
+        $student = fx_student();
+        $pastFirst = date('Y-m-d', strtotime('-2 weeks', strtotime('last saturday')));
+        [$semesterId, $reservationId] = $this->confirmReservationFor($student, $pastFirst, 5);
+
+        $preview = Billing::reversalPreview($student, $semesterId, $reservationId);
+        $this->assertFalse($preview['will_reverse']);
+        $this->assertStringContainsString('already had a lesson', (string)$preview['blocked_reason']);
+        // The live debits are still listed so the dialog can show what stays.
+        $this->assertSame(37500, $preview['total_cents']);
+    }
+
+    // ── The daily installment-fee sweep ────────────────────────────────────
+
+    /** A confirmed student in a semester running 2030-09-01 → 2030-12-20. */
+    private function confirmedStudentInProgressSemester(bool $includeInstallmentFee = false): array
+    {
+        $student = fx_student();
+        $setup = fx_semester_with_dates(
+            $this->ctx, fx_teacher(), '2030-09-07', 4, 'fall', 2030, '2030-09-01', '2030-12-20'
+        );
+        [$semesterId, $locationId, $teacherId, $dayOfWeek] = $setup;
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId,
+            'teacher_user_id' => $teacherId,
+            'location_id' => $locationId,
+            'student_user_id' => $student,
+            'day_of_week' => $dayOfWeek,
+            'start_time' => '10:00',
+            'status' => 'confirmed',
+        ], ['include_installment_fee' => $includeInstallmentFee]);
+        return [$student, $semesterId];
+    }
+
+    public function testInstallmentSweepChargesUnpaidStudentsFromDayTwo(): void
+    {
+        [$student, $semesterId] = $this->confirmedStudentInProgressSemester();
+        $this->assertSame(37500, Billing::balanceForStudentCents($student));
+
+        // Day 1 of the semester: nothing happens.
+        $result = Billing::applyAutomaticInstallmentFees(null, '2030-09-01');
+        $this->assertSame([], $result['applied']);
+        $this->assertSame(37500, Billing::balanceForStudentCents($student));
+
+        // Day 2: the fee posts, as a system entry (no ctx).
+        $result = Billing::applyAutomaticInstallmentFees(null, '2030-09-02');
+        $this->assertCount(1, $result['applied']);
+        $this->assertSame($student, $result['applied'][0]['student_user_id']);
+        $this->assertSame(2500, $result['applied'][0]['amount_cents']);
+        $this->assertSame(40000, Billing::balanceForStudentCents($student));
+
+        // Idempotent: a second run (same or later day) posts nothing.
+        $result = Billing::applyAutomaticInstallmentFees(null, '2030-09-03');
+        $this->assertSame([], $result['applied']);
+        $this->assertSame(40000, Billing::balanceForStudentCents($student));
+
+        // After the semester ends, the sweep no longer touches it.
+        $result = Billing::applyAutomaticInstallmentFees(null, '2030-12-21');
+        $this->assertSame(0, $result['semesters']);
+    }
+
+    public function testInstallmentSweepSkipsPaidAndAlreadyChargedStudents(): void
+    {
+        [$student, $semesterId] = $this->confirmedStudentInProgressSemester();
+        Billing::recordManualPayment($this->ctx, $student, 37500, '2030-09-01', $semesterId, 'Paid in full');
+
+        // Paid in full: no fee.
+        $result = Billing::applyAutomaticInstallmentFees(null, '2030-09-02');
+        $this->assertSame([], $result['applied']);
+        $this->assertSame(1, $result['skipped']);
+
+        // A student opted in at confirmation already carries the fee: skipped
+        // (their spring semester is the one in progress on this date).
+        [$optedIn] = $this->confirmedStudentInProgressSemester2();
+        $result = Billing::applyAutomaticInstallmentFees(null, '2030-02-03');
+        $this->assertSame([], $result['applied']);
+        $this->assertSame(40000, Billing::balanceForStudentCents($optedIn));
+    }
+
+    /** Second opted-in student in a separate in-progress semester (unique season/year). */
+    private function confirmedStudentInProgressSemester2(): array
+    {
+        $student = fx_student('Opted', 'In');
+        $setup = fx_semester_with_dates(
+            $this->ctx, fx_teacher('Second', 'Teacher'), '2030-02-02', 4, 'spring', 2030, '2030-01-15', '2030-05-30'
+        );
+        [$semesterId, $locationId, $teacherId, $dayOfWeek] = $setup;
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId,
+            'teacher_user_id' => $teacherId,
+            'location_id' => $locationId,
+            'student_user_id' => $student,
+            'day_of_week' => $dayOfWeek,
+            'start_time' => '10:00',
+            'status' => 'confirmed',
+        ], ['include_installment_fee' => true]);
+        return [$student, $semesterId];
+    }
+
+    public function testInstallmentSweepDryRunWritesNothing(): void
+    {
+        [$student] = $this->confirmedStudentInProgressSemester();
+
+        $result = Billing::applyAutomaticInstallmentFees(null, '2030-09-02', true);
+        $this->assertCount(1, $result['applied']);
+        $this->assertSame(37500, Billing::balanceForStudentCents($student)); // unchanged
+    }
+
+    public function testInstallmentSweepHonorsSurplusRolledForward(): void
+    {
+        // A credit from an earlier term that covers this term counts as paid.
+        [$student, $semesterId] = $this->confirmedStudentInProgressSemester();
+        $spring = fx_semester($this->ctx, 'spring', 2030, '2030-01-10', '2030-05-30');
+        Billing::recordManualPayment($this->ctx, $student, 37500, '2030-02-01', $spring, 'Prepaid');
+
+        $result = Billing::applyAutomaticInstallmentFees(null, '2030-09-02');
+        $this->assertSame([], $result['applied']);
     }
 
     // ── Duration-change accounting ──────────────────────────────────────────

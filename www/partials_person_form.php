@@ -124,16 +124,38 @@ function person_field_labels(): array {
 }
 
 /**
+ * The person's address formatted the way an address is written:
+ * "123 Main St<br>Apt 2<br>Bronx, NY 10461". '' when nothing is recorded.
+ */
+function person_address_block_html(array $user): string {
+    $lines = [];
+    foreach (['address_street_1', 'address_street_2'] as $key) {
+        $value = trim((string)($user[$key] ?? ''));
+        if ($value !== '') {
+            $lines[] = h($value);
+        }
+    }
+    $city = trim((string)($user['address_city'] ?? ''));
+    $state = trim((string)($user['address_state'] ?? ''));
+    $zip = trim((string)($user['address_zip'] ?? ''));
+    $cityLine = $city . ($city !== '' && $state !== '' ? ', ' : '') . $state . ($zip !== '' ? ' ' . $zip : '');
+    if (trim($cityLine) !== '') {
+        $lines[] = h(trim($cityLine));
+    }
+    return implode('<br>', $lines);
+}
+
+/**
  * Read-only rendering of the person field set, grouped the same way the
  * edit form groups it. Empty fields are still listed (as a muted dash) so
- * it is obvious what is missing.
+ * it is obvious what is missing — except the address, which renders as one
+ * formatted block.
  */
 function person_details_html(array $user): string {
     $labels = person_field_labels();
     $sections = [
         'Name' => ['first_name', 'last_name', 'suffix', 'preferred_name'],
         'Contact' => ['email', 'cell_phone', 'secondary_email', 'home_phone'],
-        'Address' => ['address_street_1', 'address_street_2', 'address_city', 'address_state', 'address_zip'],
         'Emergency Contact' => ['emergency_contact_name', 'emergency_contact_phone'],
         'Other' => ['shirt_size'],
     ];
@@ -147,6 +169,13 @@ function person_details_html(array $user): string {
             $html .= $value === ''
                 ? '<dd class="detail-empty">—</dd>'
                 : '<dd>' . h($value) . '</dd>';
+        }
+        if ($heading === 'Contact') {
+            $address = person_address_block_html($user);
+            $html .= '<dt>Address</dt>';
+            $html .= $address === ''
+                ? '<dd class="detail-empty">—</dd>'
+                : '<dd>' . $address . '</dd>';
         }
         $html .= '</dl>';
     }

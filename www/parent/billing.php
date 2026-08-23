@@ -156,7 +156,9 @@ header_html('Billing');
       <div class="small" style="margin-top:12px;">
         <p style="margin-top:0;">You'll enter your card on the next page — it goes straight to Stripe and the conservatory never sees it. Paying by check or cash instead? Call us at <a href="tel:+17188417415"><?=h(Settings::contactPhone())?></a>.</p>
         <?php if (!$hasPaidCurrentSemester): ?>
-          <p style="margin-bottom:0;"><strong>Remember:</strong> At least half of the balance must be paid before two weeks before the first lesson to reserve your place. Accounts not paid in full before the first class will incur a $20 installment fee.</p>
+          <?php $feeNotice = $currentSemester ? SemesterManagement::installmentFeeNotice($currentSemester) : null; ?>
+          <p style="margin-bottom:0;"><strong>Remember:</strong> At least half of the balance must be paid two weeks before the first lesson to reserve your place.
+            <?=$feeNotice !== null ? h($feeNotice) : 'Accounts not paid in full before the first class will incur an installment fee.'?></p>
         <?php endif; ?>
       </div>
     <?php else: ?>

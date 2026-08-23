@@ -26,40 +26,207 @@ class Billing {
     // ── Semester confirmation charges ─────────────────────────────────────
 
     /**
-     * Post the semester's charges (registration + lessons + recital fee +
-     * installment plan fee, from the semester row) as debits on the student's
-     * ledger. Idempotent per (student, semester, entry_type): a student
-     * confirming a second reservation in the same semester (e.g. a second
-     * instrument) is not charged twice.
+     * Post the semester's charges (registration + lessons + recital fee, from
+     * the semester row) as debits on the student's ledger. The installment
+     * plan fee is included only when the admin opted the family in
+     * ($includeInstallmentFee) — otherwise the daily sweep applies it later if
+     * the balance goes unpaid. Idempotent per (student, semester, entry_type):
+     * a student confirming a second reservation in the same semester (e.g. a
+     * second instrument) is not charged twice.
      */
-    public static function postSemesterConfirmationCharges(?UserContext $ctx, int $studentUserId, int $semesterId, int $durationMinutes = 30): void {
+    public static function postSemesterConfirmationCharges(?UserContext $ctx, int $studentUserId, int $semesterId, int $durationMinutes = 30, bool $includeInstallmentFee = false): void {
         self::assertAdmin($ctx);
         $semester = SemesterManagement::find($semesterId);
         if (!$semester) {
             throw new InvalidArgumentException('Semester not found.');
         }
-        $charges = [
-            'registration' => [SemesterManagement::registrationFeeCents($semester), 'Semester registration'],
-            'lessons' => [SemesterManagement::lessonFeeCents($semester, $durationMinutes), 'Semester lessons'],
-            'recital_fee' => [SemesterManagement::recitalFeeCents($semester), 'Recital fee'],
-            'installment_plan_fee' => [SemesterManagement::installmentPlanFeeCents($semester), 'Installment plan fee'],
-        ];
+        $charges = self::confirmationChargeAmounts($semester, $durationMinutes);
+        if ($includeInstallmentFee) {
+            $charges['installment_plan_fee'] = [SemesterManagement::installmentPlanFeeCents($semester), 'Installment plan fee'];
+        }
         foreach ($charges as $entryType => [$amountCents, $description]) {
             if ($amountCents <= 0) {
                 continue;
             }
             // Skip only while a live (not fully reversed) debit of this type
             // exists — so re-confirming after a reversal re-posts the charge.
-            $liveDebit = self::sumCents($studentUserId, $semesterId, 'debit', $entryType)
-                - self::reversedCents($studentUserId, $semesterId, $entryType);
-            if ($liveDebit > 0) {
+            if (self::liveDebitCents($studentUserId, $semesterId, $entryType) > 0) {
                 continue;
             }
             self::insertEntry($ctx, $studentUserId, date('Y-m-d'), 'debit', $entryType, $amountCents, $semesterId, $description);
         }
         self::log($ctx, 'billing.confirmation_charges_posted', [
             'student_user_id' => $studentUserId, 'semester_id' => $semesterId,
+            'include_installment_fee' => $includeInstallmentFee,
         ]);
+    }
+
+    /** The base confirmation charges (installment fee handled separately). */
+    private static function confirmationChargeAmounts(array $semester, int $durationMinutes): array {
+        return [
+            'registration' => [SemesterManagement::registrationFeeCents($semester), 'Semester registration'],
+            'lessons' => [SemesterManagement::lessonFeeCents($semester, $durationMinutes), 'Semester lessons'],
+            'recital_fee' => [SemesterManagement::recitalFeeCents($semester), 'Recital fee'],
+        ];
+    }
+
+    /**
+     * The line items that WOULD post if this student's reservation were
+     * confirmed now — what the admin's confirmation dialog shows. Read-only.
+     */
+    public static function confirmationChargesPreview(int $studentUserId, int $semesterId, int $durationMinutes): array {
+        $semester = SemesterManagement::find($semesterId);
+        if (!$semester) {
+            throw new InvalidArgumentException('Semester not found.');
+        }
+        $lines = [];
+        $total = 0;
+        foreach (self::confirmationChargeAmounts($semester, $durationMinutes) as $entryType => [$amountCents, $description]) {
+            if ($amountCents <= 0) {
+                continue;
+            }
+            $willPost = self::liveDebitCents($studentUserId, $semesterId, $entryType) <= 0;
+            $lines[] = [
+                'entry_type' => $entryType,
+                'description' => $description,
+                'amount_cents' => $amountCents,
+                'will_post' => $willPost,
+                'skip_reason' => $willPost ? null : 'already charged this semester',
+            ];
+            if ($willPost) {
+                $total += $amountCents;
+            }
+        }
+        $feeCents = SemesterManagement::installmentPlanFeeCents($semester);
+        return [
+            'lines' => $lines,
+            'total_cents' => $total,
+            'installment_fee_cents' => $feeCents,
+            'installment_available' => $feeCents > 0
+                && self::liveDebitCents($studentUserId, $semesterId, 'installment_plan_fee') <= 0,
+            'installment_note' => SemesterManagement::installmentFeeNotice($semester),
+        ];
+    }
+
+    /**
+     * What un-confirming (or deleting) a confirmed reservation would reverse —
+     * or why nothing will be. Read-only; mirrors the guards in
+     * reverseSemesterConfirmationCharges. $excludingReservationId is the
+     * reservation about to be unconfirmed: the preview runs before the status
+     * flips, so it must not count as "another confirmed reservation".
+     */
+    public static function reversalPreview(int $studentUserId, int $semesterId, ?int $excludingReservationId = null): array {
+        $blockedReason = null;
+        if (self::studentHasOccurredLessonInSemester($studentUserId, $semesterId)) {
+            $blockedReason = 'the student has already had a lesson this semester';
+        } elseif (self::studentHasConfirmedReservationInSemester($studentUserId, $semesterId, $excludingReservationId)) {
+            $blockedReason = 'the student holds another confirmed reservation this semester';
+        }
+        $lines = [];
+        $total = 0;
+        foreach (self::CONFIRMATION_CHARGES as $entryType) {
+            $remaining = self::liveDebitCents($studentUserId, $semesterId, $entryType);
+            if ($remaining <= 0) {
+                continue;
+            }
+            $lines[] = ['entry_type' => $entryType, 'amount_cents' => $remaining];
+            $total += $remaining;
+        }
+        return [
+            'will_reverse' => $blockedReason === null && $total > 0,
+            'blocked_reason' => $blockedReason,
+            'lines' => $lines,
+            'total_cents' => $total,
+        ];
+    }
+
+    /**
+     * The daily installment-fee sweep. For every semester in progress past its
+     * first day, post the installment plan fee to each confirmed student who
+     * (a) still owes part of that semester's balance (credit rolled forward
+     * from earlier terms counts as payment) and (b) has not already been
+     * charged the fee. Idempotent: the live-debit check makes a second run on
+     * the same day (or any later day) post nothing new.
+     *
+     * $ctx null = system run (the daily cron): entries carry a NULL
+     * created_by_user_id and the activity log records a system action, the
+     * same way Stripe webhook writes do.
+     *
+     * Returns ['applied' => rows, 'skipped' => int, 'semesters' => int];
+     * each applied row: student_user_id, student_name, semester_id,
+     * semester_label, amount_cents.
+     */
+    public static function applyAutomaticInstallmentFees(?UserContext $ctx, ?string $today = null, bool $dryRun = false): array {
+        if ($ctx !== null) {
+            self::assertAdmin($ctx);
+        }
+        $today = $today !== null ? self::normalizeDate($today) : date('Y-m-d');
+
+        // In progress and at least the second day: start_date < today <= end_date.
+        $st = self::pdo()->prepare('SELECT * FROM semesters WHERE start_date < ? AND end_date >= ?');
+        $st->execute([$today, $today]);
+        $semesters = $st->fetchAll();
+
+        $applied = [];
+        $skipped = 0;
+        $semestersSwept = 0;
+        foreach ($semesters as $semester) {
+            $feeCents = SemesterManagement::installmentPlanFeeCents($semester);
+            if ($feeCents <= 0) {
+                continue;
+            }
+            $semestersSwept++;
+            $semesterId = (int)$semester['id'];
+
+            $st = self::pdo()->prepare(
+                "SELECT DISTINCT r.student_user_id, u.first_name, u.last_name
+                 FROM semester_lesson_reservations r
+                 JOIN users u ON u.id = r.student_user_id
+                 WHERE r.semester_id = ? AND r.status = 'confirmed'"
+            );
+            $st->execute([$semesterId]);
+            foreach ($st->fetchAll() as $student) {
+                $studentUserId = (int)$student['student_user_id'];
+                if (self::liveDebitCents($studentUserId, $semesterId, 'installment_plan_fee') > 0) {
+                    $skipped++;
+                    continue;
+                }
+                $unpaid = false;
+                foreach (self::semesterBalancesForStudent($studentUserId, $today) as $row) {
+                    if ($row['semester_id'] === $semesterId && $row['balance_cents'] > 0) {
+                        $unpaid = true;
+                        break;
+                    }
+                }
+                if (!$unpaid) {
+                    $skipped++;
+                    continue;
+                }
+                if (!$dryRun) {
+                    self::insertEntry(
+                        $ctx, $studentUserId, $today, 'debit', 'installment_plan_fee',
+                        $feeCents, $semesterId, 'Installment plan fee'
+                    );
+                    self::log($ctx, 'billing.installment_fee_auto_applied', [
+                        'student_user_id' => $studentUserId, 'semester_id' => $semesterId,
+                        'amount_cents' => $feeCents,
+                    ]);
+                }
+                $applied[] = [
+                    'student_user_id' => $studentUserId,
+                    'student_name' => trim((string)$student['first_name'] . ' ' . (string)$student['last_name']),
+                    'semester_id' => $semesterId,
+                    'semester_label' => SemesterManagement::label($semester),
+                    'amount_cents' => $feeCents,
+                ];
+            }
+        }
+        if (!$dryRun && $applied) {
+            self::log($ctx, 'billing.installment_fee_run', [
+                'date' => $today, 'applied' => count($applied), 'skipped' => $skipped,
+            ]);
+        }
+        return ['applied' => $applied, 'skipped' => $skipped, 'semesters' => $semestersSwept];
     }
 
     /**
@@ -82,9 +249,7 @@ class Billing {
 
         $reversed = false;
         foreach (self::CONFIRMATION_CHARGES as $entryType) {
-            $debited = self::sumCents($studentUserId, $semesterId, 'debit', $entryType);
-            $alreadyReversed = self::reversedCents($studentUserId, $semesterId, $entryType);
-            $remaining = $debited - $alreadyReversed;
+            $remaining = self::liveDebitCents($studentUserId, $semesterId, $entryType);
             if ($remaining <= 0) {
                 continue;
             }
@@ -561,13 +726,15 @@ class Billing {
     public static function semesterBalancesForStudent(int $studentUserId, ?string $today = null): array {
         $st = self::pdo()->prepare(
             "SELECT le.semester_id, s.season, s.year, s.start_date, s.end_date,
+                    s.second_installment_due_date, s.installment_plan_fee,
                     COALESCE(SUM(CASE WHEN le.accounting_type='debit' THEN le.amount_cents ELSE 0 END), 0) AS charged_cents,
                     COALESCE(SUM(CASE WHEN le.accounting_type='credit' THEN le.amount_cents ELSE 0 END), 0) AS paid_cents,
                     COALESCE(SUM(CASE WHEN le.accounting_type='debit' AND le.entry_type='installment_plan_fee' THEN le.amount_cents ELSE 0 END), 0) AS installment_fee_cents
              FROM ledger_entries le
              LEFT JOIN semesters s ON s.id = le.semester_id
              WHERE le.for_student_user_id = ?
-             GROUP BY le.semester_id, s.season, s.year, s.start_date, s.end_date
+             GROUP BY le.semester_id, s.season, s.year, s.start_date, s.end_date,
+                      s.second_installment_due_date, s.installment_plan_fee
              ORDER BY s.start_date IS NULL, s.start_date, le.semester_id"
         );
         $st->execute([$studentUserId]);
@@ -595,7 +762,9 @@ class Billing {
                 ? self::semesterPaymentBehindReason(
                     $balance, $charged, $paid, (string)$row['start_date'],
                     $counts['elapsed'], $counts['total'],
-                    (int)$row['installment_fee_cents'] > 0, $today
+                    (int)$row['installment_fee_cents'] > 0,
+                    $row['second_installment_due_date'] !== null ? (string)$row['second_installment_due_date'] : null,
+                    $today
                 )
                 : null;
 
@@ -606,6 +775,10 @@ class Billing {
                     : 'Other charges',
                 'start_date' => $row['start_date'] !== null ? (string)$row['start_date'] : null,
                 'end_date' => $row['end_date'] !== null ? (string)$row['end_date'] : null,
+                'second_installment_due_date' => $row['second_installment_due_date'] !== null
+                    ? (string)$row['second_installment_due_date'] : null,
+                'installment_plan_fee_cents' => (int)round((float)($row['installment_plan_fee'] ?? 0) * 100),
+                'on_installment_plan' => (int)$row['installment_fee_cents'] > 0,
                 'charged_cents' => $charged,
                 'paid_cents' => $paid,
                 'balance_cents' => $balance,
@@ -660,8 +833,10 @@ class Billing {
      *   - half the term's charges are due two weeks before it starts;
      *   - the rest before the first lesson — unless the family is on the
      *     installment plan ($onInstallmentPlan: an installment plan fee on
-     *     this term's ledger), which extends it to the lesson before the
-     *     term's half-way point (of 14 lessons, before the 6th).
+     *     this term's ledger), which extends it to the semester's explicit
+     *     second-installment due date ($secondInstallmentDueDate). Legacy
+     *     semesters with no date fall back to the lesson before the term's
+     *     half-way point (of 14 lessons, before the 6th).
      *
      * Pure on purpose — the caller supplies the term's totals and lesson
      * counts, so the rule can be read (and tested) on its own.
@@ -674,6 +849,7 @@ class Billing {
         int $lessonsElapsed,
         int $lessonsTotal,
         bool $onInstallmentPlan,
+        ?string $secondInstallmentDueDate = null,
         ?string $today = null
     ): ?string {
         if ($balanceCents <= 0) {
@@ -700,8 +876,18 @@ class Billing {
                 ? 'the full balance was due before the first lesson (accounts without an installment plan pay in full before lessons begin)'
                 : null;
         }
-        // On the installment plan: the rest by the lesson before the
-        // half-way point.
+        // On the installment plan: the rest by the semester's explicit
+        // second-installment due date when one is set.
+        if ($secondInstallmentDueDate !== null && $secondInstallmentDueDate !== '') {
+            $dueTs = strtotime($secondInstallmentDueDate);
+            if ($dueTs !== false) {
+                return $todayTs > $dueTs
+                    ? 'under the installment plan, the full balance was due by ' . date('M j, Y', $dueTs)
+                    : null;
+            }
+        }
+        // Legacy semesters (no explicit date): the rest by the lesson before
+        // the half-way point.
         if ($lessonsTotal > 0 && $lessonsElapsed >= ($lessonsTotal / 2) - 1) {
             $dueBeforeLesson = (int)ceil(($lessonsTotal / 2) - 1);
             return $dueBeforeLesson >= 1
@@ -724,11 +910,12 @@ class Billing {
         string $semesterStartDate,
         int $lessonsElapsed,
         int $lessonsTotal,
+        ?string $secondInstallmentDueDate = null,
         ?string $today = null
     ): bool {
         return self::semesterPaymentBehindReason(
             $balanceCents, $chargedCents, $paidCents, $semesterStartDate,
-            $lessonsElapsed, $lessonsTotal, true, $today
+            $lessonsElapsed, $lessonsTotal, true, $secondInstallmentDueDate, $today
         ) !== null;
     }
 
@@ -857,6 +1044,12 @@ class Billing {
         return (int)$st->fetchColumn();
     }
 
+    /** Debited minus reversed for one (student, semester, entry_type) — what still stands. */
+    private static function liveDebitCents(int $studentUserId, int $semesterId, string $entryType): int {
+        return self::sumCents($studentUserId, $semesterId, 'debit', $entryType)
+            - self::reversedCents($studentUserId, $semesterId, $entryType);
+    }
+
     /** Cents already reversed for a confirmation charge (matched by description). */
     private static function reversedCents(int $studentUserId, int $semesterId, string $entryType): int {
         $st = self::pdo()->prepare(
@@ -901,12 +1094,16 @@ class Billing {
         return (bool)$st->fetchColumn();
     }
 
-    private static function studentHasConfirmedReservationInSemester(int $studentUserId, int $semesterId): bool {
-        $st = self::pdo()->prepare(
-            "SELECT 1 FROM semester_lesson_reservations
-             WHERE student_user_id=? AND semester_id=? AND status='confirmed' LIMIT 1"
-        );
-        $st->execute([$studentUserId, $semesterId]);
+    private static function studentHasConfirmedReservationInSemester(int $studentUserId, int $semesterId, ?int $excludingReservationId = null): bool {
+        $sql = "SELECT 1 FROM semester_lesson_reservations
+             WHERE student_user_id=? AND semester_id=? AND status='confirmed'";
+        $args = [$studentUserId, $semesterId];
+        if ($excludingReservationId !== null) {
+            $sql .= ' AND id <> ?';
+            $args[] = $excludingReservationId;
+        }
+        $st = self::pdo()->prepare($sql . ' LIMIT 1');
+        $st->execute($args);
         return (bool)$st->fetchColumn();
     }
 

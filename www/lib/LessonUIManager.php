@@ -222,7 +222,7 @@ class LessonUIManager {
             // lesson notes included — lives on their own page.
             var studentLink = document.getElementById('lessonStudentLink');
             studentLink.textContent = 'Open ' + (cell.dataset.studentName || 'the student') + "'s page";
-            studentLink.href = '/admin/student_edit.php?id=' + encodeURIComponent(cell.dataset.studentId || '');
+            studentLink.href = '/admin/student.php?id=' + encodeURIComponent(cell.dataset.studentId || '');
 
             modal.classList.remove('hidden');
             modal.setAttribute('aria-hidden', 'false');

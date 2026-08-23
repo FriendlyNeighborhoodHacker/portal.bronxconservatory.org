@@ -29,27 +29,39 @@ try {
     if (!$reservation) {
         throw new InvalidArgumentException('That reservation is no longer here.');
     }
+    // Policy: money never moves without an explicit line-item confirmation.
+    // A status change to or from confirmed posts charges or reversal credits,
+    // so it must arrive with charges_acknowledged=1 (the JS shows the
+    // itemized dialog first; this refusal is the backstop).
+    $requestedStatus = (string)($_POST['status'] ?? '');
+    $currentStatus = (string)$reservation['status'];
+    $statusAffectsCharges = $requestedStatus !== '' && $requestedStatus !== $currentStatus
+        && ($requestedStatus === 'confirmed' || $currentStatus === 'confirmed');
+    if ($statusAffectsCharges && (string)($_POST['charges_acknowledged'] ?? '') !== '1') {
+        echo json_encode([
+            'ok' => false,
+            'needs_charge_confirmation' => true,
+            'error' => 'This change affects charges — please review and confirm them first.',
+        ]);
+        exit;
+    }
     if ($duration > 0 && $duration !== (int)$reservation['duration_minutes']) {
-        // Duration is changing. If confirmed, we need to handle accounting.
+        // Duration is changing. If confirmed, the review page recomputes and
+        // shows the refund/charge entries before anything posts.
         if ($reservation['status'] === 'confirmed') {
-            $calc = Billing::durationChangeLedgerCalculation(
-                $reservationId,
-                (int)$reservation['semester_id'],
-                (int)$reservation['duration_minutes'],
-                $duration
-            );
             echo json_encode([
                 'ok' => false,
                 'needs_accounting' => true,
                 'reservation_id' => $reservationId,
-                'calculation' => $calc,
             ]);
             exit;
         }
         // Pending reservation: just update, no charges yet.
         ReservationManagement::updateReservation($ctx, $reservationId, ['duration_minutes' => $duration]);
     }
-    ReservationManagement::setStatus($ctx, $reservationId, (string)($_POST['status'] ?? ''));
+    ReservationManagement::setStatus($ctx, $reservationId, $requestedStatus, [
+        'include_installment_fee' => (string)($_POST['include_installment_fee'] ?? '') === '1',
+    ]);
     echo json_encode(['ok' => true]);
 } catch (\Throwable $e) {
     echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

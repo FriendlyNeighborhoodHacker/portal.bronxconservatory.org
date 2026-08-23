@@ -92,7 +92,10 @@ class ReservationManagement {
         if ($status === 'confirmed') {
             self::generateLessonsForReservation($ctx, $id);
             if ($options['post_charges'] ?? true) {
-                Billing::postSemesterConfirmationCharges($ctx, $studentUserId, $semesterId, $durationMinutes);
+                Billing::postSemesterConfirmationCharges(
+                    $ctx, $studentUserId, $semesterId, $durationMinutes,
+                    (bool)($options['include_installment_fee'] ?? false)
+                );
             }
         }
 
@@ -177,10 +180,11 @@ class ReservationManagement {
      * Change a reservation's status along the allowed graph
      * (pending_reach_out <-> pending_confirmation <-> confirmed).
      *   -> confirmed: generates the semester's lessons + posts charges
+     *     ($options['include_installment_fee'] adds the installment plan fee)
      *   confirmed -> pending_*: deletes FUTURE lessons + reverses charges
      *     when the student hasn't had a lesson yet (Billing decides)
      */
-    public static function setStatus(?UserContext $ctx, int $reservationId, string $newStatus): void {
+    public static function setStatus(?UserContext $ctx, int $reservationId, string $newStatus, array $options = []): void {
         self::assertAdmin($ctx);
         $r = self::requireReservation($reservationId);
         $oldStatus = (string)$r['status'];
@@ -211,7 +215,10 @@ class ReservationManagement {
 
         if ($newStatus === 'confirmed') {
             self::generateLessonsForReservation($ctx, $reservationId);
-            Billing::postSemesterConfirmationCharges($ctx, (int)$r['student_user_id'], (int)$r['semester_id'], (int)$r['duration_minutes']);
+            Billing::postSemesterConfirmationCharges(
+                $ctx, (int)$r['student_user_id'], (int)$r['semester_id'], (int)$r['duration_minutes'],
+                (bool)($options['include_installment_fee'] ?? false)
+            );
         } elseif ($oldStatus === 'confirmed') {
             self::deleteFutureLessons($reservationId);
             // Status is already updated, so "another confirmed reservation"

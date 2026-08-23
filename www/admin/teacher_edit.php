@@ -53,7 +53,7 @@ $flashError = $_SESSION['people_flash_error'] ?? null;
 unset($_SESSION['people_flash'], $_SESSION['people_flash_error']);
 if (isset($_GET['uploaded'])) { $flash = 'Photo uploaded.'; }
 if (isset($_GET['deleted'])) { $flash = 'Photo removed.'; }
-if (isset($_GET['photo_err'])) { $flashError = 'Photo upload failed.'; }
+if (isset($_GET['err'])) { $flashError = 'Photo upload failed.'; }
 
 $name = trim($user['first_name'] . ' ' . $user['last_name']);
 header_html('Edit ' . $name);
@@ -95,7 +95,7 @@ header_html('Edit ' . $name);
   <?php if (!$students): ?><p class="small">No students this semester.</p><?php endif; ?>
   <?php foreach ($students as $student): ?>
     <div class="lesson-row">
-      <a href="/admin/student_edit.php?id=<?=(int)$student['id']?>">
+      <a href="/admin/student.php?id=<?=(int)$student['id']?>">
         <strong><?=h($student['first_name'] . ' ' . $student['last_name'])?></strong></a>
       <span class="small"><?=h(str_replace('_', ' ', (string)$student['reservation_status']))?></span>
     </div>

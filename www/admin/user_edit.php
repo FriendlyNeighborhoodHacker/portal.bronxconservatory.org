@@ -51,10 +51,9 @@ $hasEmail = !empty($user['email']);
 $userName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
 header_html('Edit ' . $userName);
 
-// Handle messages from upload_photo redirect
+// Handle messages from upload_photo redirect (?err= is already read above).
 if (isset($_GET['uploaded'])) { $msg = 'Photo uploaded.'; }
 if (isset($_GET['deleted'])) { $msg = 'Photo removed.'; }
-if (isset($_GET['photo_err'])) { $err = 'Photo upload failed.'; }
 ?>
 
 <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">

@@ -29,8 +29,13 @@ ApplicationUI::minimalHeaderHtml('Register — Payment Plan');
     <label class="inline">
       <input type="radio" name="installment" value="1"<?=$installment === 1 || $installment === '1' ? ' checked' : ''?>>
       <span><strong>Yes</strong> — installment plan (+<?=registration_dollars(SemesterManagement::installmentPlanFeeCents($semester))?>):
-        fees and 50% of tuition today, the remaining tuition due by week 4 of the semester.</span>
+        fees and 50% of tuition today, the remaining tuition due
+        <?php $secondDue = SemesterManagement::secondInstallmentDueDate($semester); ?>
+        <?=$secondDue !== null ? 'by ' . h(date('M j, Y', strtotime($secondDue))) : 'by week 4 of the semester'?>.</span>
     </label>
+    <?php if ($feeNotice = SemesterManagement::installmentFeeNotice($semester)): ?>
+      <p class="small"><?=h($feeNotice)?></p>
+    <?php endif; ?>
     <div class="actions">
       <button type="submit" name="action" value="back" class="btn-outline">Back</button>
       <button type="submit" name="action" value="next" class="btn-cta">Continue</button>

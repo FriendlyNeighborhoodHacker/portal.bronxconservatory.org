@@ -33,7 +33,7 @@ try {
     $_SESSION['people_flash'] = $person['existed']
         ? 'That email already belonged to an account — it is now marked as a student and updated below.'
         : 'Student added.';
-    header('Location: /admin/student_edit.php?id=' . $userId);
+    header('Location: /admin/student.php?id=' . $userId);
 } catch (\Throwable $e) {
     $_SESSION['people_flash_error'] = $e->getMessage();
     $_SESSION['people_form_old'] = [

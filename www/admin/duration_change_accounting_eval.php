@@ -21,11 +21,15 @@ require_csrf();
 
 $reservationId = (int)($_POST['reservation_id'] ?? 0);
 $newDurationMinutes = (int)($_POST['new_duration_minutes'] ?? 0);
-$refundCents = (int)($_POST['refund_cents'] ?? 0);
-$newChargeCents = (int)($_POST['new_charge_cents'] ?? 0);
+// Amounts arrive as dollars (the review page's editable inputs).
+$refundCents = Billing::parseAmountCents((string)($_POST['refund_amount'] ?? ''));
+$newChargeCents = Billing::parseAmountCents((string)($_POST['new_charge_amount'] ?? ''));
 $ctx = UserContext::getLoggedInUserContext();
 
 try {
+    if ($refundCents === null || $refundCents < 0 || $newChargeCents === null || $newChargeCents < 0) {
+        throw new InvalidArgumentException('Refund and new charge must be non-negative dollar amounts.');
+    }
     $reservation = ReservationManagement::findReservation($reservationId);
     if (!$reservation) {
         throw new InvalidArgumentException('That reservation is no longer here.');
@@ -39,7 +43,14 @@ try {
         throw new InvalidArgumentException('Duration has not changed.');
     }
 
-    // Post the ledger entries
+    // Update the duration first — it can be refused for a slot conflict, and
+    // money must not have moved for a change that did not happen.
+    ReservationManagement::updateReservation(
+        $ctx,
+        $reservationId,
+        ['duration_minutes' => $newDurationMinutes]
+    );
+
     Billing::postDurationChangeEntries(
         $ctx,
         (int)$reservation['student_user_id'],
@@ -48,13 +59,6 @@ try {
         $newChargeCents,
         $originalDuration,
         $newDurationMinutes
-    );
-
-    // Update the reservation's duration (this also updates future lessons in place)
-    ReservationManagement::updateReservation(
-        $ctx,
-        $reservationId,
-        ['duration_minutes' => $newDurationMinutes]
     );
 
     echo json_encode(['ok' => true]);

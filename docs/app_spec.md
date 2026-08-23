@@ -177,14 +177,21 @@ attach to the *student*; a parent's balance is the sum over their children.
 
 Confirming a reservation posts the semester's fees as debits: **registration**,
 **lessons** (the 30- or 60-minute semester fee; other durations are prorated off
-the 30-minute rate), **recital fee**, and the **installment plan fee** — each
-only if the fee is non-zero and no live debit of that type already exists for
-that student and semester. So a second instrument in the same term does not
-re-charge registration.
+the 30-minute rate), and **recital fee** — each only if the fee is non-zero and
+no live debit of that type already exists for that student and semester. So a
+second instrument in the same term does not re-charge registration. The
+**installment plan fee** is posted only when the admin checks "include
+installment fee" in the confirmation dialog. Every admin action that posts
+charges (or reversal credits) first shows a line-item review dialog, and the
+endpoints refuse to post without its acknowledgement.
 
-Nothing else charges automatically. Not lead conversion, not the schedule CSV
-import (opening balances are loaded separately so nobody is billed twice), not
-one-off lessons, not cancellations, not moving a lesson's time.
+The one other automatic charge is the **daily installment-fee sweep**
+(`www/bin/apply_installment_fees.php`, see docs/cron.md): from the second day
+of a semester, confirmed students who still owe part of that semester's balance
+and don't already carry the fee are charged it. Nothing else charges
+automatically. Not lead conversion, not the schedule CSV import (opening
+balances are loaded separately so nobody is billed twice), not one-off lessons,
+not cancellations, not moving a lesson's time.
 
 ### What credits a balance
 
@@ -253,7 +260,10 @@ quote is **frozen onto the lead at submit**, so a later price change never
 rewrites what a family was told. Payment (full, or fees + half tuition on the
 installment plan) is taken with an embedded Stripe form and **held on the lead**
 until conversion moves it onto a student's ledger. The remaining installment is
-due by week 4 and is collected operationally — no code schedules that charge.
+due by the semester's **second installment due date** (a semester property,
+defaulted to the term's midpoint and shown wherever fees are presented); the
+daily installment-fee sweep charges the plan fee to anyone still unpaid after
+the semester's first day.
 
 Abandoning checkout still leaves a lead, so the family can be called.
 

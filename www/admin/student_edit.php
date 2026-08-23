@@ -1,16 +1,13 @@
 <?php
-// Edit Student: photo, basic information, parents (+Add Parent modal),
-// instruments, charges & payments, and soft delete.
+// Edit Profile for a student: the basic-information fields (with demographic
+// as one more field) and the soft delete. Everything else about the student —
+// parents, reservations, charges, notes, photo, instruments — lives on the
+// student page (student.php).
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../partials_person_form.php';
-require_once __DIR__ . '/../partials_parent_modal.php';
 require_once __DIR__ . '/../partials_confirm_modal.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
 require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
-require_once __DIR__ . '/../lib/InstrumentCatalog.php';
-require_once __DIR__ . '/../lib/ReservationManagement.php';
-require_once __DIR__ . '/../lib/LedgerUIManager.php';
-require_once __DIR__ . '/../lib/NotesManagement.php';
 Application::init();
 require_admin();
 
@@ -21,23 +18,11 @@ if (!$user) {
     exit;
 }
 
-$parents = StudentTeacherManagement::parentsOfStudent($userId);
 $demographic = StudentTeacherManagement::demographicForStudent(UserContext::getLoggedInUserContext(), $userId);
-$allInstruments = InstrumentCatalog::all();
-$studentInstruments = InstrumentCatalog::namesForStudent($userId);
-$semesterId = Application::adminSelectedSemesterId();
-$reservations = ReservationManagement::reservationsForStudent($userId, $semesterId);
-$returnTo = '/admin/student_edit.php?id=' . $userId;
-// What the teachers have written after lessons — read-only here; they are
-// logged from the teacher's own day view, where the lesson is in front of them.
-$lessonNotes = NotesManagement::recentLessonNotesForStudent($userId);
 
 $flash = $_SESSION['people_flash'] ?? null;
 $flashError = $_SESSION['people_flash_error'] ?? null;
 unset($_SESSION['people_flash'], $_SESSION['people_flash_error']);
-if (isset($_GET['uploaded'])) { $flash = 'Photo uploaded.'; }
-if (isset($_GET['deleted'])) { $flash = 'Photo removed.'; }
-if (isset($_GET['photo_err'])) { $flashError = 'Photo upload failed.'; }
 
 $name = trim($user['first_name'] . ' ' . $user['last_name']);
 header_html('Edit ' . $name);
@@ -45,19 +30,32 @@ header_html('Edit ' . $name);
 
 <div class="page-head">
   <h2>Edit Student — <?=h($name)?><?=$user['is_deleted'] ? ' <span class="badge">Deleted</span>' : ''?></h2>
-  <a class="button" href="/admin/students.php">Back to Students</a>
+  <a class="button" href="/admin/student.php?id=<?=$userId?>">Back to <?=h($user['first_name'])?></a>
 </div>
 
 <?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
 <?php if ($flashError): ?><p class="error"><?=h($flashError)?></p><?php endif; ?>
-
-<?=person_photo_card_html($user, $returnTo)?>
 
 <div class="card">
   <form method="post" action="/admin/student_edit_eval.php" class="stack" data-warn-unsaved>
     <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
     <input type="hidden" name="id" value="<?=$userId?>">
     <?php person_basic_info_fields_html($user); ?>
+    <h3>Other</h3>
+    <div class="grid-2">
+      <label>Demographic
+        <select name="demographic">
+          <option value="">Not recorded</option>
+          <?php foreach (StudentTeacherManagement::DEMOGRAPHIC_LABELS as $code => $label): ?>
+            <option value="<?=h($code)?>" <?=$demographic === $code ? 'selected' : ''?>>
+              <?=h($code . ' — ' . $label)?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+        <span class="small">For the conservatory's own reporting. Shown on admin screens only —
+          never to the family, the student, or the teacher.</span>
+      </label>
+    </div>
     <div class="actions">
       <button type="submit" class="button primary">Save Student</button>
     </div>
@@ -65,105 +63,9 @@ header_html('Edit ' . $name);
 </div>
 
 <div class="card">
-  <div class="page-head">
-    <h3>Parents</h3>
-    <button type="button" class="button" data-modal-open="addParentModal">Add Parent</button>
-  </div>
-  <?php if (!$parents): ?><p class="small">No parents linked yet.</p><?php endif; ?>
-  <?php foreach ($parents as $parent): ?>
-    <div class="lesson-row">
-      <span>
-        <a href="/admin/parent_edit.php?id=<?=(int)$parent['id']?>"><strong><?=h($parent['first_name'] . ' ' . $parent['last_name'])?></strong></a>
-        <?php if ($parent['role']): ?><span class="small">(<?=h($parent['role'])?>)</span><?php endif; ?>
-        <div class="small"><?=h(trim(($parent['cell_phone'] ?? '') . '  ' . ($parent['email'] ?? '')))?></div>
-      </span>
-      <form method="post" action="/admin/parent_unlink_eval.php" style="margin-left:auto;"
-            onsubmit="return confirm('Unlink this parent from <?=h($name)?>?');">
-        <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
-        <input type="hidden" name="parent_user_id" value="<?=(int)$parent['id']?>">
-        <input type="hidden" name="child_user_id" value="<?=$userId?>">
-        <input type="hidden" name="return_to" value="<?=h($returnTo)?>">
-        <button type="submit" class="button">Unlink</button>
-      </form>
-    </div>
-  <?php endforeach; ?>
-</div>
-
-<div class="card">
-  <h3>Demographics</h3>
-  <p class="small">Recorded for the conservatory's own reporting. This is shown
-    on this admin screen only — never to the family, the student, or the teacher.</p>
-  <form method="post" action="/admin/student_demographic_eval.php" class="stack">
-    <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
-    <input type="hidden" name="id" value="<?=$userId?>">
-    <label>Demographic
-      <select name="demographic">
-        <option value="">Not recorded</option>
-        <?php foreach (StudentTeacherManagement::DEMOGRAPHIC_LABELS as $code => $label): ?>
-          <option value="<?=h($code)?>" <?=$demographic === $code ? 'selected' : ''?>>
-            <?=h($code . ' — ' . $label)?>
-          </option>
-        <?php endforeach; ?>
-      </select>
-    </label>
-    <div class="actions"><button type="submit" class="button">Save Demographics</button></div>
-  </form>
-</div>
-
-<div class="card">
-  <h3>Instruments</h3>
-  <form method="post" action="/admin/student_instruments_eval.php" class="stack">
-    <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
-    <input type="hidden" name="id" value="<?=$userId?>">
-    <div class="choice-grid">
-      <?php foreach ($allInstruments as $instrument): ?>
-        <label class="inline">
-          <input type="checkbox" name="instrument_ids[]" value="<?=(int)$instrument['id']?>"
-            <?=in_array($instrument['name'], $studentInstruments, true) ? 'checked' : ''?>>
-          <?=h($instrument['name'])?>
-        </label>
-      <?php endforeach; ?>
-    </div>
-    <div class="actions"><button type="submit" class="button">Save Instruments</button></div>
-  </form>
-</div>
-
-<?php if ($reservations): ?>
-<div class="card">
-  <h3>This Semester</h3>
-  <?php foreach ($reservations as $reservation): ?>
-    <div class="lesson-row">
-      <span class="lesson-row-time"><?=h(['SU','MO','TU','WE','TH','FR','SA'][(int)$reservation['day_of_week']] . ' ' . date('g:i a', strtotime((string)$reservation['start_time'])))?></span>
-      <span><?=h($reservation['teacher_first_name'] . ' ' . $reservation['teacher_last_name'])?> · <?=h($reservation['location_name'])?></span>
-      <span class="small"><?=h(str_replace('_', ' ', (string)$reservation['status']))?></span>
-    </div>
-  <?php endforeach; ?>
-</div>
-<?php endif; ?>
-
-<div class="card">
-  <h3>Lesson notes</h3>
-  <?php if (!$lessonNotes): ?>
-    <p class="small">No lesson notes yet. Teachers write these from their own day view after a lesson.</p>
-  <?php else: ?>
-    <?php foreach ($lessonNotes as $note): ?>
-      <div class="lesson-row" style="align-items:flex-start;">
-        <span class="lesson-row-time"><?=h(date('D, M j, Y', strtotime((string)$note['start_datetime'])))?></span>
-        <span><?=nl2br(h($note['body']))?></span>
-        <span class="small"><?=h(trim($note['teacher_first_name'] . ' ' . $note['teacher_last_name']))?></span>
-      </div>
-    <?php endforeach; ?>
-    <p class="small" style="margin-top:8px;">The ten most recent, newest first.</p>
-  <?php endif; ?>
-</div>
-
-<?php LedgerUIManager::renderSection($userId, $semesterId, $returnTo); ?>
-
-<div class="card">
   <button type="button" class="button danger" data-modal-open="deleteStudentModal">Delete this student</button>
 </div>
 
-<?php render_parent_modal($userId); ?>
 <?php render_confirm_modal(
     'deleteStudentModal',
     'Delete ' . $name . '?',

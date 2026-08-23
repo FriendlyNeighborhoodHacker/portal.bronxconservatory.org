@@ -23,6 +23,49 @@ final class SemesterManagementTest extends TestCase
         $this->assertTrue(SemesterManagement::hasAnySemester());
     }
 
+    public function testSecondInstallmentDueDateRoundTripsAndValidates(): void
+    {
+        // Stored on create, exposed by the accessor, editable on update.
+        $id = SemesterManagement::createSemester(
+            $this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20', [], '2030-10-15'
+        );
+        $semester = SemesterManagement::find($id);
+        $this->assertSame('2030-10-15', SemesterManagement::secondInstallmentDueDate($semester));
+
+        SemesterManagement::updateSemester(
+            $this->ctx, $id, 'fall', 2030, '2030-09-01', '2030-12-20', [], '2030-11-01'
+        );
+        $this->assertSame('2030-11-01', SemesterManagement::secondInstallmentDueDate(SemesterManagement::find($id)));
+
+        // Null clears it (legacy half-way-lesson rule).
+        SemesterManagement::updateSemester($this->ctx, $id, 'fall', 2030, '2030-09-01', '2030-12-20', [], null);
+        $this->assertNull(SemesterManagement::secondInstallmentDueDate(SemesterManagement::find($id)));
+
+        // Outside the semester: rejected.
+        $this->expectException(InvalidArgumentException::class);
+        SemesterManagement::updateSemester(
+            $this->ctx, $id, 'fall', 2030, '2030-09-01', '2030-12-20', [], '2031-01-05'
+        );
+    }
+
+    public function testMidpointDateAndInstallmentFeeNotice(): void
+    {
+        $this->assertSame('2030-10-26', SemesterManagement::midpointDate('2030-09-01', '2030-12-20'));
+
+        $id = SemesterManagement::createSemester(
+            $this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20',
+            ['installment_plan_fee' => '25.00'], '2030-10-15'
+        );
+        $notice = SemesterManagement::installmentFeeNotice(SemesterManagement::find($id));
+        $this->assertStringContainsString('$25.00', $notice);
+        $this->assertStringContainsString('Sep 1, 2030', $notice);
+        $this->assertStringContainsString('Oct 15, 2030', $notice);
+
+        // No fee, no notice.
+        $zeroFee = SemesterManagement::createSemester($this->ctx, 'spring', 2030, '2030-01-10', '2030-05-30');
+        $this->assertNull(SemesterManagement::installmentFeeNotice(SemesterManagement::find($zeroFee)));
+    }
+
     public function testSeasonYearMustBeUnique(): void
     {
         SemesterManagement::createSemester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');

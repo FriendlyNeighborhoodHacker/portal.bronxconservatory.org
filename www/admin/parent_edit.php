@@ -25,7 +25,7 @@ $flashError = $_SESSION['people_flash_error'] ?? null;
 unset($_SESSION['people_flash'], $_SESSION['people_flash_error']);
 if (isset($_GET['uploaded'])) { $flash = 'Photo uploaded.'; }
 if (isset($_GET['deleted'])) { $flash = 'Photo removed.'; }
-if (isset($_GET['photo_err'])) { $flashError = 'Photo upload failed.'; }
+if (isset($_GET['err'])) { $flashError = 'Photo upload failed.'; }
 
 $name = trim($user['first_name'] . ' ' . $user['last_name']);
 header_html('Edit ' . $name);
@@ -61,7 +61,7 @@ header_html('Edit ' . $name);
   <?php foreach ($children as $child): ?>
     <div class="lesson-row">
       <span>
-        <a href="/admin/student_edit.php?id=<?=(int)$child['id']?>">
+        <a href="/admin/student.php?id=<?=(int)$child['id']?>">
           <strong><?=h($child['first_name'] . ' ' . $child['last_name'])?></strong></a>
         <div class="small"><?=h(implode(', ', $child['instruments']))?></div>
       </span>

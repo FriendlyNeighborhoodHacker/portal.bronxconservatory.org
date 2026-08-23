@@ -185,6 +185,8 @@ function registration_tuition_intro_html(array $semester): string {
         . '<p>Recital &amp; Logistics fee: <strong>' . registration_money(SemesterManagement::recitalFeeCents($semester))
         . '</strong> per lesson block.</p>'
         . '<p class="small">Registrations done after the start of the semester (space permitting) will be prorated to the remaining weeks of term.</p>'
+        . (($notice = SemesterManagement::installmentFeeNotice($semester)) !== null
+            ? '<p class="small">' . h($notice) . '</p>' : '')
         . '</div>';
 }
 

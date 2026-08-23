@@ -46,6 +46,23 @@ class InstrumentCatalog {
         return array_column($st->fetchAll(), 'name');
     }
 
+    /**
+     * The instrument(s) a lesson between this teacher and student most
+     * plausibly covers — reservations carry no instrument column, so this is
+     * derived: the overlap of what the teacher teaches and what the student
+     * plays; the teacher's list when there is no overlap; the student's when
+     * the teacher has none recorded; [] when neither has any.
+     */
+    public static function likelyLessonInstruments(int $teacherUserId, int $studentUserId): array {
+        $teacherNames = self::namesForTeacher($teacherUserId);
+        $studentNames = self::namesForStudent($studentUserId);
+        $overlap = array_values(array_intersect($teacherNames, $studentNames));
+        if ($overlap) {
+            return $overlap;
+        }
+        return $teacherNames ?: $studentNames;
+    }
+
     // Replace a student's instrument set. $ctx may be null (public registration).
     public static function setStudentInstruments(?UserContext $ctx, int $studentUserId, array $instrumentIds): void {
         self::setInstruments('student_instruments', 'student_user_id', $studentUserId, $instrumentIds);

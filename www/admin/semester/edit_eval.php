@@ -21,7 +21,9 @@ try {
         (int)($_POST['year'] ?? 0),
         (string)($_POST['start_date'] ?? ''),
         (string)($_POST['end_date'] ?? ''),
-        (array)($_POST['pricing'] ?? [])
+        (array)($_POST['pricing'] ?? []),
+        (string)($_POST['second_installment_due_date'] ?? '') !== ''
+            ? (string)$_POST['second_installment_due_date'] : null
     );
     $_SESSION['import_flash'] = 'Semester updated.';
     header('Location: /admin/semesters.php');
@@ -32,6 +34,7 @@ try {
         'year' => (string)($_POST['year'] ?? ''),
         'start_date' => (string)($_POST['start_date'] ?? ''),
         'end_date' => (string)($_POST['end_date'] ?? ''),
+        'second_installment_due_date' => (string)($_POST['second_installment_due_date'] ?? ''),
         'pricing' => (array)($_POST['pricing'] ?? []),
     ];
     header('Location: /admin/semester/edit.php?semester_id=' . $semesterId);

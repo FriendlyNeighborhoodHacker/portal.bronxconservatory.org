@@ -16,7 +16,7 @@ $studentUserId = (int)($_POST['student_user_id'] ?? 0);
 $semesterId = (int)($_POST['semester_id'] ?? 0) ?: null;
 $returnTo = validate_relative_next_path($_POST['return_to'] ?? '');
 if ($returnTo === '') {
-    $returnTo = '/admin/student_edit.php?id=' . $studentUserId;
+    $returnTo = '/admin/student.php?id=' . $studentUserId;
 }
 
 $amountCents = (int)round((float)($_POST['amount'] ?? 0) * 100);

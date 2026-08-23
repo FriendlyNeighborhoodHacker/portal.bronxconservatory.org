@@ -88,7 +88,7 @@ header_html('Students');
             </div>
           <?php endforeach; ?>
         </td>
-        <td><a class="button" href="/admin/student_edit.php?id=<?=(int)$student['id']?>">Edit</a></td>
+        <td><a class="button" href="/admin/student.php?id=<?=(int)$student['id']?>">Open</a></td>
       </tr>
       <?php endforeach; ?>
     </tbody>

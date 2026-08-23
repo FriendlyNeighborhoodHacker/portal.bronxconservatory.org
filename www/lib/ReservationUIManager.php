@@ -53,6 +53,8 @@ class ReservationUIManager {
               <form id="resAddForm" class="stack">
                 <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
                 <input type="hidden" name="semester_id" value="<?=$semesterId?>">
+                <input type="hidden" name="charges_acknowledged" value="">
+                <input type="hidden" name="include_installment_fee" value="">
                 <input type="hidden" name="location_id" id="resAddLocationId">
                 <input type="hidden" name="teacher_user_id" id="resAddTeacherId">
                 <input type="hidden" name="day_of_week" id="resAddDay">
@@ -76,7 +78,8 @@ class ReservationUIManager {
                     </select>
                   </label>
                 </div>
-                <p class="small">Confirming generates the semester's lessons and posts its charges.</p>
+                <p class="small">Confirming generates the semester's lessons — a dialog will
+                itemize the charges for review before anything is posted.</p>
                 <div class="actions actions-split">
                   <span class="actions-right">
                     <button type="button" class="button" data-modal-close>Cancel</button>
@@ -136,6 +139,8 @@ class ReservationUIManager {
             <form id="resEditForm" class="stack">
               <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
               <input type="hidden" name="reservation_id" id="resEditId">
+              <input type="hidden" name="charges_acknowledged" value="">
+              <input type="hidden" name="include_installment_fee" value="">
               <label>Length
                 <select name="duration_minutes" id="resEditDuration">
                   <?php foreach (ReservationManagement::DURATION_OPTIONS as $minutes): ?>
@@ -153,8 +158,9 @@ class ReservationUIManager {
                   <option value="confirmed">Confirmed</option>
                 </select>
               </label>
-              <p class="small">Confirming generates the semester's lessons and posts its charges;
-              reverting to pending deletes the future lessons.</p>
+              <p class="small">Confirming generates the semester's lessons; reverting to pending
+              deletes the future lessons. Either way, a dialog will itemize the charge or
+              credit line items for review before anything is posted.</p>
               <p class="small"><a id="resEditStudentLink" href="#" target="_blank" rel="noopener"></a></p>
               <div class="actions actions-split">
                 <button type="button" class="button danger" id="resEditDelete">Delete reservation</button>
@@ -207,11 +213,38 @@ class ReservationUIManager {
           </div>
         </div>
 
+        <!-- Charge confirmation: the line items a confirm posts / an un-confirm reverses -->
+        <div id="resChargesModal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true">
+          <div class="modal-content">
+            <button class="close" type="button" aria-label="Close">&times;</button>
+            <h3 id="resChargesTitle">Confirm charges</h3>
+            <p class="small" id="resChargesContext"></p>
+            <div class="error small hidden" id="resChargesWarning"></div>
+            <table class="list" id="resChargesTable">
+              <tbody id="resChargesLines"></tbody>
+            </table>
+            <label class="inline hidden" id="resChargesInstallmentRow">
+              <input type="checkbox" id="resChargesInstallment">
+              <span id="resChargesInstallmentLabel">Include installment fee</span>
+            </label>
+            <p class="small hidden" id="resChargesNote"></p>
+            <div class="actions actions-split">
+              <span class="actions-right">
+                <button type="button" class="button" data-modal-close>Cancel</button>
+                <button type="button" class="button primary" id="resChargesConfirmBtn">Post charges &amp; confirm</button>
+              </span>
+            </div>
+          </div>
+        </div>
+
         <script>
         document.addEventListener('DOMContentLoaded', function () {
           var addModal = document.getElementById('resAddModal');
           var editModal = document.getElementById('resEditModal');
           var holdEditModal = document.getElementById('holdEditModal');
+          var chargesModal = document.getElementById('resChargesModal');
+          // What the charge dialog's Confirm button should do: {url, form, errEl, mode}
+          var pendingCharges = null;
 
           function openModal(modal) {
             modal.classList.remove('hidden');
@@ -228,20 +261,136 @@ class ReservationUIManager {
               .then(function (json) {
                 if (json && json.ok) { window.location.reload(); }
                 else if (json && json.needs_accounting) {
-                  // Duration change on confirmed reservation: redirect to accounting screen
-                  var calculation = JSON.stringify(json.calculation);
-                  var csrf = form.elements.csrf ? form.elements.csrf.value : '';
-                  var url = '/admin/duration_change_accounting.php?'
+                  // Duration change on a confirmed reservation: the review
+                  // page recomputes and shows the entries before posting.
+                  window.location.href = '/admin/duration_change_accounting.php?'
                     + 'reservation_id=' + encodeURIComponent(json.reservation_id)
-                    + '&new_duration_minutes=' + encodeURIComponent(form.elements.duration_minutes.value)
-                    + '&calculation=' + encodeURIComponent(calculation)
-                    + '&csrf=' + encodeURIComponent(csrf);
-                  window.location.href = url;
+                    + '&new_duration_minutes=' + encodeURIComponent(form.elements.duration_minutes.value);
                 }
                 else { showError(errEl, (json && json.error) || 'Something went wrong.'); }
               })
               .catch(function () { showError(errEl, 'Network error.'); });
           }
+
+          function closeModal(modal) {
+            modal.classList.add('hidden');
+            modal.setAttribute('aria-hidden', 'true');
+          }
+
+          // Fetch the line items a status change would post and show them for
+          // review; only the dialog's Confirm button proceeds (with
+          // charges_acknowledged=1 — the endpoints refuse the change without it).
+          function openChargesReview(query, submit) {
+            submit.errEl.classList.add('hidden');
+            fetch('/admin/reservation_charges_preview.php?' + query, { credentials: 'same-origin' })
+              .then(function (r) { return r.json(); })
+              .then(function (json) {
+                if (!json || !json.ok) {
+                  showError(submit.errEl, (json && json.error) || 'Something went wrong.');
+                  return;
+                }
+                renderChargesReview(json, submit.mode);
+                pendingCharges = submit;
+                openModal(chargesModal);
+              })
+              .catch(function () { showError(submit.errEl, 'Network error.'); });
+          }
+
+          function renderChargesReview(json, mode) {
+            var title = document.getElementById('resChargesTitle');
+            var warning = document.getElementById('resChargesWarning');
+            var table = document.getElementById('resChargesTable');
+            var lines = document.getElementById('resChargesLines');
+            var installmentRow = document.getElementById('resChargesInstallmentRow');
+            var note = document.getElementById('resChargesNote');
+            var confirmBtn = document.getElementById('resChargesConfirmBtn');
+
+            document.getElementById('resChargesContext').textContent =
+              (json.student_name || '') + (json.semester_label ? ' — ' + json.semester_label : '');
+            warning.classList.add('hidden');
+            installmentRow.classList.add('hidden');
+            note.classList.add('hidden');
+            lines.innerHTML = '';
+
+            function addLine(label, amount, muted, mutedNote) {
+              var tr = document.createElement('tr');
+              var tdLabel = document.createElement('td');
+              tdLabel.textContent = label + (mutedNote ? ' — ' + mutedNote : '');
+              var tdAmount = document.createElement('td');
+              tdAmount.style.textAlign = 'right';
+              tdAmount.textContent = amount;
+              if (muted) { tr.style.opacity = '0.55'; tdAmount.style.textDecoration = 'line-through'; }
+              tr.appendChild(tdLabel);
+              tr.appendChild(tdAmount);
+              lines.appendChild(tr);
+            }
+            function addTotal(label, amount) {
+              var tr = document.createElement('tr');
+              var tdLabel = document.createElement('td');
+              tdLabel.innerHTML = '<strong></strong>';
+              tdLabel.firstChild.textContent = label;
+              var tdAmount = document.createElement('td');
+              tdAmount.style.textAlign = 'right';
+              tdAmount.innerHTML = '<strong></strong>';
+              tdAmount.firstChild.textContent = amount;
+              tr.appendChild(tdLabel);
+              tr.appendChild(tdAmount);
+              lines.appendChild(tr);
+            }
+
+            if (mode === 'confirm') {
+              title.textContent = 'Confirm reservation — review charges';
+              confirmBtn.textContent = 'Post charges & confirm';
+              (json.lines || []).forEach(function (line) {
+                addLine(line.label, line.amount, !line.will_post, line.will_post ? '' : line.skip_reason);
+              });
+              addTotal('Total charged now', json.total);
+              table.classList.remove('hidden');
+              if (json.installment_available) {
+                document.getElementById('resChargesInstallmentLabel').textContent =
+                  'Include installment fee (' + json.installment_fee + ') — the family is paying in two installments';
+                document.getElementById('resChargesInstallment').checked = false;
+                installmentRow.classList.remove('hidden');
+              }
+              if (json.installment_note) {
+                note.textContent = json.installment_note;
+                note.classList.remove('hidden');
+              }
+            } else {
+              title.textContent = mode === 'delete'
+                ? 'Delete reservation — review credits'
+                : 'Un-confirm reservation — review credits';
+              confirmBtn.textContent = mode === 'delete' ? 'Post credits & delete' : 'Post credits & un-confirm';
+              if (json.will_reverse) {
+                (json.lines || []).forEach(function (line) { addLine(line.label, line.amount, false, ''); });
+                addTotal('Total credited', json.total);
+                table.classList.remove('hidden');
+              } else {
+                table.classList.add('hidden');
+                warning.textContent = json.blocked_reason
+                  ? 'No credits will be issued because ' + json.blocked_reason
+                    + '. The existing charges remain on the ledger; make a manual adjustment if needed.'
+                  : 'There are no charges left to reverse for this semester.';
+                warning.classList.remove('hidden');
+                confirmBtn.textContent = mode === 'delete' ? 'Delete anyway' : 'Un-confirm anyway';
+              }
+            }
+          }
+
+          document.getElementById('resChargesConfirmBtn').addEventListener('click', function () {
+            if (!pendingCharges) return;
+            var submit = pendingCharges;
+            pendingCharges = null;
+            submit.form.elements.charges_acknowledged.value = '1';
+            if (submit.mode === 'confirm') {
+              var row = document.getElementById('resChargesInstallmentRow');
+              var checked = !row.classList.contains('hidden')
+                && document.getElementById('resChargesInstallment').checked;
+              submit.form.elements.include_installment_fee.value = checked ? '1' : '0';
+            }
+            closeModal(chargesModal);
+            postForm(submit.url, submit.form, submit.errEl);
+          });
 
           // Add-modal tabs: one visible panel at a time.
           var tabs = addModal.querySelectorAll('.modal-tab');
@@ -270,6 +419,10 @@ class ReservationUIManager {
             // Anywhere in an occupied cell counts as the thing in it.
             var item = bcmCellItemFor(e.target);
             if (item && item.dataset.reservationId) {
+              var editForm = document.getElementById('resEditForm');
+              editForm.dataset.originalStatus = item.dataset.status || '';
+              editForm.elements.charges_acknowledged.value = '';
+              editForm.elements.include_installment_fee.value = '';
               document.getElementById('resEditId').value = item.dataset.reservationId;
               document.getElementById('resEditTitle').textContent = item.dataset.studentName || 'Reservation';
               document.getElementById('resEditContext').textContent = item.dataset.context || '';
@@ -289,8 +442,8 @@ class ReservationUIManager {
               // Way out of the grid: everything else about this student
               // (parents, instruments, charges) lives on their own page.
               var studentLink = document.getElementById('resEditStudentLink');
-              studentLink.textContent = 'Edit ' + (item.dataset.studentName || 'student');
-              studentLink.href = '/admin/student_edit.php?id=' + encodeURIComponent(item.dataset.studentId || '');
+              studentLink.textContent = 'Open ' + (item.dataset.studentName || 'student');
+              studentLink.href = '/admin/student.php?id=' + encodeURIComponent(item.dataset.studentId || '');
               document.getElementById('resEditErr').classList.add('hidden');
               openModal(editModal);
               return;
@@ -318,6 +471,9 @@ class ReservationUIManager {
                 document.getElementById(prefix + 'Time').value = cell.dataset.time;
               });
               document.getElementById('resAddContext').textContent = cell.dataset.context || '';
+              var addForm = document.getElementById('resAddForm');
+              addForm.elements.charges_acknowledged.value = '';
+              addForm.elements.include_installment_fee.value = '';
               document.getElementById('resAddStudent_id').value = '';
               document.getElementById('resAddStudent_input').value = '';
               document.getElementById('holdAddTitle').value = '';
@@ -331,11 +487,25 @@ class ReservationUIManager {
 
           document.getElementById('resAddForm').addEventListener('submit', function (e) {
             e.preventDefault();
-            if (!document.getElementById('resAddStudent_id').value) {
-              showError(document.getElementById('resAddErr'), 'Please pick a student.');
+            var errEl = document.getElementById('resAddErr');
+            var studentId = document.getElementById('resAddStudent_id').value;
+            if (!studentId) {
+              showError(errEl, 'Please pick a student.');
               return;
             }
-            postForm('/admin/reservation_create.php', this, document.getElementById('resAddErr'));
+            // Creating directly as confirmed posts charges: review them first.
+            if (this.elements.status.value === 'confirmed'
+                && this.elements.charges_acknowledged.value !== '1') {
+              openChargesReview(
+                'action=confirm'
+                  + '&semester_id=' + encodeURIComponent(this.elements.semester_id.value)
+                  + '&student_user_id=' + encodeURIComponent(studentId)
+                  + '&duration_minutes=' + encodeURIComponent(this.elements.duration_minutes.value),
+                { url: '/admin/reservation_create.php', form: this, errEl: errEl, mode: 'confirm' }
+              );
+              return;
+            }
+            postForm('/admin/reservation_create.php', this, errEl);
           });
 
           document.getElementById('holdAddForm').addEventListener('submit', function (e) {
@@ -349,13 +519,47 @@ class ReservationUIManager {
 
           document.getElementById('resEditForm').addEventListener('submit', function (e) {
             e.preventDefault();
-            postForm('/admin/reservation_update.php', this, document.getElementById('resEditErr'));
+            var errEl = document.getElementById('resEditErr');
+            var original = this.dataset.originalStatus || '';
+            var next = this.elements.status.value;
+            if (this.elements.charges_acknowledged.value !== '1' && next !== original) {
+              // Confirming posts charges; un-confirming posts reversal
+              // credits. Either way, review the line items first.
+              if (next === 'confirmed') {
+                openChargesReview(
+                  'action=confirm'
+                    + '&reservation_id=' + encodeURIComponent(this.elements.reservation_id.value)
+                    + '&duration_minutes=' + encodeURIComponent(this.elements.duration_minutes.value),
+                  { url: '/admin/reservation_update.php', form: this, errEl: errEl, mode: 'confirm' }
+                );
+                return;
+              }
+              if (original === 'confirmed') {
+                openChargesReview(
+                  'action=unconfirm&reservation_id=' + encodeURIComponent(this.elements.reservation_id.value),
+                  { url: '/admin/reservation_update.php', form: this, errEl: errEl, mode: 'unconfirm' }
+                );
+                return;
+              }
+            }
+            postForm('/admin/reservation_update.php', this, errEl);
           });
 
           document.getElementById('resEditDelete').addEventListener('click', function () {
+            var form = document.getElementById('resEditForm');
+            var errEl = document.getElementById('resEditErr');
+            // Deleting a confirmed reservation reverses its charges: review
+            // the credits first. Pending reservations carry no charges.
+            if ((form.dataset.originalStatus || '') === 'confirmed'
+                && form.elements.charges_acknowledged.value !== '1') {
+              openChargesReview(
+                'action=unconfirm&reservation_id=' + encodeURIComponent(form.elements.reservation_id.value),
+                { url: '/admin/reservation_delete.php', form: form, errEl: errEl, mode: 'delete' }
+              );
+              return;
+            }
             if (!confirm('Delete this reservation? Future lessons will be removed; past lessons are kept.')) return;
-            postForm('/admin/reservation_delete.php', document.getElementById('resEditForm'),
-                     document.getElementById('resEditErr'));
+            postForm('/admin/reservation_delete.php', form, errEl);
           });
 
           document.getElementById('holdEditForm').addEventListener('submit', function (e) {
