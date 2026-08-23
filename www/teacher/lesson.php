@@ -40,13 +40,9 @@ header_html('Lesson — ' . $studentName);
 <?php endif; ?>
 
 <div class="card">
-  <h3>Notes</h3>
+  <h3>Notes &amp; Materials</h3>
   <?=LessonDetailUIManager::notesBlockHtml($lessonId, true, 'What you covered, what to practice…')?>
-</div>
-
-<div class="card">
-  <h3>Materials</h3>
-  <?=LessonDetailUIManager::resourcesBlockHtml($lessonId, true)?>
+  <?=LessonDetailUIManager::resourcesEditButtonHtml($lessonId)?>
 </div>
 
 <?php LessonDetailUIManager::renderNotesScript(); ?>

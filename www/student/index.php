@@ -29,7 +29,6 @@ foreach (LessonManagement::recentLessonsForStudent((int)$me['id'], date('Y-m-d',
         break;
     }
 }
-$lastLessonNotes = $lastLesson ? NotesManagement::lessonNotesForLesson((int)$lastLesson['id']) : [];
 
 header_html('My Schedule');
 ?>
@@ -44,15 +43,9 @@ header_html('My Schedule');
     Teacher: <?=h(trim(($lastLesson['substitute_first_name'] ?? null ?: $lastLesson['teacher_first_name']) . ' '
       . ($lastLesson['substitute_last_name'] ?? null ?: $lastLesson['teacher_last_name'])))?><?=LessonManagement::isCancelled($lastLesson) ? ' · cancelled' : ''?>
   </p>
-  <?php if ($lastLessonNotes): ?>
-    <div class="lesson-notes">
-    <?php foreach ($lastLessonNotes as $note): ?>
-      <?=LessonDetailUIManager::noteBubbleHtml($note)?>
-    <?php endforeach; ?>
-    </div>
-  <?php else: ?>
-    <p class="small">No notes were left for this class yet.</p>
-  <?php endif; ?>
+  <div class="lesson-notes">
+    <?=LessonDetailUIManager::threadHtml((int)$lastLesson['id'])?>
+  </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
     <a href="#" data-lesson-detail="<?=(int)$lastLesson['id']?>" class="button notes">Notes &amp; Materials</a>
     <a href="/student/notes.php" class="button notes">See notes from all classes.</a>

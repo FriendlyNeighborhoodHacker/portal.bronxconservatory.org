@@ -25,10 +25,11 @@ room/location (online lessons get an icon). Two design decisions shape it:
   because a mis-tap between two lessons should not be permanent.
   (`lessons.attended`: NULL = unmarked, 1 = attended, 0 = missed.)
 
-Each card also carries the lesson's **notes and materials inline**, so the
-teacher never has to leave the day to write a note or attach something.
-"Add a resource" attaches a file (stored in `private_files`) or a link, each
-with a title, in a modal.
+Each card also carries the lesson's **notes and materials inline** as one
+chat-style thread, so the teacher never has to leave the day to write a note
+or attach something. "Add or remove materials" opens a modal that attaches a
+file (stored in `private_files`) or a link — with a drag-and-drop zone built
+for dragging a voice memo straight from the Voice Memos app.
 
 ## Teaching Days
 

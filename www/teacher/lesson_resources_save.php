@@ -6,8 +6,8 @@
 //
 // Removals run before the addition so that swapping one material for another
 // in a single save can never leave both behind if the upload is rejected.
-// Returns the lesson's materials list as an HTML fragment, which the caller
-// swaps in.
+// Returns the lesson's notes-and-materials thread as an HTML fragment, which
+// the caller swaps in (materials appear as attachment bubbles in it).
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/ResourceManagement.php';
 require_once __DIR__ . '/../lib/LessonDetailUIManager.php';
@@ -46,7 +46,7 @@ try {
         ResourceManagement::addFileResource($ctx, $lessonId, $title, $_FILES['resource']);
     }
 
-    echo LessonDetailUIManager::resourcesListHtml($lessonId);
+    echo LessonDetailUIManager::threadHtml($lessonId);
 } catch (\Throwable $e) {
     http_response_code(400);
     echo h($e->getMessage());

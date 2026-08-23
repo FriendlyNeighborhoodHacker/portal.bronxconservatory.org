@@ -1165,6 +1165,48 @@ body.auth .brand-logo {
   color: var(--color-text-muted);
 }
 
+/* The materials dropzone: drag a voice memo (or any file) onto the modal.
+   The real file input is visually hidden but still the thing the form
+   submits; the dropzone is its face. */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 18px 12px;
+  text-align: center;
+  cursor: pointer;
+  border: 2px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunk);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.dropzone:hover,
+.dropzone:focus-visible {
+  border-color: var(--color-text-muted);
+}
+
+.dropzone.dragover {
+  background: var(--color-notes-bg);
+  border-color: var(--color-callout);
+}
+
+.dropzone.has-file {
+  background: var(--color-notes-bg);
+  border-style: solid;
+  border-color: var(--color-notes-border);
+}
+
+.visually-hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 /* ===== Edit resources modal =====
    One row per material already on the lesson, its Remove tickbox on the
    right. A ticked row strikes itself through so what the save is about to

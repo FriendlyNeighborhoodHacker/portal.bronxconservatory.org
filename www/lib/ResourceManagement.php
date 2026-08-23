@@ -116,6 +116,31 @@ class ResourceManagement {
         return $row ?: null;
     }
 
+    /**
+     * Materials for a set of lessons in one query — the raw material for the
+     * combined notes-and-materials threads on pages that list many lessons,
+     * so they do not pay one query per lesson. Newest first within a lesson;
+     * callers group by lesson_id.
+     */
+    public static function resourcesForLessons(array $lessonIds): array {
+        $ids = array_values(array_unique(array_map('intval', $lessonIds)));
+        if (!$ids) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $st = self::pdo()->prepare(
+            "SELECT lr.*, pf.original_filename, pf.content_type, pf.byte_length,
+                    up.first_name AS uploader_first_name, up.last_name AS uploader_last_name
+             FROM lesson_resources lr
+             LEFT JOIN private_files pf ON pf.id = lr.private_file_id
+             LEFT JOIN users up ON up.id = lr.created_by_user_id
+             WHERE lr.lesson_id IN ($placeholders)
+             ORDER BY lr.lesson_id, lr.created_at DESC, lr.id DESC"
+        );
+        $st->execute($ids);
+        return $st->fetchAll();
+    }
+
     public static function resourcesForLesson(int $lessonId): array {
         $st = self::pdo()->prepare(
             'SELECT lr.*, pf.original_filename, pf.content_type, pf.byte_length,

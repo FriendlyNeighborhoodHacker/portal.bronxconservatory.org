@@ -21,17 +21,32 @@ class LessonDetailUIManager {
 
     // ── Fragments ─────────────────────────────────────────────────────────
 
-    /** A lesson's notes, oldest first, each a chat bubble signed underneath. */
-    public static function notesHtml(int $lessonId): string {
-        $notes = NotesManagement::lessonNotesForLesson($lessonId);
-        if (!$notes) {
-            return '<p class="small lesson-notes-empty">No notes on this lesson yet.</p>';
-        }
-        $html = '';
+    /**
+     * A lesson's conversation: its notes AND its materials as one thread of
+     * chat bubbles, oldest first — a voice memo sits in the flow of messages
+     * exactly where it was sent, like an attachment in a text thread.
+     */
+    public static function threadHtml(int $lessonId): string {
+        return self::threadBubblesHtml(
+            NotesManagement::lessonNotesForLesson($lessonId),
+            array_reverse(ResourceManagement::resourcesForLesson($lessonId))
+        );
+    }
+
+    /** The thread from already-fetched rows (for pages that batch-query). */
+    public static function threadBubblesHtml(array $notes, array $resources): string {
+        $entries = [];
         foreach ($notes as $note) {
-            $html .= self::noteBubbleHtml($note);
+            $entries[] = ['at' => (string)$note['created_at'], 'html' => self::noteBubbleHtml($note)];
         }
-        return $html;
+        foreach ($resources as $resource) {
+            $entries[] = ['at' => (string)$resource['created_at'], 'html' => self::materialBubbleHtml($resource)];
+        }
+        if (!$entries) {
+            return '<p class="small lesson-notes-empty">No notes or materials on this lesson yet.</p>';
+        }
+        usort($entries, fn(array $a, array $b) => strcmp($a['at'], $b['at']));
+        return implode('', array_column($entries, 'html'));
     }
 
     /** One note as a speech bubble: the message, then who said it and when. */
@@ -44,13 +59,37 @@ class LessonDetailUIManager {
             . '</div>';
     }
 
+    /** One material as a speech bubble: an attachment in the conversation. */
+    public static function materialBubbleHtml(array $resource): string {
+        if (($resource['resource_type'] ?? '') === 'link') {
+            $icon = '&#128279;'; // link
+            $link = '<a href="' . h((string)$resource['url']) . '" target="_blank" rel="noopener">'
+                . h((string)$resource['title']) . '</a>';
+            $detail = '';
+        } else {
+            $isAudio = str_starts_with((string)($resource['content_type'] ?? ''), 'audio/');
+            $icon = $isAudio ? '&#127908;' : '&#128206;'; // microphone / paperclip
+            $link = '<a href="/resource_download.php?id=' . (int)$resource['id'] . '">'
+                . h((string)$resource['title']) . '</a>';
+            $filename = (string)($resource['original_filename'] ?? '');
+            $detail = $filename !== '' ? ' <span class="small">(' . h($filename) . ')</span>' : '';
+        }
+        $by = trim((string)($resource['uploader_first_name'] ?? '') . ' ' . (string)($resource['uploader_last_name'] ?? ''));
+        return '<div class="lesson-note lesson-note-material">'
+            . '<div>' . $icon . ' ' . $link . $detail . '</div>'
+            . '<div class="lesson-note-by">— ' . h($by !== '' ? $by : 'Someone') . ', '
+            . h(date('M j, Y g:i A', strtotime((string)$resource['created_at']))) . '</div>'
+            . '</div>';
+    }
+
     /**
-     * The notes block for a lesson: the thread, then a box to add to it.
-     * $canWrite is the caller's answer to "may this person write here?" —
-     * NotesManagement enforces it again on save.
+     * The conversation block for a lesson: the notes-and-materials thread,
+     * then a box to add a note to it. $canWrite is the caller's answer to
+     * "may this person write here?" — NotesManagement enforces it again on
+     * save.
      */
     public static function notesBlockHtml(int $lessonId, bool $canWrite, string $placeholder = 'Add a note about this lesson…'): string {
-        $html = '<div class="lesson-notes" id="lesson-notes-' . $lessonId . '">' . self::notesHtml($lessonId) . '</div>';
+        $html = '<div class="lesson-notes" id="lesson-notes-' . $lessonId . '">' . self::threadHtml($lessonId) . '</div>';
         if (!$canWrite) {
             return $html;
         }
@@ -66,37 +105,14 @@ class LessonDetailUIManager {
             . '</form>';
     }
 
-    /** A lesson's materials. The whole element, so a save can swap it out. */
-    public static function resourcesListHtml(int $lessonId): string {
-        $resources = ResourceManagement::resourcesForLesson($lessonId);
-        $html = '<div class="lesson-resources" id="lesson-resources-' . $lessonId . '">';
-        if (!$resources) {
-            $html .= '<p class="small">No materials on this lesson yet.</p>';
-        }
-        foreach ($resources as $resource) {
-            $html .= '<div class="lesson-row">';
-            if ($resource['resource_type'] === 'link') {
-                $html .= '<span><a href="' . h((string)$resource['url']) . '" target="_blank" rel="noopener">&#128279; '
-                    . h((string)$resource['title']) . '</a></span>';
-            } else {
-                $html .= '<span><a href="/resource_download.php?id=' . (int)$resource['id'] . '">'
-                    . h((string)$resource['title']) . '</a></span>';
-                $html .= '<span class="small">' . h((string)($resource['original_filename'] ?? '')) . '</span>';
-            }
-            $html .= '</div>';
-        }
-        return $html . '</div>';
-    }
-
-    /** The materials list, plus the button that edits it where allowed. */
-    public static function resourcesBlockHtml(int $lessonId, bool $canEdit): string {
-        $html = self::resourcesListHtml($lessonId);
-        if ($canEdit) {
-            $html .= '<div class="actions" style="margin-top:6px;">'
-                . '<button type="button" class="button" data-resource-edit="' . $lessonId . '">Edit resources</button>'
-                . '</div>';
-        }
-        return $html;
+    /**
+     * The button that opens the Edit resources modal. Materials themselves
+     * live in the thread (threadHtml) as attachment bubbles.
+     */
+    public static function resourcesEditButtonHtml(int $lessonId): string {
+        return '<div class="actions" style="margin-top:6px;">'
+            . '<button type="button" class="button notes" data-resource-edit="' . $lessonId . '">Add or remove materials</button>'
+            . '</div>';
     }
 
     /**
@@ -213,11 +229,9 @@ class LessonDetailUIManager {
           <?php if (LessonManagement::isCancelled($lesson)): ?><span class="badge">Cancelled</span><?php endif; ?>
         </p>
 
-        <h4>Notes</h4>
+        <h4>Notes &amp; Materials</h4>
         <?=self::notesBlockHtml($lessonId, true, 'Add a note — a question for the teacher, or how practice went…')?>
-
-        <h4>Materials</h4>
-        <?=self::resourcesBlockHtml($lessonId, true)?>
+        <?=self::resourcesEditButtonHtml($lessonId)?>
         <?php
     }
 
@@ -317,8 +331,15 @@ class LessonDetailUIManager {
                 <button type="button" class="modal-tab" id="lrTabLink">Share a link</button>
               </div>
               <label>Title <input type="text" name="title" placeholder="Week 3 recording"></label>
-              <label id="lrFieldFile">File (audio, PDF, image, or video)
-                <input type="file" name="resource"></label>
+              <div id="lrFieldFile">
+                <div id="lrDropzone" class="dropzone" role="button" tabindex="0"
+                     aria-label="Drag a voice memo or file here, or press Enter to choose one">
+                  <span id="lrDropText">🎙 Drag a voice memo here — or click to choose a file</span>
+                  <span class="small">Audio, PDF, image, or video · up to 50 MB</span>
+                </div>
+                <input type="file" name="resource" class="visually-hidden-input"
+                       accept="audio/*,.m4a,.mp3,.wav,.ogg,application/pdf,image/*,video/*">
+              </div>
               <label id="lrFieldLink" style="display:none;">Link (http/https)
                 <input type="url" name="url" placeholder="https://..."></label>
 
@@ -346,6 +367,75 @@ class LessonDetailUIManager {
           var typeInput = form.querySelector('input[name=resource_type]');
           var fileInput = form.querySelector('input[name=resource]');
           var urlInput = form.querySelector('input[name=url]');
+          var titleInput = form.querySelector('input[name=title]');
+          var dropzone = document.getElementById('lrDropzone');
+          var dropText = document.getElementById('lrDropText');
+          var defaultDropText = dropText.textContent;
+
+          // ── Drag-a-voice-memo-here dropzone ──
+          // The visually hidden file input is still what the form submits;
+          // the dropzone is its face. The whole modal accepts the drop, so a
+          // recording dragged from the Voice Memos app can land anywhere on it.
+          function showChosenFile() {
+            var f = fileInput.files && fileInput.files[0];
+            dropText.textContent = f ? '✓ ' + f.name : defaultDropText;
+            dropzone.classList.toggle('has-file', !!f);
+            if (f && titleInput.value.trim() === '') {
+              titleInput.value = f.name.replace(/\.[^.]+$/, '');
+            }
+          }
+          function takeFiles(files) {
+            if (!files || !files.length) return;
+            switchTab(true); // a dropped file means the file tab
+            try {
+              var dt = new DataTransfer();
+              dt.items.add(files[0]); // one material per save
+              fileInput.files = dt.files;
+            } catch (err) {
+              errEl.textContent = 'Your browser could not take the dropped file — please use the file picker instead.';
+              errEl.classList.remove('hidden');
+              return;
+            }
+            showChosenFile();
+            if (files.length > 1) {
+              errEl.textContent = 'One file per save — took "' + files[0].name + '". Save, then drop the next one.';
+              errEl.classList.remove('hidden');
+            }
+          }
+          function dragHasFiles(e) {
+            return e.dataTransfer &&
+              Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') !== -1;
+          }
+          dropzone.addEventListener('click', function () { fileInput.click(); });
+          dropzone.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+          });
+          fileInput.addEventListener('change', showChosenFile);
+
+          var content = modal.querySelector('.modal-content');
+          ['dragenter', 'dragover'].forEach(function (type) {
+            content.addEventListener(type, function (e) {
+              if (!dragHasFiles(e)) return;
+              e.preventDefault();
+              dropzone.classList.add('dragover');
+            });
+          });
+          content.addEventListener('dragleave', function (e) {
+            if (!content.contains(e.relatedTarget)) dropzone.classList.remove('dragover');
+          });
+          content.addEventListener('drop', function (e) {
+            if (!dragHasFiles(e)) return;
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            takeFiles(e.dataTransfer.files);
+          });
+          // While the modal is open, a drop that misses it must not make the
+          // browser navigate away to the dropped file.
+          ['dragover', 'drop'].forEach(function (type) {
+            window.addEventListener(type, function (e) {
+              if (!modal.classList.contains('hidden')) e.preventDefault();
+            });
+          });
 
           // The inactive field is disabled, not just hidden, so the browser
           // never submits it and never validates a url the teacher can't see.
@@ -372,6 +462,8 @@ class LessonDetailUIManager {
             form.reset();
             form.querySelector('input[name=lesson_id]').value = lessonId;
             switchTab(true);
+            showChosenFile();
+            dropzone.classList.remove('dragover');
             errEl.classList.add('hidden');
             current.innerHTML = '<p class="small">Loading…</p>';
             modal.classList.remove('hidden');
@@ -418,9 +510,11 @@ class LessonDetailUIManager {
                   errEl.classList.remove('hidden');
                   return;
                 }
-                var list = document.getElementById('lesson-resources-' + lessonId);
-                if (list) {
-                  list.outerHTML = res.text;
+                // The save returns the lesson's refreshed thread — the new
+                // material appears as a bubble in the conversation.
+                var thread = document.getElementById('lesson-notes-' + lessonId);
+                if (thread) {
+                  thread.innerHTML = res.text;
                 } else {
                   window.location.reload();
                 }

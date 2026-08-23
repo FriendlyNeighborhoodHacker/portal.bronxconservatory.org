@@ -7,6 +7,7 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
 require_once __DIR__ . '/../lib/LessonDetailUIManager.php';
 require_once __DIR__ . '/../lib/NotesManagement.php';
+require_once __DIR__ . '/../lib/ResourceManagement.php';
 Application::init();
 require_login();
 
@@ -27,6 +28,10 @@ $notesByLesson = [];
 foreach (NotesManagement::notesForLessons(array_column($pastLessons, 'id')) as $note) {
     $notesByLesson[(int)$note['lesson_id']][] = $note;
 }
+$resourcesByLesson = [];
+foreach (ResourceManagement::resourcesForLessons(array_column($pastLessons, 'id')) as $resource) {
+    $resourcesByLesson[(int)$resource['lesson_id']][] = $resource;
+}
 
 header_html('Notes from All Classes');
 ?>
@@ -43,8 +48,9 @@ header_html('Notes from All Classes');
 <?php foreach ($pastLessons as $lesson): ?>
 <?php
     $cancelled = LessonManagement::isCancelled($lesson);
-    // notesForLessons returns newest-first; a conversation reads oldest-first.
+    // The batch queries return newest-first; a conversation reads oldest-first.
     $notes = array_reverse($notesByLesson[(int)$lesson['id']] ?? []);
+    $resources = array_reverse($resourcesByLesson[(int)$lesson['id']] ?? []);
 ?>
 <div class="card"<?=$cancelled ? ' style="opacity:0.7;"' : ''?>>
   <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap;">
@@ -61,15 +67,9 @@ header_html('Notes from All Classes');
     </div>
     <a href="#" data-lesson-detail="<?=(int)$lesson['id']?>" class="button notes" style="white-space:nowrap;">Notes &amp; Materials</a>
   </div>
-  <?php if ($notes): ?>
-    <div class="lesson-notes" style="margin-top:12px;">
-    <?php foreach ($notes as $note): ?>
-      <?=LessonDetailUIManager::noteBubbleHtml($note)?>
-    <?php endforeach; ?>
-    </div>
-  <?php else: ?>
-    <p class="small" style="margin-bottom:0;">No notes for this class.</p>
-  <?php endif; ?>
+  <div class="lesson-notes" style="margin-top:12px;">
+    <?=LessonDetailUIManager::threadBubblesHtml($notes, $resources)?>
+  </div>
 </div>
 <?php endforeach; ?>
 

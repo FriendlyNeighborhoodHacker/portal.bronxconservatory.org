@@ -107,11 +107,9 @@ header_html($title);
       <?=teacher_attendance_html($lessonId, null, $lesson['attended'])?>
     </div>
 
-    <h4>Notes</h4>
+    <h4>Notes &amp; Materials</h4>
     <?=LessonDetailUIManager::notesBlockHtml($lessonId, true, 'What you covered, what to practice…')?>
-
-    <h4>Materials</h4>
-    <?=LessonDetailUIManager::resourcesBlockHtml($lessonId, true)?>
+    <?=LessonDetailUIManager::resourcesEditButtonHtml($lessonId)?>
   </div>
 <?php endforeach; ?>
 

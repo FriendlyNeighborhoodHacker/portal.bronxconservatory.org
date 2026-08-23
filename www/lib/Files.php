@@ -221,7 +221,7 @@ final class Files {
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     $mime = (string)$finfo->file($tmp);
     if (!in_array($mime, $allowedMimeTypes, true)) {
-      throw new InvalidArgumentException('Unsupported file type (' . $mime . '). Allowed: PDF, images, Word, Excel, text.');
+      throw new InvalidArgumentException('Unsupported file type (' . $mime . '). Allowed: audio recordings, PDFs, images, and video.');
     }
 
     $data = @file_get_contents($tmp);

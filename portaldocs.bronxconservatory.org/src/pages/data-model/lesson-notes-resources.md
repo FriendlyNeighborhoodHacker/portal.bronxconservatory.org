@@ -40,7 +40,10 @@ an external link, each with a `title`.
 
 Adding materials works on the same terms as notes: anyone who may see the
 lesson — teacher, student, parent, admin — may attach to it; removing a
-material is limited to whoever added it, or an admin. Resources surface in
-three places: on the teacher's lesson card (where "Add a resource" lives), in
-the family's lesson modal (which offers the same editor), and collected on
-the student's My Materials page in lesson-date order.
+material is limited to whoever added it, or an admin. Notes and materials
+render as **one conversation thread** of chat bubbles, interleaved by time —
+a voice memo sits in the flow exactly where it was sent, like an attachment
+in a text thread. The materials editor (on teacher cards and in the family's
+lesson modal) accepts drag-and-drop, built for dragging voice memos straight
+in; materials are also collected on the student's My Materials page in
+lesson-date order.
