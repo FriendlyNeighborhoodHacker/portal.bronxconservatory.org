@@ -6,12 +6,25 @@
  * sync. Used by the /sample-data listing page and the download endpoint that
  * emits each file.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
-/** Absolute path of the repo's sample_data directory. */
-export const SAMPLE_DATA_DIR = fileURLToPath(new URL('../../../sample_data', import.meta.url));
+/**
+ * The repo's sample_data directory, found by walking up from the build's
+ * working directory (import.meta.url is useless here — the module is bundled
+ * into dist/ before prerendering runs).
+ */
+function findSampleDataDir(): string {
+  let dir = process.cwd();
+  for (let i = 0; i < 5; i++) {
+    const candidate = join(dir, 'sample_data');
+    if (existsSync(candidate)) return candidate;
+    dir = dirname(dir);
+  }
+  throw new Error('sample_data directory not found above ' + process.cwd());
+}
+
+export const SAMPLE_DATA_DIR = findSampleDataDir();
 
 export interface SampleFile {
   /** "fall_semester/location_dates.csv" — also the download path segment. */
