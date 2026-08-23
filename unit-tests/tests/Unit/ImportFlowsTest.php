@@ -934,13 +934,14 @@ final class ImportFlowsTest extends TestCase
             $this->ledgerRow('Lucia Ramos', 'registration', '35.00', ['date' => 'whenever']),
             $this->ledgerRow('Lucia Ramos', 'other', '20.00'),
             $this->ledgerRow('Lucia Ramos', 'payment', '100.00', ['accounting_type' => 'sideways']),
-            // Byte-for-byte the same as an earlier row.
+            // Byte-for-byte the same as an earlier row — kept, not rejected:
+            // two same-priced lesson blocks are two real charges.
             $this->ledgerRow('Lucia Ramos', 'lessons', '425.00'),
             $this->ledgerRow('Lucia Ramos', 'lessons', '425.00'),
         ], $context);
 
         $this->assertSame(
-            ['error', 'error', 'error', 'error', 'error', 'error', 'error', 'valid', 'error'],
+            ['error', 'error', 'error', 'error', 'error', 'error', 'error', 'valid', 'valid'],
             array_column($validated, 'status')
         );
         $this->assertStringContainsString('No match found for student', $validated[0]['messages'][0]);
@@ -950,9 +951,9 @@ final class ImportFlowsTest extends TestCase
         $this->assertStringContainsString('not a valid date', $validated[4]['messages'][0]);
         $this->assertStringContainsString('debit or a credit', $validated[5]['messages'][0]);
         $this->assertStringContainsString('Debit or Credit must be', $validated[6]['messages'][0]);
-        $this->assertStringContainsString('Identical to row 8', $validated[8]['messages'][0]);
+        $this->assertStringContainsString('both kept', $validated[8]['changes']);
 
-        $this->assertSame(1, LedgerEntriesCsvImport::commit($this->ctx, $validated, $context)['created']);
+        $this->assertSame(2, LedgerEntriesCsvImport::commit($this->ctx, $validated, $context)['created']);
     }
 
     public function testAmountParsing(): void

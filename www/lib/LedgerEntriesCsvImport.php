@@ -173,19 +173,22 @@ class LedgerEntriesCsvImport {
                 $key = implode(':', [
                     $fields['student_user_id'], $date, $accountingType, $entryType, $amountCents,
                 ]);
-                if (isset($seen[$key])) {
-                    $status = 'error';
-                    $messages[] = 'Identical to row ' . $seen[$key] . ' — remove one, or give them different dates.';
-                } elseif (Billing::entryExists($fields)) {
+                if (Billing::entryExists($fields)) {
                     $seen[$key] = $i + 1;
                     $changes = 'Already recorded (no change)';
                 } else {
+                    // Identical rows within one file are all kept: a student
+                    // with two same-priced lesson blocks legitimately owes the
+                    // same charge twice on the same date. The annotation just
+                    // makes the repetition visibly deliberate in the preview.
+                    $dupOfRow = $seen[$key] ?? null;
                     $seen[$key] = $i + 1;
                     $changes = ($accountingType === 'debit' ? 'Charge ' : 'Credit ')
                         . $student['first_name'] . ' ' . $student['last_name'] . ' '
                         . Billing::formatCents($amountCents)
                         . ' — ' . str_replace('_', ' ', $entryType)
-                        . ', ' . date('M j, Y', strtotime($date));
+                        . ', ' . date('M j, Y', strtotime($date))
+                        . ($dupOfRow !== null ? ' (same as row ' . $dupOfRow . ' — both kept)' : '');
                     $row['_fields'] = $fields;
                 }
             }
