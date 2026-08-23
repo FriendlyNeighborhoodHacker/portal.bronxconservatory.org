@@ -8,6 +8,10 @@
 
 require __DIR__ . '/config.local.php';
 
+// No database here means no Settings::timezone(), so the deploy log would
+// otherwise be stamped in the server's own time zone.
+date_default_timezone_set('America/New_York');
+
 if (!defined('GIT_WEBHOOK_SECRET') || GIT_WEBHOOK_SECRET === '') {
     http_response_code(500);
     echo "Webhook not configured\n";
