@@ -189,6 +189,74 @@ final class SemesterManagementTest extends TestCase
         $this->assertSame($locB, (int)$active[0]['id']);
     }
 
+    public function testLocationWeekdaysReplaceAndCleanup(): void
+    {
+        $semesterId = fx_semester($this->ctx);
+        $locA = fx_location_id();
+        $locB = fx_second_location_id();
+        SemesterManagement::setActiveLocations($this->ctx, $semesterId, [$locA, $locB], [
+            $locA => [[6, '09:00', '17:00']],
+            $locB => [[6, '09:00', '17:00'], [2, '15:30', '20:00']],
+        ]);
+
+        $this->assertSame([6], array_map('intval',
+            array_column(SemesterManagement::locationWeekdays($semesterId, $locA), 'day_of_week')));
+        $this->assertSame([2, 6], array_map('intval',
+            array_column(SemesterManagement::locationWeekdays($semesterId, $locB), 'day_of_week')));
+
+        // Replace-set: Tuesday goes away when not re-declared.
+        SemesterManagement::setLocationWeekdays($this->ctx, $semesterId, $locB, [[6, '10:00', '16:00']]);
+        $rows = SemesterManagement::locationWeekdays($semesterId, $locB);
+        $this->assertCount(1, $rows);
+        $this->assertSame('10:00:00', $rows[0]['start_time']);
+
+        // Removing a location drops its declarations too.
+        SemesterManagement::setActiveLocations($this->ctx, $semesterId, [$locA]);
+        $this->assertSame([], SemesterManagement::locationWeekdays($semesterId, $locB));
+
+        // Bad input throws.
+        $this->expectException(InvalidArgumentException::class);
+        SemesterManagement::setLocationWeekdays($this->ctx, $semesterId, $locA, [[6, '17:00', '09:00']]);
+    }
+
+    public function testWeekdaysForLocationIsTheUnionOfDeclaredAndDates(): void
+    {
+        $semesterId = fx_semester($this->ctx);
+        $locationId = fx_location_id();
+        SemesterManagement::setActiveLocations($this->ctx, $semesterId, [$locationId]);
+
+        // Nothing known yet.
+        $this->assertSame([], SemesterManagement::weekdaysForLocation($semesterId, $locationId));
+
+        // Declared Tuesday counts before any dates exist…
+        SemesterManagement::setLocationWeekdays($this->ctx, $semesterId, $locationId, [[2, '15:30', '20:00']]);
+        $this->assertSame([2], SemesterManagement::weekdaysForLocation($semesterId, $locationId));
+
+        // …and a real date on an undeclared weekday still counts.
+        SemesterManagement::upsertLocationDate(
+            $this->ctx, $semesterId, $locationId, '2030-09-07', '09:00:00', '17:00:00', 'active', 'Saturday one-off'
+        );
+        $this->assertSame([2, 6], SemesterManagement::weekdaysForLocation($semesterId, $locationId));
+    }
+
+    public function testDayHoursPreferDeclarationsAndUnionAcrossLocations(): void
+    {
+        $semesterId = fx_semester($this->ctx);
+        $locA = fx_location_id();
+        $locB = fx_second_location_id();
+        SemesterManagement::setActiveLocations($this->ctx, $semesterId, [$locA, $locB]);
+
+        // A declares Saturday 10-4; B has only dates, one of them wider (9-5).
+        SemesterManagement::setLocationWeekdays($this->ctx, $semesterId, $locA, [[6, '10:00', '16:00']]);
+        SemesterManagement::upsertLocationDate($this->ctx, $semesterId, $locA, '2030-09-07', '08:00:00', '18:00:00', 'active', null);
+        SemesterManagement::upsertLocationDate($this->ctx, $semesterId, $locB, '2030-09-07', '09:00:00', '17:00:00', 'active', null);
+
+        $hours = SemesterManagement::dayHoursForSemester($semesterId);
+        // A's declaration overrides its own wider date; B's date-derived hours
+        // still widen the day for the semester.
+        $this->assertSame([9 * 60, 17 * 60], $hours[6]);
+    }
+
     public function testLocationDateUpsertAndWeekdayQueries(): void
     {
         $semesterId = fx_semester($this->ctx);

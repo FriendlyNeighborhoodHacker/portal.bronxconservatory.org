@@ -133,6 +133,14 @@ class HoldBlocksCsvImport {
                 $messages[] = 'Title is required (e.g. "Lunch").';
             }
 
+            if ($status !== 'error' && $location && $teacher && $dayOfWeek !== null
+                && !SemesterManagement::isTeacherAtLocation($semesterId, (int)$location['id'], (int)$teacher['id'], $dayOfWeek)) {
+                $status = 'error';
+                $messages[] = ($teacher['first_name'] . ' ' . $teacher['last_name']) . ' does not teach at '
+                    . $location['name'] . ' on ' . self::dayLabel($dayOfWeek)
+                    . 's — check the day, or import a location-teachers row for it.';
+            }
+
             if ($status !== 'error' && $location && $teacher && $dayOfWeek !== null && $duration !== null) {
                 $key = self::slotKey((int)$location['id'], (int)$teacher['id'], $dayOfWeek, $startTime);
                 if (isset($seen[$key])) {

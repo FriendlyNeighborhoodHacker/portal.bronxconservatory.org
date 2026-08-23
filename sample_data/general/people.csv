@@ -13,6 +13,8 @@ Tanya,Johnson,tanya.johnson@example.org,718-555-0209,,1010 E 163rd St,Bronx,NY,1
 Wei,Chen,wei.chen@example.org,646-555-0210,,2710 Valentine Ave,Bronx,NY,10458,,,,,,
 Gloria,Martinez,gloria.martinez@example.org,347-555-0211,,480 Concord Ave,Bronx,NY,10455,,,,,,
 Keisha,Thompson,keisha.thompson@example.org,718-555-0212,,1170 Ogden Ave,Bronx,NY,10452,,,,,,
+Yolanda,Reyes,yolanda.reyes@example.org,718-555-0213,,741 Melrose Ave,Bronx,NY,10455,,,,,,
+Monique,Charles,monique.charles@example.org,347-555-0214,,1980 Webster Ave,Bronx,NY,10457,,,,,,
 Lucia,Ramos,,,,,,,,3/14/2013,2031,7,MS 223,Piano,Rosa Ramos; Hector Ramos
 Marco,Ramos,,,,,,,,9/2/2015,2033,5,PS 157,Violin,Rosa Ramos; Hector Ramos
 Devon,Brown,,,,,,,,6/21/2011,2029,9,University Heights HS,"Violin, Viola",Denise Brown
@@ -27,3 +29,6 @@ Chris,Johnson,,,,,,,,5/9/2012,2030,8,MS 45,Guitar,Tanya Johnson
 Mei,Chen,,,,,,,,8/23/2015,2033,5,PS 24,Piano,Wei Chen
 Angel,Martinez,,,,,,,,12/1/2011,2029,9,DeWitt Clinton HS,Voice,Gloria Martinez
 Kayla,Thompson,,,,,,,,3/3/2014,2032,6,MS 331,Cello,Keisha Thompson
+Sofia,Reyes,,,,,,,,5/19/2013,2031,7,MS 223,Violin,Yolanda Reyes
+Diego,Reyes,,,,,,,,7/22/2015,2033,5,PS 157,Guitar,Yolanda Reyes
+Jordan,Charles,,,,,,,,9/9/2012,2030,8,MS 45,Piano,Monique Charles

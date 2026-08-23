@@ -35,8 +35,11 @@ Five ideas explain most of the system. Everything else is detail.
 A semester is a season (`fall`/`spring`/`summer`/`test`) plus a year. It owns its
 own start/end dates, its own **fees**, its active **locations**, and — per
 location — a **calendar of class dates** (each active, or inactive for a break,
-titled e.g. "Holiday Week"). Schedules, lessons, and money all hang off a
-semester.
+titled e.g. "Holiday Week"). A location may meet on more than one weekday —
+Saturdays at both sites and Tuesday evenings at one, say — and each date
+carries its own hours. Teachers are assigned per (location, **day**), so a
+Saturday-only teacher never shows up on a Tuesday grid. Schedules, lessons,
+and money all hang off a semester.
 
 *Current semester resolution* (`SemesterManagement::resolveDefaultSemester`):
 the semester containing today → else the next future one → else the most recent
@@ -340,11 +343,15 @@ top bar rather than the submenu because it is a daily work queue, not a setting.
 
 ### Semester Schedule (`admin/schedule.php`)
 
-The weekly pattern as a grid: **columns are (location, teacher) pairs**, rows are
-30-minute slots per day. Each cell is a reservation, a hold block, or empty.
-Clicking an empty cell books one; clicking a filled one edits length or status,
-or deletes it. An **Edit** toggle enables dragging a reservation to another slot
-(off by default, so a stray gesture cannot move a family's lesson).
+The weekly pattern, drawn as **one grid per class day**, stacked (Saturdays on
+top, then on through the week): **columns are the (location, teacher) pairs
+assigned to that day**, rows are 30-minute slots over that day's real opening
+hours. A teacher who works Saturdays but not Tuesdays simply has no Tuesday
+column, and a Saturday-only location does not appear in the Tuesday grid at
+all. Each cell is a reservation, a hold block, or empty. Clicking an empty
+cell books one; clicking a filled one edits length or status, or deletes it.
+An **Edit** toggle enables dragging a reservation to another slot (off by
+default, so a stray gesture cannot move a family's lesson).
 
 Cell colors are the point of the page — they encode who has paid:
 

@@ -12,6 +12,9 @@ class SemesterManagement {
 
     public const SEASONS = ['fall', 'spring', 'summer', 'test'];
 
+    /** Saturday — the day assumed when a semester's class dates say nothing yet. */
+    public const DEFAULT_TEACHING_DAY = 6;
+
     private static function pdo(): PDO {
         return pdo();
     }
@@ -267,8 +270,17 @@ class SemesterManagement {
 
     // ── Active locations (wizard step 2) ──────────────────────────────────
 
-    /** Replace the semester's active-location set (diff-and-apply). */
-    public static function setActiveLocations(?UserContext $ctx, int $semesterId, array $locationIds): void {
+    /**
+     * Replace the semester's active-location set (diff-and-apply). Removing a
+     * location also drops its declared weekdays.
+     *
+     * $weekdaysByLocation, when given, replaces each listed location's
+     * declared weekdays in the same transaction:
+     * [locationId => [[dayOfWeek, 'HH:MM', 'HH:MM'], ...], ...].
+     */
+    public static function setActiveLocations(
+        ?UserContext $ctx, int $semesterId, array $locationIds, ?array $weekdaysByLocation = null
+    ): void {
         self::assertAdmin($ctx);
         $locationIds = array_values(array_unique(array_map('intval', $locationIds)));
         $pdo = self::pdo();
@@ -278,10 +290,17 @@ class SemesterManagement {
             foreach (array_diff($current, $locationIds) as $removeId) {
                 $pdo->prepare('DELETE FROM semester_locations WHERE semester_id=? AND location_id=?')
                     ->execute([$semesterId, $removeId]);
+                $pdo->prepare('DELETE FROM semester_location_weekdays WHERE semester_id=? AND location_id=?')
+                    ->execute([$semesterId, $removeId]);
             }
             foreach (array_diff($locationIds, $current) as $addId) {
                 $pdo->prepare('INSERT IGNORE INTO semester_locations (semester_id, location_id) VALUES (?,?)')
                     ->execute([$semesterId, $addId]);
+            }
+            if ($weekdaysByLocation !== null) {
+                foreach ($locationIds as $locationId) {
+                    self::replaceLocationWeekdays($semesterId, $locationId, $weekdaysByLocation[$locationId] ?? []);
+                }
             }
             $pdo->commit();
         } catch (\Throwable $e) {
@@ -289,6 +308,76 @@ class SemesterManagement {
             throw $e;
         }
         self::log($ctx, 'semester.locations_set', ['semester_id' => $semesterId, 'location_ids' => $locationIds]);
+    }
+
+    /**
+     * Replace one location's declared weekdays:
+     * $days = [[dayOfWeek, 'HH:MM', 'HH:MM'], ...].
+     */
+    public static function setLocationWeekdays(?UserContext $ctx, int $semesterId, int $locationId, array $days): void {
+        self::assertAdmin($ctx);
+        $pdo = self::pdo();
+        $pdo->beginTransaction();
+        try {
+            self::replaceLocationWeekdays($semesterId, $locationId, $days);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+        self::log($ctx, 'semester.location_weekdays_set', [
+            'semester_id' => $semesterId, 'location_id' => $locationId, 'days' => array_column($days, 0),
+        ]);
+    }
+
+    /** The delete-and-insert behind setLocationWeekdays; caller holds the transaction. */
+    private static function replaceLocationWeekdays(int $semesterId, int $locationId, array $days): void {
+        $pdo = self::pdo();
+        $pdo->prepare('DELETE FROM semester_location_weekdays WHERE semester_id=? AND location_id=?')
+            ->execute([$semesterId, $locationId]);
+        $st = $pdo->prepare(
+            'INSERT INTO semester_location_weekdays (semester_id, location_id, day_of_week, start_time, end_time)
+             VALUES (?,?,?,?,?)'
+        );
+        foreach ($days as $day) {
+            $dayOfWeek = (int)($day[0] ?? -1);
+            $start = self::normalizeTimeOfDay((string)($day[1] ?? ''), 'Start time');
+            $end = self::normalizeTimeOfDay((string)($day[2] ?? ''), 'End time');
+            if ($dayOfWeek < 0 || $dayOfWeek > 6) {
+                throw new InvalidArgumentException('Day of week must be 0 (Sunday) through 6 (Saturday).');
+            }
+            if ($end <= $start) {
+                throw new InvalidArgumentException('End time must be after the start time.');
+            }
+            $st->execute([$semesterId, $locationId, $dayOfWeek, $start, $end]);
+        }
+    }
+
+    /** "9:00" / "09:00:00" -> "09:00:00", or throws. */
+    private static function normalizeTimeOfDay(string $time, string $label): string {
+        if (!preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', trim($time), $m) || (int)$m[1] > 23 || (int)$m[2] > 59) {
+            throw new InvalidArgumentException($label . ' is not a valid time.');
+        }
+        return sprintf('%02d:%02d:%02d', (int)$m[1], (int)$m[2], (int)($m[3] ?? 0));
+    }
+
+    /**
+     * The declared weekdays — which days each location holds classes, with
+     * that day's standard hours. Ordered by location name, then day.
+     */
+    public static function locationWeekdays(int $semesterId, ?int $locationId = null): array {
+        $sql = 'SELECT slw.*, l.name AS location_name
+                FROM semester_location_weekdays slw
+                JOIN locations l ON l.id = slw.location_id
+                WHERE slw.semester_id = ?';
+        $args = [$semesterId];
+        if ($locationId !== null) {
+            $sql .= ' AND slw.location_id = ?';
+            $args[] = $locationId;
+        }
+        $st = self::pdo()->prepare($sql . ' ORDER BY l.name, slw.day_of_week');
+        $st->execute($args);
+        return $st->fetchAll();
     }
 
     /** The semester's active locations, ordered by name. */
@@ -439,12 +528,91 @@ class SemesterManagement {
         return $st->fetchAll();
     }
 
+    /**
+     * The weekdays a location holds classes on this semester, sorted: the
+     * union of its declared weekdays and the weekdays of its actual class
+     * dates. The union matters both ways — a declared day renders and accepts
+     * assignments before its dates are imported, and a one-off date on an odd
+     * weekday (which upsertLocationDate deliberately allows) keeps counting.
+     * Both active and inactive dates count: a location that meets Tuesdays is
+     * open Tuesdays even in the week it takes a break.
+     */
+    public static function weekdaysForLocation(int $semesterId, int $locationId): array {
+        $st = self::pdo()->prepare(
+            'SELECT DISTINCT dow FROM (
+                 SELECT day_of_week AS dow FROM semester_location_weekdays
+                 WHERE semester_id=? AND location_id=?
+                 UNION
+                 SELECT DAYOFWEEK(date) - 1 AS dow FROM semester_location_dates
+                 WHERE semester_id=? AND location_id=?
+             ) days ORDER BY dow'
+        );
+        $st->execute([$semesterId, $locationId, $semesterId, $locationId]);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /**
+     * When each class day opens and closes, in minutes since midnight:
+     * [day => [opensAt, closesAt]]. Days the semester does not meet on are
+     * absent. Per location a day's hours come from its declaration, falling
+     * back to the widest of its actual class dates (a location added to the
+     * semester after the wizard ran has dates but no declaration). Locations
+     * sharing a day are then unioned — one building opening early widens the
+     * day rather than hiding its own early hours. Callers snap this to
+     * whatever grid they draw on.
+     */
+    public static function dayHoursForSemester(int $semesterId): array {
+        // Per (location, day): declared hours where present…
+        $declared = [];
+        $st = self::pdo()->prepare(
+            'SELECT location_id, day_of_week AS dow, start_time, end_time
+             FROM semester_location_weekdays WHERE semester_id=?'
+        );
+        $st->execute([$semesterId]);
+        foreach ($st->fetchAll() as $row) {
+            $declared[$row['location_id'] . ':' . $row['dow']] =
+                [self::minutesOfDay((string)$row['start_time']), self::minutesOfDay((string)$row['end_time'])];
+        }
+        // …else the widest of that location's dates on that day.
+        $st = self::pdo()->prepare(
+            'SELECT location_id, DAYOFWEEK(date) - 1 AS dow, MIN(start_time) AS opens, MAX(end_time) AS closes
+             FROM semester_location_dates WHERE semester_id=? GROUP BY location_id, dow'
+        );
+        $st->execute([$semesterId]);
+        $perLocation = $declared;
+        foreach ($st->fetchAll() as $row) {
+            $key = $row['location_id'] . ':' . $row['dow'];
+            if (!isset($perLocation[$key])) {
+                $perLocation[$key] =
+                    [self::minutesOfDay((string)$row['opens']), self::minutesOfDay((string)$row['closes'])];
+            }
+        }
+        // Union across locations per day.
+        $hours = [];
+        foreach ($perLocation as $key => [$opens, $closes]) {
+            $day = (int)explode(':', $key)[1];
+            $hours[$day] = isset($hours[$day])
+                ? [min($hours[$day][0], $opens), max($hours[$day][1], $closes)]
+                : [$opens, $closes];
+        }
+        ksort($hours);
+        return $hours;
+    }
+
+    /** "17:00:00" -> 1020. */
+    private static function minutesOfDay(string $time): int {
+        [$h, $m] = array_map('intval', array_pad(explode(':', $time), 2, '0'));
+        return $h * 60 + $m;
+    }
+
     // ── Location teachers (wizard step 4, CSV-imported) ───────────────────
 
     /**
      * Replace the semester's (location, teacher) assignments with the given
-     * pairs: [[locationId, teacherUserId], ...]. Column order within a
-     * location follows the order pairs are given.
+     * pairs: [[locationId, teacherUserId, dayOfWeek?], ...]. Column order
+     * within a location follows the order pairs are given. A pair with no day
+     * is assigned to every weekday its location meets on — see
+     * daysForAssignment().
      */
     public static function setLocationTeachers(?UserContext $ctx, int $semesterId, array $pairs): void {
         self::assertAdmin($ctx);
@@ -455,7 +623,7 @@ class SemesterManagement {
             $sortOrder = [];
             $st = $pdo->prepare(
                 'INSERT IGNORE INTO semester_location_teachers
-                   (semester_id, location_id, teacher_user_id, sort_order) VALUES (?,?,?,?)'
+                   (semester_id, location_id, teacher_user_id, day_of_week, sort_order) VALUES (?,?,?,?,?)'
             );
             foreach ($pairs as $pair) {
                 $locationId = (int)($pair[0] ?? 0);
@@ -463,8 +631,19 @@ class SemesterManagement {
                 if ($locationId <= 0 || $teacherUserId <= 0) {
                     throw new InvalidArgumentException('Each pair needs a location id and a teacher user id.');
                 }
-                $sortOrder[$locationId] = ($sortOrder[$locationId] ?? 0) + 1;
-                $st->execute([$semesterId, $locationId, $teacherUserId, $sortOrder[$locationId]]);
+                $day = isset($pair[2]) ? (int)$pair[2] : null;
+                // One sort_order per teacher, shared across their days, so a
+                // teacher sits in the same column position on every day.
+                $key = $locationId . ':' . $teacherUserId;
+                if (!isset($sortOrder[$key])) {
+                    $sortOrder[$key] = count(array_filter(
+                        array_keys($sortOrder),
+                        fn(string $k): bool => str_starts_with($k, $locationId . ':')
+                    )) + 1;
+                }
+                foreach (self::daysForAssignment($semesterId, $locationId, $day) as $dayOfWeek) {
+                    $st->execute([$semesterId, $locationId, $teacherUserId, $dayOfWeek, $sortOrder[$key]]);
+                }
             }
             $pdo->commit();
         } catch (\Throwable $e) {
@@ -474,41 +653,99 @@ class SemesterManagement {
         self::log($ctx, 'semester.location_teachers_set', ['semester_id' => $semesterId, 'pairs' => count($pairs)]);
     }
 
-    /** Add one (location, teacher) assignment, keeping existing ones. */
-    public static function addLocationTeacher(?UserContext $ctx, int $semesterId, int $locationId, int $teacherUserId): void {
+    /**
+     * Add one (location, teacher, day) assignment, keeping existing ones.
+     * $dayOfWeek null means every weekday the location meets on, which is how
+     * a location-teachers CSV with no Day column behaves.
+     */
+    public static function addLocationTeacher(
+        ?UserContext $ctx, int $semesterId, int $locationId, int $teacherUserId, ?int $dayOfWeek = null
+    ): void {
         self::assertAdmin($ctx);
+        // A teacher already holding a column here keeps its position on their
+        // new day; a new teacher goes to the end.
         $st = self::pdo()->prepare(
-            'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM semester_location_teachers
-             WHERE semester_id=? AND location_id=?'
+            'SELECT MIN(sort_order) FROM semester_location_teachers
+             WHERE semester_id=? AND location_id=? AND teacher_user_id=?'
         );
-        $st->execute([$semesterId, $locationId]);
-        $next = (int)$st->fetchColumn();
-        self::pdo()->prepare(
+        $st->execute([$semesterId, $locationId, $teacherUserId]);
+        $existing = $st->fetchColumn();
+        if ($existing === null || $existing === false) {
+            $st = self::pdo()->prepare(
+                'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM semester_location_teachers
+                 WHERE semester_id=? AND location_id=?'
+            );
+            $st->execute([$semesterId, $locationId]);
+            $existing = (int)$st->fetchColumn();
+        }
+        $insert = self::pdo()->prepare(
             'INSERT IGNORE INTO semester_location_teachers
-               (semester_id, location_id, teacher_user_id, sort_order) VALUES (?,?,?,?)'
-        )->execute([$semesterId, $locationId, $teacherUserId, $next]);
+               (semester_id, location_id, teacher_user_id, day_of_week, sort_order) VALUES (?,?,?,?,?)'
+        );
+        $days = self::daysForAssignment($semesterId, $locationId, $dayOfWeek);
+        foreach ($days as $day) {
+            $insert->execute([$semesterId, $locationId, $teacherUserId, $day, (int)$existing]);
+        }
         self::log($ctx, 'semester.location_teacher_added', [
-            'semester_id' => $semesterId, 'location_id' => $locationId, 'teacher_user_id' => $teacherUserId,
+            'semester_id' => $semesterId, 'location_id' => $locationId,
+            'teacher_user_id' => $teacherUserId, 'days' => $days,
         ]);
+    }
+
+    /**
+     * Which days one assignment covers. A named day is taken as given; no day
+     * means every weekday the location meets on, falling back to Saturday for
+     * a location whose class dates have not been imported yet — the same
+     * fallback the schedule grid has always used.
+     */
+    public static function daysForAssignment(int $semesterId, int $locationId, ?int $dayOfWeek): array {
+        if ($dayOfWeek !== null) {
+            return [$dayOfWeek];
+        }
+        return self::weekdaysForLocation($semesterId, $locationId) ?: [self::DEFAULT_TEACHING_DAY];
     }
 
     /**
      * The semester's (location, teacher) pairs — the Semester Schedule grid's
      * column spine. Ordered by location name, then column sort order.
+     *
+     * With a $dayOfWeek, only the teachers working that day, which is what
+     * each of the grid's per-day tables is drawn from. Without one, one row
+     * per (location, teacher) however many days they work — the shape every
+     * caller that does not care about days expects.
      */
-    public static function locationTeachers(int $semesterId): array {
-        $st = self::pdo()->prepare(
-            'SELECT slt.*, l.name AS location_name,
+    public static function locationTeachers(int $semesterId, ?int $dayOfWeek = null): array {
+        $sql = 'SELECT slt.*, l.name AS location_name,
                     u.first_name AS teacher_first_name, u.last_name AS teacher_last_name,
                     u.preferred_name AS teacher_preferred_name
              FROM semester_location_teachers slt
              JOIN locations l ON l.id = slt.location_id
              JOIN users u ON u.id = slt.teacher_user_id
-             WHERE slt.semester_id = ?
-             ORDER BY l.name, slt.sort_order, u.last_name'
-        );
-        $st->execute([$semesterId]);
-        return $st->fetchAll();
+             WHERE slt.semester_id = ?';
+        $args = [$semesterId];
+        if ($dayOfWeek !== null) {
+            $sql .= ' AND slt.day_of_week = ?';
+            $args[] = $dayOfWeek;
+        }
+        $st = self::pdo()->prepare($sql . ' ORDER BY l.name, slt.sort_order, u.last_name');
+        $st->execute($args);
+        $rows = $st->fetchAll();
+        if ($dayOfWeek !== null) {
+            return $rows;
+        }
+        // Collapse a teacher's several days back into one column. Done here
+        // rather than with GROUP BY because slt.* would trip ONLY_FULL_GROUP_BY.
+        $seen = [];
+        $out = [];
+        foreach ($rows as $row) {
+            $key = $row['location_id'] . ':' . $row['teacher_user_id'];
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $out[] = $row;
+        }
+        return $out;
     }
 
     /**
@@ -596,13 +833,38 @@ class SemesterManagement {
         return $row;
     }
 
-    /** Is this teacher assigned to this location for this semester? */
-    public static function isTeacherAtLocation(int $semesterId, int $locationId, int $teacherUserId): bool {
+    /**
+     * Every assignment as a "locationId:teacherId:day" set — the cheap way to
+     * test many (pair, day) combinations at once.
+     */
+    public static function locationTeacherDayKeys(int $semesterId): array {
         $st = self::pdo()->prepare(
-            'SELECT COUNT(*) FROM semester_location_teachers
-             WHERE semester_id=? AND location_id=? AND teacher_user_id=?'
+            'SELECT location_id, teacher_user_id, day_of_week FROM semester_location_teachers WHERE semester_id=?'
         );
-        $st->execute([$semesterId, $locationId, $teacherUserId]);
+        $st->execute([$semesterId]);
+        $keys = [];
+        foreach ($st->fetchAll() as $row) {
+            $keys[$row['location_id'] . ':' . $row['teacher_user_id'] . ':' . $row['day_of_week']] = true;
+        }
+        return $keys;
+    }
+
+    /**
+     * Is this teacher assigned to this location for this semester — and, when
+     * a day is given, does that assignment cover that day?
+     */
+    public static function isTeacherAtLocation(
+        int $semesterId, int $locationId, int $teacherUserId, ?int $dayOfWeek = null
+    ): bool {
+        $sql = 'SELECT COUNT(*) FROM semester_location_teachers
+             WHERE semester_id=? AND location_id=? AND teacher_user_id=?';
+        $args = [$semesterId, $locationId, $teacherUserId];
+        if ($dayOfWeek !== null) {
+            $sql .= ' AND day_of_week=?';
+            $args[] = $dayOfWeek;
+        }
+        $st = self::pdo()->prepare($sql);
+        $st->execute($args);
         return (int)$st->fetchColumn() > 0;
     }
 

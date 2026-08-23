@@ -7,6 +7,7 @@ require_once __DIR__ . '/schedule_grid.php';
 require_once __DIR__ . '/../lib/SemesterManagement.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
 require_once __DIR__ . '/../lib/HoldBlockManagement.php';
+require_once __DIR__ . '/../lib/ScheduleGridData.php';
 require_once __DIR__ . '/../lib/LessonUIManager.php';
 require_once __DIR__ . '/../lib/HoldBlockUIManager.php';
 require_once __DIR__ . '/../lib/CalendarAddUIManager.php';
@@ -47,15 +48,19 @@ foreach (SemesterManagement::locationDates($semesterId) as $dateRow) {
     }
 }
 if (!$days) {
-    $days = [6 => true];
+    $days = [SemesterManagement::DEFAULT_TEACHING_DAY => true];
 }
 $days = array_keys($days);
 sort($days);
 
-$defaultBounds = [9 * 60, 16 * 60 + 30];
+// Each day runs over its real opening hours — Saturday and Tuesday may keep
+// entirely different ones.
+$hours = SemesterManagement::dayHoursForSemester($semesterId);
 $bounds = [];
 foreach ($days as $day) {
-    $bounds[$day] = $defaultBounds;
+    $bounds[$day] = isset($hours[$day])
+        ? ScheduleGridData::slotBounds($hours[$day])
+        : ScheduleGridData::DEFAULT_BOUNDS;
 }
 // Lessons and hold blocks share the grid: both are things occupying a
 // teacher's column at a moment in the week.
@@ -78,21 +83,10 @@ foreach ($holdBlocks as $hold) {
     $occupants[] = $hold;
 }
 
-// Columns follow that same effective pair, so a lesson someone is
-// substituting — at whichever building it is being held in — shows up in
-// their column there, including when neither of them has a column at that
-// location this semester, which is exactly when it would otherwise vanish.
-$columns = SemesterManagement::locationTeachersIncluding(
-    SemesterManagement::locationTeachers($semesterId),
-    array_map(
-        fn(array $o): array => ['location_id' => $o['_location_id'], 'teacher_user_id' => $o['_teacher_user_id']],
-        $occupants
-    )
-);
-
 // Each key holds a LIST: double-booking is prevented, but if one ever slips
 // through, the cell shows every commitment rather than hiding one.
 $cellIndex = [];
+$dayPairs = [];
 foreach ($occupants as $occupant) {
     $ts = strtotime((string)$occupant['start_datetime']);
     $day = (int)date('w', $ts);
@@ -102,8 +96,27 @@ foreach ($occupants as $occupant) {
     $bounds[$day][1] = max($bounds[$day][1] ?? $slot, $slot);
     $key = $occupant['_location_id'] . ':' . $occupant['_teacher_user_id'] . ':' . $day . ':' . $slot;
     $cellIndex[$key][] = $occupant;
+    $dayPairs[$day][] = ['location_id' => $occupant['_location_id'], 'teacher_user_id' => $occupant['_teacher_user_id']];
 }
-$rows = schedule_row_slots($days, $bounds);
+
+// One band per day, each with the teachers assigned to THAT day, widened by
+// the effective pair of anything actually happening on it — so a lesson
+// someone is substituting, at whichever building it is being held in, shows
+// up in their column there, including when neither of them has a column at
+// that location this semester, which is exactly when it would otherwise
+// vanish.
+$bands = [];
+foreach ($days as $day) {
+    $bands[] = [
+        'day' => $day,
+        'label' => date('l, M j', strtotime('+' . $day . ' days', $weekStartTs)),
+        'columns' => SemesterManagement::locationTeachersIncluding(
+            SemesterManagement::locationTeachers($semesterId, $day),
+            $dayPairs[$day] ?? []
+        ),
+        'bounds' => $bounds[$day],
+    ];
+}
 
 $cellFn = function (array $column, array $row) use ($cellIndex, $weekStartTs) {
     $columnKey = $column['location_id'] . ':' . $column['teacher_user_id'];
@@ -247,7 +260,7 @@ header_html('Calendar Week', ['wide' => true]);
 
 <?php /* The grid is drawn even on an empty week — that is precisely when you
          want to be able to click a slot and put something in it. */ ?>
-  <?=schedule_grid_html($columns, $rows, $cellFn)?>
+  <?=schedule_day_grids_html($bands, $cellFn, 'week')?>
   <div class="grid-legend" style="margin-top:10px;">
     <span><span class="swatch" style="background:var(--res-paid-bg);"></span>Scheduled</span>
     <span><span class="swatch" style="background:var(--res-substitute-bg);"></span>Substitute teacher</span>

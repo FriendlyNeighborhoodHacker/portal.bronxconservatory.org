@@ -29,6 +29,7 @@ DELETE FROM semester_hold_blocks;
 DELETE FROM semester_hold_block_reservations;
 DELETE FROM semester_location_teachers;
 DELETE FROM semester_location_dates;
+DELETE FROM semester_location_weekdays;
 DELETE FROM semester_locations;
 DELETE FROM semesters;
 

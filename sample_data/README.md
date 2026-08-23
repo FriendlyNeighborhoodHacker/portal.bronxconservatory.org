@@ -20,23 +20,33 @@ Reset first with `./reset_db.sh`, then upload in this order:
    two locations every later file references by name.
 1. **general/teachers.csv** — Admin > Teachers > Upload CSV (or setup Step 2)
 2. **general/people.csv** — Admin > Students > Upload Students & Parents CSV
-   (optional setup stage). One file for the whole roster: parent rows carry
-   contact/address details, student rows carry grade/instruments and list
-   their parents by name (or email — see Fatima's row) in the Parents
-   column. Siblings share the same parent rows; row order doesn't matter.
+   (optional setup stage). One file for the whole roster — 16 parents and 17
+   students: parent rows carry contact/address details, student rows carry
+   grade/instruments and list their parents by name (or email — see Fatima's
+   row) in the Parents column. Siblings share the same parent rows; row order
+   doesn't matter.
 
 ## 2. Fall 2026
 
 3. Create the semester (Fall 2026, 2026-09-08 – 2026-12-20), pick both
    locations, then:
-4. **fall_semester/location_dates.csv** — semester wizard step 3 (Saturdays
-   Sep 12 – Dec 19, 9:00 am – 5:00 pm at both locations, with Thanksgiving
-   weekend inactive)
+4. **fall_semester/location_dates.csv** — semester wizard step 3. The
+   conservatory runs two class days a week: Saturdays Sep 5 – Dec 19
+   (9:00 am – 5:00 pm at both locations, with Thanksgiving weekend inactive)
+   and, at Bronx Community College only, Tuesday evenings Sep 8 – Dec 15
+   (3:30 – 8:00 pm). Access Bronx Charter School is Saturday-only. There is no
+   inactive Tuesday: Thanksgiving falls on a Thursday, so only the Saturday
+   track takes that week off — holidays are per-weekday.
 5. **fall_semester/location_teachers.csv** — semester wizard step 4 (the
-   schedule grid's columns)
+   schedule grid's columns). One row per teacher-location-**day**: everyone
+   works Saturdays, and Andre Baptiste and Grace Lin also work the Tuesday
+   evenings at Bronx Community College. The Semester Schedule draws one grid
+   per day, so the Tuesday grid shows only those two columns. A blank Day
+   would assign the teacher to every day the location holds classes.
 6. **fall_semester/hold_blocks.csv** — Admin > Semesters > Import Hold Blocks.
    Gives every teacher a Saturday lunch, 12:00–1:30 pm, so those cells are held
-   instead of bookable. James Okafor teaches at both locations but gets only one
+   instead of bookable, and the two Tuesday teachers a 5:30–6:00 pm dinner.
+   James Okafor teaches at both locations but gets only one
    lunch: a teacher can't be in two places at once, and the importer rejects
    the second row if you add it.
 
@@ -47,7 +57,7 @@ Reset first with `./reset_db.sh`, then upload in this order:
 
 7. **fall_semester/semester_location_reservations.csv** — the last wizard step
    (Admin > Semesters > Import Schedule). One row per weekly lesson slot: all
-   14 students, one slot each, 10 confirmed and 4 still pending. Confirmed rows
+   17 students, one slot each, 12 confirmed and 5 still pending. Confirmed rows
    generate their lessons, but **no charges are posted** — this file is how an
    existing schedule moves into the portal, and those families' balances came
    from wherever they were kept before.
@@ -55,16 +65,21 @@ Reset first with `./reset_db.sh`, then upload in this order:
    Things it exercises: 45- and 60-minute lessons alongside the usual 30;
    siblings booked at the same hour with different teachers (the Ramos and Cruz
    pairs); James Okafor teaching at Access in the morning and Bronx Community
-   College after his lunch block.
+   College after his lunch block; and the Tuesday-evening students (the Reyes
+   siblings and Jordan Charles) at Bronx Community College — each Tuesday track
+   numbers its lessons independently of the Saturday track.
 
 8. **fall_semester/ledger_entries.csv** — the final wizard step (Admin >
    Semesters > Import Charges & Payments). Where the money already stood when
-   the portal took over: each of the 10 confirmed students carries a $35
-   registration fee, a $15 recital fee and $425 of lessons ($475), dated
-   Aug 15 before the semester opened. Then the payments that had come in:
+   the portal took over: each of the 12 confirmed students carries a $35
+   registration fee, a $15 recital fee and $420 of lessons for a 30-minute
+   slot ($470; the 60-minute students owe $840 of lessons, and Devon Brown
+   also carries a $20 installment-plan fee), dated Aug 15 before the semester
+   opened. Then the payments that had come in:
 
    - Lucia and Marco Ramos paid in full (two checks, Aug 20)
-   - Devon Brown paid half, $237.50, in September
+   - Sofia and Diego Reyes paid in full (two checks, Aug 22)
+   - Devon Brown paid half, $455, on Sep 5
    - the other seven confirmed students have not paid
 
    Which is the point of the file — after uploading it the Semester Schedule
@@ -88,16 +103,20 @@ The spring files deliberately differ from fall so the two semesters can't be
 confused for each other, and so semester-scoped data is visibly scoped:
 
 - 17 Saturdays, Jan 30 – May 22, with Midwinter Recess (Feb 20) and Spring
-  Break (Apr 3) inactive — 15 class days.
-- Bronx Community College runs a shorter day in spring (10:00 am – 4:00 pm);
-  Access Bronx Charter School stays 9:00 am – 5:00 pm.
+  Break (Apr 3) inactive — 15 class days. The Bronx Community College Tuesday
+  track runs Jan 26 – May 18, and unlike fall it DOES take its breaks: the
+  Tuesdays of recess week (Feb 16) and spring-break week (Mar 30) are
+  inactive, so both tracks still land on 15 class days.
+- Bronx Community College runs a shorter Saturday in spring (10:00 am –
+  4:00 pm); Access Bronx Charter School stays 9:00 am – 5:00 pm, and the
+  Tuesday evenings stay 3:30 – 8:00 pm.
 - Grace Lin picks up a second location, so spring has two teachers spanning
   both sites (Okafor and Lin) — each still gets exactly one lunch row.
 - Marisol Vega has a second hold block, a 9:00–9:30 am faculty meeting, since
   a teacher may hold several non-overlapping blocks in a week.
 
 Then, instead of uploading a schedule: **Admin > Semesters > Pre-populate from
-Previous**, with Fall 2026 as the source. All 14 students come across keeping
+Previous**, with Fall 2026 as the source. All 17 students come across keeping
 their teacher, location, day and time, every one of them **pending reach out** —
 the list to call through. Nothing is confirmed, no lessons are generated and
 nobody is charged. Re-running it is safe: rows already carried over are skipped

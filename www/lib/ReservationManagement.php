@@ -269,11 +269,8 @@ class ReservationManagement {
         }
 
         // The target's grid columns: a pair that no longer teaches there this
-        // semester has nowhere to put the reservation.
-        $columns = [];
-        foreach (SemesterManagement::locationTeachers($targetSemesterId) as $pair) {
-            $columns[$pair['location_id'] . ':' . $pair['teacher_user_id']] = true;
-        }
+        // semester — or not on that day — has nowhere to put the reservation.
+        $columns = SemesterManagement::locationTeacherDayKeys($targetSemesterId);
         // Already carried over? Keyed by student+teacher+location rather than
         // by slot, so re-running after an admin has moved someone's time does
         // not create a second reservation for them.
@@ -296,10 +293,11 @@ class ReservationManagement {
             $startTime = (string)$r['start_time'];
             $duration = (int)$r['duration_minutes'];
 
-            if (!isset($columns[$locationId . ':' . $teacherUserId])) {
+            if (!isset($columns[$locationId . ':' . $teacherUserId . ':' . $dayOfWeek])) {
                 $status = 'error';
                 $messages[] = trim((string)$r['teacher_first_name'] . ' ' . (string)$r['teacher_last_name'])
-                    . ' does not teach at ' . (string)$r['location_name'] . ' this semester.';
+                    . ' does not teach at ' . (string)$r['location_name'] . ' on '
+                    . self::DAY_LABELS[$dayOfWeek] . 's this semester.';
             } elseif (isset($existing[$studentUserId . ':' . $teacherUserId . ':' . $locationId])) {
                 $changes = 'Already carried over (no change)';
             } else {

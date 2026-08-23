@@ -32,6 +32,33 @@ function schedule_row_slots(array $days, array $bounds): array {
     return $rows;
 }
 
+/**
+ * Render one grid per class day, stacked: Saturdays first, then Tuesday
+ * below it. Each day gets its own table because each day has its own
+ * columns — a teacher who works Saturdays only has no Tuesday column — and
+ * the location header colspans and main.js's column pager both assume a
+ * single column spine per table.
+ *
+ * $bands from ScheduleGridData's 'bands'. $keyPrefix namespaces each grid's
+ * remembered pager page, so the two tables do not fight over one anchor.
+ */
+function schedule_day_grids_html(array $bands, callable $cellFn, string $keyPrefix, ?callable $labelFn = null): string {
+    if (!$bands) {
+        return schedule_grid_html([], [], $cellFn);
+    }
+    $html = '';
+    foreach ($bands as $band) {
+        $day = (int)$band['day'];
+        $rows = schedule_row_slots([$day], [$day => $band['bounds']]);
+        $label = $labelFn ? $labelFn($band) : (string)$band['label'];
+        $html .= '<section class="schedule-day">'
+            . '<h3 class="schedule-day-head">' . h($label) . '</h3>'
+            . schedule_grid_html($band['columns'], $rows, $cellFn, $keyPrefix . ':' . $day)
+            . '</section>';
+    }
+    return $html;
+}
+
 /** "Lucia Ramos" -> "Lucia R.", single word unchanged. */
 function schedule_short_person_name(string $full): string {
     $parts = preg_split('/\s+/', trim($full)) ?: [];
@@ -83,6 +110,9 @@ function schedule_cell_item_html(string $title, string $subtitle, array $attrs, 
  * ['html' => ..., 'class' => ..., 'attrs' => [k=>v], 'rowspan' => n,
  *  'skip' => bool] (skip = covered by an earlier rowspan).
  *
+ * $gridKey namespaces the pager's remembered page in sessionStorage; pass
+ * one whenever a page draws more than one grid.
+ *
  * The markup carries everything main.js's setupScheduleGrid() needs to
  * condense and paginate columns client-side: data-col on every teacher
  * header and body cell, data-loc-key + data-label on location headers,
@@ -90,7 +120,7 @@ function schedule_cell_item_html(string $title, string $subtitle, array $attrs, 
  * column spine as data-columns JSON on the table. The wrapper includes the
  * (initially hidden) pager mount.
  */
-function schedule_grid_html(array $columns, array $rows, callable $cellFn): string {
+function schedule_grid_html(array $columns, array $rows, callable $cellFn, string $gridKey = ''): string {
     if (!$columns) {
         return '<div class="card"><p>No teachers are assigned to locations for this semester yet. '
              . '<a href="/admin/semesters.php">Import location teachers</a> to build the grid.</p></div>';
@@ -112,7 +142,8 @@ function schedule_grid_html(array $columns, array $rows, callable $cellFn): stri
         $spine[] = ['loc' => $locKey, 'locName' => $name, 'teacher' => $teacherName];
     }
 
-    $html = '<div class="schedule-widget">';
+    $html = '<div class="schedule-widget"'
+        . ($gridKey !== '' ? ' data-grid-key="' . h($gridKey) . '"' : '') . '>';
     $html .= '<div class="schedule-pager hidden"></div>';
     $html .= '<div class="schedule-scroll"><table class="schedule-grid" data-columns="' . h(json_encode($spine)) . '">';
     $html .= '<thead><tr><th class="grid-time"></th>';

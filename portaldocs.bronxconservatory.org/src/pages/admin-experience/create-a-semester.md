@@ -64,9 +64,12 @@ design: rows that already exist are updated or skipped, never duplicated.
 
 One row per class date per location: `Location Name`, `Date`, `Start Time`,
 `End Time`, `Status` (active/inactive, blank = active), `Notes` ("Day 1",
-"Holiday Week" — shown on calendars as the date's title). Inactive rows are
-breaks: no lessons are generated for them, and families see the notes text.
-Dates outside the semester range are a warning, not an error.
+"Holiday Week" — shown on calendars as the date's title). A location may meet
+on more than one weekday — Saturdays at both sites and Tuesday evenings at
+one, say — with each date carrying its own hours; each weekday's track keeps
+its own "Day 1…Day N" numbering, matching how lessons are numbered. Inactive
+rows are breaks: no lessons are generated for them, and families see the
+notes text. Dates outside the semester range are a warning, not an error.
 
 Committing also **re-syncs existing lessons and hold blocks** at each
 touched location — confirmed reservations drop future lessons on
@@ -74,10 +77,13 @@ dates that are no longer active and generate any newly active ones.
 
 ### Step 4 — Location teachers (`location_teachers`)
 
-`Teacher Name`, `Location Name` — which teachers teach where. These pairs
-become the **columns of the Semester Schedule grid**; nothing can be
-scheduled for a teacher at a location without one. The import is purely
-additive (existing pairs are skipped, never removed).
+`Teacher Name`, `Location Name`, `Day` (optional) — which teachers teach
+where, and on which day of the week. These become the **columns of the
+Semester Schedule** — the schedule draws one grid per class day, and a
+teacher appears only in the grids of the days listed here; nothing can be
+scheduled for a teacher at a location on a day without one. A blank `Day`
+assigns the teacher to every weekday the location holds classes on. The
+import is purely additive (existing assignments are skipped, never removed).
 
 ### Step 5 — Hold blocks (`hold_blocks`)
 

@@ -7,6 +7,7 @@
 // straight through.
 require_once __DIR__ . '/../../partials.php';
 require_once __DIR__ . '/../../lib/SemesterManagement.php';
+require_once __DIR__ . '/../../lib/LocationManagement.php';
 Application::init();
 require_admin();
 
@@ -18,12 +19,36 @@ require_csrf();
 
 $semesterId = (int)($_POST['semester_id'] ?? 0);
 $locationIds = array_map('intval', (array)($_POST['location_ids'] ?? []));
+$dayInput = (array)($_POST['location_days'] ?? []);
 
 try {
     if (!$locationIds) {
         throw new InvalidArgumentException('Pick at least one location.');
     }
-    SemesterManagement::setActiveLocations(UserContext::getLoggedInUserContext(), $semesterId, $locationIds);
+    // Each selected location needs at least one class day, with hours.
+    $locationNames = [];
+    foreach (LocationManagement::all() as $location) {
+        $locationNames[(int)$location['id']] = (string)$location['name'];
+    }
+    $weekdaysByLocation = [];
+    foreach ($locationIds as $locationId) {
+        $days = [];
+        foreach ((array)($dayInput[$locationId] ?? []) as $dow => $dayRow) {
+            if (empty($dayRow['on'])) {
+                continue;
+            }
+            $days[] = [(int)$dow, (string)($dayRow['start'] ?? ''), (string)($dayRow['end'] ?? '')];
+        }
+        if (!$days) {
+            throw new InvalidArgumentException(
+                'Pick at least one class day for ' . ($locationNames[$locationId] ?? 'each location') . '.'
+            );
+        }
+        $weekdaysByLocation[$locationId] = $days;
+    }
+    SemesterManagement::setActiveLocations(
+        UserContext::getLoggedInUserContext(), $semesterId, $locationIds, $weekdaysByLocation
+    );
 
     $step7 = '/admin/import/upload.php?' . http_build_query([
         'flow' => 'ledger_entries',

@@ -220,13 +220,15 @@ function import_columns_help_html(array $flow): string {
 
         case 'location_dates':
             $intro = 'One row per class date per location. The location name must match one of '
-                . 'this semester\'s active locations. Inactive rows are breaks/holidays: no '
-                . 'lessons are generated for them, and the notes text is shown to families.';
+                . 'this semester\'s active locations, and each date must fall on a weekday the '
+                . 'location is declared open (the semester\'s Locations page). Inactive rows are '
+                . 'breaks/holidays: no lessons are generated for them, and the notes text is '
+                . 'shown to families.';
             $columns = [
                 ['Location Name', 'required', 'must match an active location for this semester'],
-                ['Date', 'required', '2026-09-12 or 9/12/2026'],
-                ['Start Time', 'required', '9:00 am, 4:30 PM, or 14:30'],
-                ['End Time', 'required', 'same formats as Start Time'],
+                ['Date', 'required', '2026-09-12 or 9/12/2026 — must fall on one of the location\'s declared days'],
+                ['Start Time', 'optional', '9:00 am, 4:30 PM, or 14:30 — blank inherits the day\'s declared hours'],
+                ['End Time', 'optional', 'same formats; blank inherits the day\'s declared hours'],
                 ['Status', 'optional', '"active" or "inactive" — blank means active'],
                 ['Notes', 'optional', 'e.g. "Day 1" or "Holiday Week" (shown for inactive dates)'],
             ];
@@ -238,16 +240,20 @@ function import_columns_help_html(array $flow): string {
             break;
 
         case 'location_teachers':
-            $intro = 'One row per teacher-location pair: which teachers teach at which location '
-                . 'this semester (these pairs become the Semester Schedule grid\'s columns). '
-                . 'Teacher names must match teachers already in the system — upload teachers first.';
+            $intro = 'One row per teacher-location-day: which teachers teach at which location, '
+                . 'and on which day of the week (these become the Semester Schedule grid\'s '
+                . 'columns — the grid draws one table per class day, and a teacher only appears '
+                . 'on the days listed here). Teacher names must match teachers already in the '
+                . 'system — upload teachers first.';
             $columns = [
                 ['Teacher Name', 'required', 'first and last name, e.g. "Marisol Vega"'],
                 ['Location Name', 'required', 'must match an active location for this semester'],
+                ['Day', 'optional', 'weekday name, e.g. "Saturday"; blank = every day the location holds classes'],
             ];
-            $example = "Teacher Name,Location Name\n"
-                . "Marisol Vega,Bronx Community College\n"
-                . "James Okafor,Access Bronx Charter School";
+            $example = "Teacher Name,Location Name,Day\n"
+                . "Marisol Vega,Bronx Community College,Saturday\n"
+                . "Andre Baptiste,Bronx Community College,Tuesday\n"
+                . "James Okafor,Access Bronx Charter School,";
             break;
 
         case 'hold_blocks':

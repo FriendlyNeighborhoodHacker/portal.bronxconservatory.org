@@ -38,8 +38,8 @@ if ($duration <= 0 || $duration > 240) {
     echo json_encode(['ok' => false, 'error' => 'Lesson length looks wrong.']);
     exit;
 }
-if (!SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $teacherUserId)) {
-    echo json_encode(['ok' => false, 'error' => 'That teacher is not assigned to that location this semester.']);
+if (!SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $teacherUserId, $dayOfWeek)) {
+    echo json_encode(['ok' => false, 'error' => 'That teacher is not assigned to that location on that day this semester.']);
     exit;
 }
 

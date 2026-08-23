@@ -24,8 +24,10 @@ locations disagree. Clicking any date opens that week.
 
 `/admin/calendar_week.php?date=…` is the schedule-grid shape for one real
 week (Sunday–Saturday, with Previous/Next), showing actual `lessons` and
-hold-block occurrences instead of the standing pattern. The differences from
-the abstract grid all follow from "real":
+hold-block occurrences instead of the standing pattern. Like the schedule it
+draws one grid per class day — but headed by the real date ("Tuesday, Sep 8")
+and ordered chronologically within the week, each with only that day's
+teachers. The differences from the abstract grid all follow from "real":
 
 - **Cancelled lessons don't appear** — their slot is genuinely free here.
   (The family and teacher still see them, marked cancelled.)

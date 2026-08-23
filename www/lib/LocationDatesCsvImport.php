@@ -31,6 +31,15 @@ class LocationDatesCsvImport {
         }
         $locationsByName = self::activeLocationsByNormalizedName($semesterId);
         $existing = self::existingDateKeys($semesterId);
+        // Declared weekdays per location — the days each location is open,
+        // and the hours blank times inherit.
+        $declaredHours = [];
+        $declaredDays = [];
+        foreach (SemesterManagement::locationWeekdays($semesterId) as $weekdayRow) {
+            $declaredHours[$weekdayRow['location_id'] . ':' . $weekdayRow['day_of_week']] =
+                [(string)$weekdayRow['start_time'], (string)$weekdayRow['end_time']];
+            $declaredDays[(int)$weekdayRow['location_id']][] = (int)$weekdayRow['day_of_week'];
+        }
 
         $out = [];
         $seen = [];
@@ -56,11 +65,35 @@ class LocationDatesCsvImport {
                 $messages[] = 'Outside the semester (' . $semester['start_date'] . ' – ' . $semester['end_date'] . ').';
             }
 
+            // A location with declared weekdays only accepts dates on them —
+            // a date on any other weekday is almost certainly a typo. A
+            // location with no declarations (predating them) is unchecked.
+            $dayOfWeek = $date !== null ? (int)date('w', strtotime($date)) : null;
+            $declared = $location ? ($declaredDays[(int)$location['id']] ?? []) : [];
+            if ($location && $dayOfWeek !== null && $declared && !in_array($dayOfWeek, $declared, true)) {
+                $status = 'error';
+                $messages[] = $location['name'] . ' is not open on ' . self::dayLabel($dayOfWeek)
+                    . 's this semester (declared days: ' . implode(', ', array_map([self::class, 'dayLabel'], $declared))
+                    . ') — fix the date, or add the day on the semester\'s Locations page.';
+            }
+
+            // Blank times inherit the declared hours for that weekday.
             $startTime = self::parseTime((string)($row['start_time'] ?? ''));
             $endTime = self::parseTime((string)($row['end_time'] ?? ''));
+            $inherited = $location !== null && $dayOfWeek !== null
+                ? ($declaredHours[$location['id'] . ':' . $dayOfWeek] ?? null)
+                : null;
+            if ($startTime === null && trim((string)($row['start_time'] ?? '')) === '' && $inherited) {
+                $startTime = $inherited[0];
+            }
+            if ($endTime === null && trim((string)($row['end_time'] ?? '')) === '' && $inherited) {
+                $endTime = $inherited[1];
+            }
             if ($startTime === null || $endTime === null) {
                 $status = 'error';
-                $messages[] = 'Start and end time are required (e.g. "9:00 am").';
+                $messages[] = $inherited === null && ($row['start_time'] ?? '') === '' && ($row['end_time'] ?? '') === ''
+                    ? 'Start and end time are required (e.g. "9:00 am") — or declare the day\'s hours on the Locations page and leave them blank.'
+                    : 'Start and end time are required (e.g. "9:00 am").';
             }
 
             $rowStatus = strtolower(trim((string)($row['status'] ?? '')));
@@ -157,6 +190,11 @@ class LocationDatesCsvImport {
             $out[$row['location_id'] . ':' . $row['date']] = true;
         }
         return $out;
+    }
+
+    /** 6 -> "Saturday". */
+    private static function dayLabel(int $dayOfWeek): string {
+        return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][$dayOfWeek] ?? (string)$dayOfWeek;
     }
 
     private static function norm(string $name): string {

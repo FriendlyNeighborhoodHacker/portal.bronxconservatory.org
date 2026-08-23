@@ -291,6 +291,23 @@ CREATE TABLE semester_locations (
   CONSTRAINT fk_semloc_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+-- Which weekdays each location holds classes on for a semester, with its
+-- standard hours that day (declared on the semester wizard's Locations step).
+-- The class-date calendar in semester_location_dates is validated against
+-- these days on import, and the schedule grid draws one table per class day
+-- over these hours.
+CREATE TABLE semester_location_weekdays (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  semester_id INT NOT NULL,
+  location_id INT NOT NULL,
+  day_of_week TINYINT NOT NULL COMMENT '0=Sunday..6=Saturday, PHP date(w)',
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  UNIQUE KEY unique_sem_loc_weekday (semester_id, location_id, day_of_week),
+  CONSTRAINT fk_slw_semester FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE CASCADE,
+  CONSTRAINT fk_slw_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 -- The class calendar per location: which dates classes are held (imported by
 -- CSV in the semester wizard). Inactive rows are breaks/holidays and are
 -- surfaced to students ("Holiday Week") but generate no lessons.
@@ -313,16 +330,19 @@ CREATE TABLE semester_location_dates (
 
 CREATE INDEX idx_sld_date ON semester_location_dates(semester_id, date);
 
--- Which teachers teach at which location for a semester (semester wizard
--- step 4). These pairs are the columns of the Semester Schedule grid;
+-- Which teachers teach at which location on which day for a semester
+-- (semester wizard step 4). These are the columns of the Semester Schedule
+-- grid, which draws one table per class day: a teacher who works Saturdays
+-- but not Tuesdays has a Saturday row only, and gets no Tuesday column.
 -- sort_order fixes the column order within a location.
 CREATE TABLE semester_location_teachers (
   id INT AUTO_INCREMENT PRIMARY KEY,
   semester_id INT NOT NULL,
   location_id INT NOT NULL,
   teacher_user_id INT NOT NULL,
+  day_of_week TINYINT NOT NULL COMMENT '0=Sunday..6=Saturday, PHP date(w)',
   sort_order INT NOT NULL DEFAULT 0,
-  UNIQUE KEY unique_sem_loc_teacher (semester_id, location_id, teacher_user_id),
+  UNIQUE KEY unique_sem_loc_teacher_day (semester_id, location_id, teacher_user_id, day_of_week),
   CONSTRAINT fk_slt_semester FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE CASCADE,
   CONSTRAINT fk_slt_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
   CONSTRAINT fk_slt_teacher FOREIGN KEY (teacher_user_id) REFERENCES users(id) ON DELETE CASCADE

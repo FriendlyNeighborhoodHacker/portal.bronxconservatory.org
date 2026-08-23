@@ -88,7 +88,9 @@ function fx_semester_with_dates(UserContext $ctx, int $teacherId, string $firstD
     ]);
     $locationId = fx_location_id();
     SemesterManagement::setActiveLocations($ctx, $semesterId, [$locationId]);
-    SemesterManagement::setLocationTeachers($ctx, $semesterId, [[$locationId, $teacherId]]);
+    SemesterManagement::setLocationWeekdays($ctx, $semesterId, $locationId, [
+        [(int)date('w', $firstTs), '09:00', '17:00'],
+    ]);
 
     $dates = [];
     for ($i = 0; $i < $count; $i++) {
@@ -96,6 +98,8 @@ function fx_semester_with_dates(UserContext $ctx, int $teacherId, string $firstD
         SemesterManagement::upsertLocationDate($ctx, $semesterId, $locationId, $date, '09:00:00', '17:00:00', 'active', 'Day ' . ($i + 1));
         $dates[] = $date;
     }
+    // After the dates, so the day-less assignment lands on $firstDate's weekday.
+    SemesterManagement::setLocationTeachers($ctx, $semesterId, [[$locationId, $teacherId]]);
     return [$semesterId, $locationId, $teacherId, (int)date('w', $firstTs), $dates];
 }
 

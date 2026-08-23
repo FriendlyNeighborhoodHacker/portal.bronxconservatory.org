@@ -1311,6 +1311,35 @@ body.auth .brand-logo {
 
 /* ===== BCM: wizard step indicator ===== */
 
+/* Wizard step 2: per-location day-of-week declarations. */
+.loc-days {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.loc-day-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 4px 18px;
+  margin: 8px 0 0 24px;
+}
+
+.loc-day-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loc-day-row > label {
+  min-width: 96px;
+}
+
+.loc-day-times input[type="time"] {
+  width: auto;
+  padding: 2px 4px;
+}
+
 .wizard-steps {
   display: flex;
   flex-wrap: wrap;
@@ -1454,6 +1483,15 @@ body.auth .brand-logo {
 }
 
 /* ===== BCM: semester schedule grid ===== */
+
+/* One stacked section per class day (Saturdays, then Tuesdays). */
+.schedule-day + .schedule-day {
+  margin-top: 28px;
+}
+
+.schedule-day-head {
+  margin: 0 0 8px;
+}
 
 .schedule-scroll {
   overflow-x: auto;

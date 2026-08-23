@@ -5,15 +5,20 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/UserContext.php';
 require_once __DIR__ . '/ActivityLog.php';
 require_once __DIR__ . '/SemesterManagement.php';
+require_once __DIR__ . '/HoldBlocksCsvImport.php';
 
 // The location-teachers CSV (semester wizard step 3d): which teachers teach
-// at which location this semester. $context requires ['semester_id' => n].
+// at which location this semester, and on which day of the week. A blank Day
+// assigns the teacher to every weekday the location holds classes on, which
+// is also what a CSV predating the Day column did. $context requires
+// ['semester_id' => n].
 class LocationTeachersCsvImport {
 
     public static function targetFields(): array {
         return [
             'teacher_name' => 'Teacher Name',
             'location_name' => 'Location Name',
+            'day' => 'Day',
         ];
     }
 
@@ -26,10 +31,7 @@ class LocationTeachersCsvImport {
         foreach (SemesterManagement::activeLocations($semesterId) as $location) {
             $locationsByName[self::norm((string)$location['name'])] = $location;
         }
-        $existingPairs = [];
-        foreach (SemesterManagement::locationTeachers($semesterId) as $pair) {
-            $existingPairs[$pair['location_id'] . ':' . $pair['teacher_user_id']] = true;
-        }
+        $existingPairs = SemesterManagement::locationTeacherDayKeys($semesterId);
 
         $out = [];
         $seen = [];
@@ -66,16 +68,48 @@ class LocationTeachersCsvImport {
                 }
             }
 
+            // A blank day means every weekday the location meets on.
+            $dayRaw = trim((string)($row['day'] ?? ''));
+            $dayOfWeek = null;
+            if ($dayRaw !== '') {
+                $dayOfWeek = HoldBlocksCsvImport::parseDayOfWeek($dayRaw);
+                if ($dayOfWeek === null) {
+                    $status = 'error';
+                    $messages[] = 'Unknown day "' . $dayRaw . '" — use a weekday name like "Saturday", or leave blank for every class day.';
+                }
+            }
+
+            // An explicit day must be one the location is actually open on
+            // (declared or with class dates). Nothing known yet = no check.
+            if ($status !== 'error' && $location && $dayOfWeek !== null) {
+                $openDays = SemesterManagement::weekdaysForLocation($semesterId, (int)$location['id']);
+                if ($openDays && !in_array($dayOfWeek, $openDays, true)) {
+                    $status = 'error';
+                    $messages[] = $location['name'] . ' is not open on ' . self::dayName($dayOfWeek)
+                        . 's this semester (' . implode(', ', array_map([self::class, 'dayName'], $openDays))
+                        . ') — check the day, or add it on the semester\'s Locations page.';
+                }
+            }
+
             if ($status !== 'error' && $location && $teacher) {
-                $key = $location['id'] . ':' . $teacher['id'];
-                if (isset($seen[$key]) || isset($existingPairs[$key])) {
+                $days = SemesterManagement::daysForAssignment($semesterId, (int)$location['id'], $dayOfWeek);
+                $newDays = [];
+                foreach ($days as $day) {
+                    $key = $location['id'] . ':' . $teacher['id'] . ':' . $day;
+                    if (!isset($seen[$key]) && !isset($existingPairs[$key])) {
+                        $newDays[] = $day;
+                    }
+                    $seen[$key] = true;
+                }
+                if (!$newDays) {
                     $changes = 'Already assigned (no change)';
                 } else {
-                    $changes = 'Assign ' . $teacher['first_name'] . ' ' . $teacher['last_name'] . ' to ' . $location['name'];
+                    $changes = 'Assign ' . $teacher['first_name'] . ' ' . $teacher['last_name'] . ' to ' . $location['name']
+                        . ' (' . implode(', ', array_map([self::class, 'dayName'], $newDays)) . ')';
                 }
-                $seen[$key] = true;
                 $row['_location_id'] = (int)$location['id'];
                 $row['_teacher_user_id'] = (int)$teacher['id'];
+                $row['_day_of_week'] = $dayOfWeek;
             }
 
             $out[] = [
@@ -104,7 +138,10 @@ class LocationTeachersCsvImport {
                 continue;
             }
             $row = $entry['data'];
-            SemesterManagement::addLocationTeacher($ctx, $semesterId, (int)$row['_location_id'], (int)$row['_teacher_user_id']);
+            SemesterManagement::addLocationTeacher(
+                $ctx, $semesterId, (int)$row['_location_id'], (int)$row['_teacher_user_id'],
+                isset($row['_day_of_week']) ? (int)$row['_day_of_week'] : null
+            );
             $added++;
         }
         return ['created' => $added, 'updated' => 0, 'skipped' => $skipped];
@@ -125,6 +162,11 @@ class LocationTeachersCsvImport {
         $norm = self::norm($name);
         $st->execute([$norm, $norm]);
         return $st->fetchAll();
+    }
+
+    /** 6 -> "Saturday". */
+    private static function dayName(int $day): string {
+        return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][$day] ?? (string)$day;
     }
 
     private static function norm(string $name): string {

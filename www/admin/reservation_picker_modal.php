@@ -40,7 +40,6 @@ function reservation_pick_column(array $columns, int $locationId, int $teacherUs
 function render_reservation_picker_modal(int $semesterId, array $grid, ?array $durations = null): void {
     $durations = $durations ?? ReservationManagement::DURATION_OPTIONS;
     $cellIndex = $grid['cellIndex'];
-    $rows = schedule_row_slots($grid['days'], $grid['bounds']);
 
     $cellFn = function (array $column, array $row) use ($cellIndex) {
         $columnKey = $column['location_id'] . ':' . $column['teacher_user_id'];
@@ -107,7 +106,7 @@ function render_reservation_picker_modal(int $semesterId, array $grid, ?array $d
         </div>
         <div class="error small hidden" id="slotPickErr"></div>
         <div style="overflow:auto;max-height:60vh;">
-          <?=schedule_grid_html($grid['columns'], $rows, $cellFn)?>
+          <?=schedule_day_grids_html($grid['bands'], $cellFn, 'picker')?>
         </div>
         <div class="actions actions-split">
           <span class="actions-right">

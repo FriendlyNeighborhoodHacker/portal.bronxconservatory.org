@@ -13,13 +13,17 @@ see [the calendar](/admin-experience/view-week-schedule).)
 
 ## The grid
 
-- **Columns** are location–teacher pairs — exactly the
-  `semester_location_teachers` rows, grouped under location headers in their
-  import order. No columns yet means no grid: "Import location teachers to
-  build the grid."
-- **Rows** are 30-minute slots per teaching weekday (defaults 9:00 am–4:30
-  pm, widened automatically to fit whatever is booked; days come from the
-  class-date calendar). A longer booking spans rows.
+One grid per class day, stacked — Saturdays on top, then on through the week
+— because each day has its own columns and its own hours.
+
+- **Columns** are location–teacher pairs — the `semester_location_teachers`
+  rows **for that day**, grouped under location headers in their import
+  order. A Saturday-only teacher has no Tuesday column, and a Saturday-only
+  location does not appear in the Tuesday grid at all. No columns yet means
+  no grid: "Import location teachers to build the grid."
+- **Rows** are 30-minute slots over that day's real opening hours from the
+  class-date calendar (9:00 am–4:30 pm when there are no dates yet, widened
+  automatically to fit whatever is booked). A longer booking spans rows.
 - **Cells** hold a reservation (student name + status), a hold block (title
   + "Held", grey diagonal hatch), or nothing. An accidental double-booking
   renders both occupants on a red hatch so nothing is ever hidden.

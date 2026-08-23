@@ -82,24 +82,24 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
     <h3>Location Preference</h3>
     <p class="form-question" id="q-location">Bronx Conservatory of Music has two locations.
       Please indicate your preference here.
-      <span class="small">PLEASE NOTE: if you want any day other than Saturday, select
-      Access Bronx Charter School.</span></p>
+      <span class="small">PLEASE NOTE: if you want a weekday evening, select
+      Bronx Community College.</span></p>
     <div class="choice-list choice-indent" role="radiogroup" aria-labelledby="q-location">
       <label class="inline">
         <input type="radio" name="location_preference" value="Bronx Community College"<?=($scheduling['location_preference'] ?? '') === 'Bronx Community College' ? ' checked' : ''?>>
         <span><strong>Bronx Community College</strong>, 200 Hall of Fame Terrace (ample parking) —
-          Saturdays 9:00am–6:00pm <em>(Saturdays only)</em></span>
+          Saturdays 9:00am–6:00pm; Tuesday evenings 3:30pm–8:00pm</span>
       </label>
       <label class="inline">
         <input type="radio" name="location_preference" value="Access Bronx Charter School"<?=($scheduling['location_preference'] ?? '') === 'Access Bronx Charter School' ? ' checked' : ''?>>
         <span><strong>Access Bronx Charter Elementary School</strong>, 388 Willis Ave —
-          Saturdays 9:00am–2:00pm; Tuesdays &amp; Thursdays 5:00pm–6:00pm (limited space)</span>
+          Saturdays 9:00am–2:00pm <em>(Saturdays only)</em></span>
       </label>
     </div>
 
     <h3>Preferred Day(s)</h3>
     <div class="choice-grid">
-      <?php foreach (['Saturday', 'Tuesday', 'Thursday'] as $day): ?>
+      <?php foreach (['Saturday', 'Tuesday'] as $day): ?>
       <label class="inline">
         <input type="checkbox" name="preferred_days[]" value="<?=$day?>"<?=in_array($day, (array)($scheduling['preferred_days'] ?? []), true) ? ' checked' : ''?>>
         <?=$day?>

@@ -78,7 +78,7 @@ function test_reset_all(): void {
         'ledger_entries', 'lesson_notes', 'lesson_resources', 'lessons',
         'semester_hold_blocks', 'semester_hold_block_reservations',
         'semester_lesson_reservations', 'semester_location_teachers',
-        'semester_location_dates', 'semester_locations', 'semesters',
+        'semester_location_dates', 'semester_location_weekdays', 'semester_locations', 'semesters',
         'announcements',
         'student_instruments', 'teacher_instruments',
         'student_profiles', 'teacher_profiles', 'parenthood',

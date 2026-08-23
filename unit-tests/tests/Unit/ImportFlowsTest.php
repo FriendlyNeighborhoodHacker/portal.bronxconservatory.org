@@ -288,6 +288,40 @@ final class ImportFlowsTest extends TestCase
         $this->assertSame('Already assigned (no change)', $again[0]['changes']);
     }
 
+    public function testLocationTeachersImportDayColumn(): void
+    {
+        $teacher = fx_teacher('Nia', 'Harp');
+        // A Saturday + Tuesday location: class dates on both weekdays.
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, fx_teacher('Sol', 'Oboe'), '2030-09-07', 3);
+        SemesterManagement::upsertLocationDate(
+            $this->ctx, $semesterId, $locationId, '2030-09-10', '15:30:00', '20:00:00', 'active', 'Day 1'
+        );
+        $locationName = (string)pdo()->query("SELECT name FROM locations WHERE id=$locationId")->fetchColumn();
+
+        // An explicit day assigns just that day.
+        $validated = LocationTeachersCsvImport::validateRows([
+            ['teacher_name' => 'Nia Harp', 'location_name' => $locationName, 'day' => 'Tuesday'],
+            ['teacher_name' => 'Nia Harp', 'location_name' => $locationName, 'day' => 'Someday'],
+        ], ['semester_id' => $semesterId]);
+        $this->assertSame(['valid', 'error'], array_column($validated, 'status'));
+        $this->assertStringContainsString('Unknown day', $validated[1]['messages'][0]);
+        LocationTeachersCsvImport::commit($this->ctx, $validated, ['semester_id' => $semesterId]);
+        $this->assertTrue(SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $teacher, 2));
+        $this->assertFalse(SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $teacher, 6));
+
+        // A blank day expands across every weekday the location meets on;
+        // the day already assigned is skipped rather than duplicated.
+        $blank = LocationTeachersCsvImport::validateRows([
+            ['teacher_name' => 'Nia Harp', 'location_name' => $locationName, 'day' => ''],
+        ], ['semester_id' => $semesterId]);
+        $this->assertSame('valid', $blank[0]['status']);
+        $this->assertStringContainsString('Saturday', $blank[0]['changes']);
+        $this->assertStringNotContainsString('Tuesday', $blank[0]['changes']);
+        LocationTeachersCsvImport::commit($this->ctx, $blank, ['semester_id' => $semesterId]);
+        $this->assertTrue(SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $teacher, 6));
+        $this->assertFalse(SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $teacher, 3));
+    }
+
     // ── Hold blocks ────────────────────────────────────────────────────────
 
     /** @return array{0:int,1:int,2:int,3:string} [semesterId, locationId, teacherId, locationName] */
@@ -449,13 +483,24 @@ final class ImportFlowsTest extends TestCase
             ['Teacher Name', 'Location Name', 'Day', 'Start Time', 'End Time', 'Title'],
             $parsed['headers']
         );
-        $this->assertCount(6, $parsed['rows']);
+        $this->assertCount(8, $parsed['rows']);
+        // Six Saturday lunches plus the two Tuesday-evening dinners.
+        $days = [];
         foreach ($parsed['rows'] as $row) {
-            $this->assertSame('Lunch', $row[5]);
-            $this->assertSame(6, HoldBlocksCsvImport::parseDayOfWeek($row[2]));
-            $this->assertSame('12:00:00', LocationDatesCsvImport::parseTime($row[3]));
-            $this->assertSame('13:30:00', LocationDatesCsvImport::parseTime($row[4]));
+            $day = HoldBlocksCsvImport::parseDayOfWeek($row[2]);
+            $days[] = $day;
+            if ($day === 6) {
+                $this->assertSame('Lunch', $row[5]);
+                $this->assertSame('12:00:00', LocationDatesCsvImport::parseTime($row[3]));
+                $this->assertSame('13:30:00', LocationDatesCsvImport::parseTime($row[4]));
+            } else {
+                $this->assertSame(2, $day);
+                $this->assertSame('Dinner', $row[5]);
+                $this->assertSame('17:30:00', LocationDatesCsvImport::parseTime($row[3]));
+                $this->assertSame('18:00:00', LocationDatesCsvImport::parseTime($row[4]));
+            }
         }
+        $this->assertSame([6 => 6, 2 => 2], array_count_values($days));
     }
 
     // ── Schedule (semester lesson reservations) ────────────────────────────
@@ -640,7 +685,7 @@ final class ImportFlowsTest extends TestCase
         $this->assertFileExists($path);
         $parsed = CsvImport::parseCsv((string)file_get_contents($path), ',');
         $this->assertSame(array_values(SemesterReservationsCsvImport::targetFields()), $parsed['headers']);
-        $this->assertCount(14, $parsed['rows']);
+        $this->assertCount(17, $parsed['rows']);
     }
 
     // ── Ledger entries (opening charges and payments) ──────────────────────
@@ -777,8 +822,8 @@ final class ImportFlowsTest extends TestCase
         $this->assertFileExists($path);
         $parsed = CsvImport::parseCsv((string)file_get_contents($path), ',');
         $this->assertSame(array_values(LedgerEntriesCsvImport::targetFields()), $parsed['headers']);
-        // 10 confirmed students x 3 charges, one installment fee, plus 3 payments.
-        $this->assertCount(34, $parsed['rows']);
+        // 12 confirmed students x 3 charges, one installment fee, plus 5 payments.
+        $this->assertCount(42, $parsed['rows']);
     }
 
     public function testTimeAndDateParsing(): void

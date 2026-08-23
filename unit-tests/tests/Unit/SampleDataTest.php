@@ -41,47 +41,79 @@ final class SampleDataTest extends TestCase
         )->fetchAll(), 'id'));
         $this->assertCount(2, $locationIds);
 
+        // The two locations by name — the day declarations differ per site.
+        $access = (int)pdo()->query("SELECT id FROM locations WHERE name='Access Bronx Charter School'")->fetchColumn();
+        $bcc = (int)pdo()->query("SELECT id FROM locations WHERE name='Bronx Community College'")->fetchColumn();
+
         $fall = SemesterManagement::createSemester($this->ctx, 'fall', 2026, '2026-09-08', '2026-12-20');
-        SemesterManagement::setActiveLocations($this->ctx, $fall, $locationIds);
+        SemesterManagement::setActiveLocations($this->ctx, $fall, $locationIds, [
+            $access => [[6, '09:00', '17:00']],
+            $bcc => [[6, '09:00', '17:00'], [2, '15:30', '20:00']],
+        ]);
         $this->importSemesterFiles($fall, 'fall_semester');
 
         // The point of the split: spring reuses general/ untouched.
         $spring = SemesterManagement::createSemester($this->ctx, 'spring', 2027, '2027-01-25', '2027-05-23');
-        SemesterManagement::setActiveLocations($this->ctx, $spring, $locationIds);
+        SemesterManagement::setActiveLocations($this->ctx, $spring, $locationIds, [
+            $access => [[6, '09:00', '17:00']],
+            $bcc => [[6, '10:00', '16:00'], [2, '15:30', '20:00']],
+        ]);
         $this->importSemesterFiles($spring, 'spring_semester');
 
-        $this->assertCount(32, SemesterManagement::locationDates($fall));   // 16 Saturdays x 2 locations (incl. one inactive holiday week)
-        $this->assertCount(34, SemesterManagement::locationDates($spring)); // 17 Saturdays x 2 locations
+        // The declarations round-trip: 2 fall rows for Access-Saturday and
+        // BCC-Saturday+Tuesday.
+        $this->assertSame(
+            [[6], [2, 6]],
+            [
+                array_map('intval', array_column(SemesterManagement::locationWeekdays($fall, $access), 'day_of_week')),
+                array_map('intval', array_column(SemesterManagement::locationWeekdays($fall, $bcc), 'day_of_week')),
+            ]
+        );
+
+        // Saturdays at both locations plus the BCC Tuesday-evening track.
+        $this->assertCount(47, SemesterManagement::locationDates($fall));   // 16 Saturdays x 2 locations (incl. one inactive holiday week) + 15 Tuesdays
+        $this->assertCount(51, SemesterManagement::locationDates($spring)); // 17 Saturdays x 2 locations + 17 Tuesdays (2 inactive each)
+        // One column per (location, teacher) pair however many days they work…
         $this->assertCount(7, SemesterManagement::locationTeachers($fall));
         $this->assertCount(8, SemesterManagement::locationTeachers($spring));
+        // …but only Baptiste and Lin work the Tuesday evenings.
+        $this->assertSame(
+            ['Andre Baptiste', 'Grace Lin'],
+            array_map(
+                fn(array $c) => trim($c['teacher_first_name'] . ' ' . $c['teacher_last_name']),
+                SemesterManagement::locationTeachers($fall, 2)
+            )
+        );
+        $this->assertCount(7, SemesterManagement::locationTeachers($fall, 6));
         // One lunch per teacher — Okafor and Lin span both locations but can
-        // only be in one place — plus Vega's spring faculty meeting.
-        $this->assertCount(6, HoldBlockManagement::holdBlockReservationsForSemester($fall));
-        $this->assertCount(7, HoldBlockManagement::holdBlockReservationsForSemester($spring));
+        // only be in one place — plus the two Tuesday dinners, plus Vega's
+        // spring faculty meeting.
+        $this->assertCount(8, HoldBlockManagement::holdBlockReservationsForSemester($fall));
+        $this->assertCount(9, HoldBlockManagement::holdBlockReservationsForSemester($spring));
 
         // Fall's schedule arrives by CSV: every student gets exactly one slot.
         $fallReservations = ReservationManagement::reservationsForSemester($fall);
-        $this->assertCount(14, $fallReservations);
-        $this->assertCount(14, array_unique(array_column($fallReservations, 'student_user_id')));
+        $this->assertCount(17, $fallReservations);
+        $this->assertCount(17, array_unique(array_column($fallReservations, 'student_user_id')));
         $this->assertSame(
-            ['confirmed' => 10, 'pending_confirmation' => 2, 'pending_reach_out' => 2], // ksorted
+            ['confirmed' => 12, 'pending_confirmation' => 3, 'pending_reach_out' => 2], // ksorted
             $this->countByStatus($fallReservations)
         );
 
         // Money arrives only from the ledger file — the schedule import bills
-        // nobody — and lands on exactly the ten confirmed students.
-        $this->assertSame(34, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+        // nobody — and lands on exactly the twelve confirmed students.
+        $this->assertSame(42, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
         $balances = Billing::semesterBalancesByStudent(
             $fall, array_map('intval', array_column($fallReservations, 'student_user_id'))
         );
         $charged = array_filter($balances, fn(array $b) => $b['semester_debit_cents'] > 0);
-        $this->assertCount(10, $charged);
-        // Eight 30-minute students at 35 + 15 + 420; Angel at 60 min
+        $this->assertCount(12, $charged);
+        // Ten 30-minute students at 35 + 15 + 420; Angel at 60 min
         // (35 + 15 + 840); Devon at 60 min plus the $20 installment fee.
         $debits = array_map(fn(array $b) => $b['semester_debit_cents'], $charged);
         sort($debits);
         $this->assertSame(
-            [47000, 47000, 47000, 47000, 47000, 47000, 47000, 47000, 89000, 91000],
+            [47000, 47000, 47000, 47000, 47000, 47000, 47000, 47000, 47000, 47000, 89000, 91000],
             $debits
         );
 
@@ -99,22 +131,25 @@ final class SampleDataTest extends TestCase
         $this->assertSame('res-balance-full', $byStudent['Naomi Osei']);
         $this->assertSame('res-pending', $byStudent['Fatima Al-Sayed']);
         $this->assertSame('res-reach-out', $byStudent['Amara Diallo']);
+        $this->assertSame('res-paid', $byStudent['Sofia Reyes']);
+        $this->assertSame('res-paid', $byStudent['Diego Reyes']);
+        $this->assertSame('res-pending', $byStudent['Jordan Charles']);
         $this->assertSame(
-            ['res-balance-full' => 7, 'res-balance-half' => 1, 'res-paid' => 2,
-             'res-pending' => 2, 'res-reach-out' => 2],
+            ['res-balance-full' => 7, 'res-balance-half' => 1, 'res-paid' => 4,
+             'res-pending' => 3, 'res-reach-out' => 2],
             $this->countValues($byStudent)
         );
 
         // Spring's schedule arrives the other way: carried forward from fall,
         // all pending reach out, nothing materialized.
         $this->assertSame(
-            ['created' => 14, 'skipped' => 0],
+            ['created' => 17, 'skipped' => 0],
             ReservationManagement::carryForwardFromSemester($this->ctx, $spring, $fall)
         );
         $springReservations = ReservationManagement::reservationsForSemester($spring);
-        $this->assertSame(['pending_reach_out' => 14], $this->countByStatus($springReservations));
+        $this->assertSame(['pending_reach_out' => 17], $this->countByStatus($springReservations));
         // Fall's ledger is the only ledger: carrying forward charges nobody.
-        $this->assertSame(34, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+        $this->assertSame(42, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
         $this->assertSame(0, (int)pdo()->query(
             "SELECT COUNT(*) FROM ledger_entries WHERE semester_id = $spring"
         )->fetchColumn());

@@ -63,9 +63,12 @@ drives lesson generation — a confirmed reservation produces one lesson per
 
 ## `semester_location_teachers`
 
-Which teachers teach at which location for a semester — wizard step 4, unique
-on (`semester_id`, `location_id`, `teacher_user_id`). These pairs are the
-**columns of the Semester Schedule grid** in the admin UI, and `sort_order`
-fixes the column order within a location. A reservation can only be placed in
-a column that exists here, which is why carrying a schedule forward to a new
-semester skips reservations whose teacher no longer teaches at that location.
+Which teachers teach at which location **on which day of the week** for a
+semester — wizard step 4, unique on (`semester_id`, `location_id`,
+`teacher_user_id`, `day_of_week`). These are the **columns of the Semester
+Schedule** in the admin UI — the schedule draws one grid per class day, and a
+teacher who works Saturdays but not Tuesdays has a Saturday row only —
+and `sort_order` fixes the column order within a location. A reservation can
+only be placed in a column that exists here, which is why carrying a schedule
+forward to a new semester skips reservations whose teacher no longer teaches
+at that location on that day.

@@ -230,8 +230,12 @@ function bcmTypeahead(opts) {
 // index is kept in sessionStorage so the modals' post-save reloads return to
 // the same page.
 function setupScheduleGrid() {
-  var widget = document.querySelector('.schedule-widget');
-  if (!widget) return;
+  // A page may stack several grids (one per class day); each condenses and
+  // pages independently.
+  document.querySelectorAll('.schedule-widget').forEach(setupOneScheduleGrid);
+}
+
+function setupOneScheduleGrid(widget) {
   var table = widget.querySelector('table[data-columns]');
   var pagerEl = widget.querySelector('.schedule-pager');
   if (!table || !pagerEl) return;
@@ -246,7 +250,8 @@ function setupScheduleGrid() {
 
   var GUTTER_NORMAL = 90, COL_NORMAL = 130;
   var GUTTER_COMPACT = 72, COL_COMPACT = 92;
-  var storageKey = 'scheduleGrid:' + window.location.pathname;
+  var storageKey = 'scheduleGrid:' + window.location.pathname
+    + (widget.dataset.gridKey ? ':' + widget.dataset.gridKey : '');
   var pages = [];         // [{cols: [indexes], label: 'Location (1 of 2)'}]
   var currentPage = 0;
   var resizeTimer = null;

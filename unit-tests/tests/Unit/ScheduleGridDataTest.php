@@ -53,6 +53,51 @@ final class ScheduleGridDataTest extends TestCase
         $this->assertSame([], $grid['cellIndex']);
     }
 
+    public function testBandsCarryPerDayColumnsAndBounds(): void
+    {
+        // A second location that meets Tuesday evenings, staffed by a
+        // Tuesday-only teacher; the fixture's location stays Saturday-only.
+        $tuesdayTeacher = fx_teacher('Nia', 'Harp');
+        $otherLocation = fx_second_location_id();
+        SemesterManagement::setActiveLocations($this->ctx, $this->semesterId, [$this->locationId, $otherLocation]);
+        SemesterManagement::upsertLocationDate(
+            $this->ctx, $this->semesterId, $otherLocation, '2030-09-10', '15:30:00', '20:00:00', 'active', 'Day 1'
+        );
+        SemesterManagement::addLocationTeacher($this->ctx, $this->semesterId, $otherLocation, $tuesdayTeacher, 2);
+
+        $grid = ScheduleGridData::semesterWeeklyGrid($this->semesterId);
+
+        // Saturday-first — the main day on top — then on through the week.
+        $this->assertSame([6, 2], array_column($grid['bands'], 'day'));
+        $this->assertSame(['Saturdays', 'Tuesdays'], array_column($grid['bands'], 'label'));
+        [$saturday, $tuesday] = $grid['bands'];
+
+        // Each band holds only its own day's teachers.
+        $this->assertSame([$this->teacher], array_map('intval', array_column($saturday['columns'], 'teacher_user_id')));
+        $this->assertSame([$tuesdayTeacher], array_map('intval', array_column($tuesday['columns'], 'teacher_user_id')));
+
+        // And each band runs over its own day's real hours: the Tuesday
+        // building opens 3:30 pm and closes 8:00, so the last slot a lesson
+        // may start in is 7:30.
+        $this->assertSame(ScheduleGridData::DEFAULT_BOUNDS, $saturday['bounds']);
+        $this->assertSame([15 * 60 + 30, 19 * 60 + 30], $tuesday['bounds']);
+    }
+
+    public function testABookingOnADayItsTeacherLostStillGetsAColumn(): void
+    {
+        $reservationId = $this->reserve('10:00', 30);
+        // The assignment behind the booking goes away.
+        pdo()->exec('DELETE FROM semester_location_teachers WHERE semester_id=' . $this->semesterId);
+
+        $grid = ScheduleGridData::semesterWeeklyGrid($this->semesterId);
+
+        $band = $grid['bands'][0];
+        $this->assertSame($this->dayOfWeek, $band['day']);
+        $this->assertSame([$this->teacher], array_map('intval', array_column($band['columns'], 'teacher_user_id')));
+        $this->assertTrue((bool)$band['columns'][0]['is_extra']);
+        $this->assertNotNull($reservationId);
+    }
+
     public function testEmptySemesterFallsBackToSaturday(): void
     {
         $bareSemester = fx_semester($this->ctx, 'spring', 2031, '2031-01-05', '2031-05-20');

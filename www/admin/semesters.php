@@ -31,6 +31,19 @@ header_html('Semesters');
 <?php
   $semesterId = (int)$semester['id'];
   $locations = SemesterManagement::activeLocations($semesterId);
+  // "Access Bronx Charter School — Saturdays · Bronx Community College — Saturdays, Tuesdays"
+  $weekdaysByLocation = [];
+  foreach (SemesterManagement::locationWeekdays($semesterId) as $weekdayRow) {
+    $weekdaysByLocation[(string)$weekdayRow['location_name']][] =
+        ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'][(int)$weekdayRow['day_of_week']];
+  }
+  $locationSummary = implode(' · ', array_map(
+      fn(array $location): string => $location['name']
+          . (isset($weekdaysByLocation[$location['name']])
+              ? ' — ' . implode(', ', $weekdaysByLocation[$location['name']])
+              : ''),
+      $locations
+  ));
   $dates = SemesterManagement::locationDates($semesterId);
   $columns = SemesterManagement::locationTeachers($semesterId);
   $reservations = ReservationManagement::reservationsForSemester($semesterId);
@@ -41,7 +54,7 @@ header_html('Semesters');
   </h3>
   <div class="card-sub">
     <?=h($semester['start_date'])?> &ndash; <?=h($semester['end_date'])?>
-    &middot; <?=count($locations)?> location<?=count($locations) === 1 ? '' : 's'?>
+    <?php if ($locationSummary !== ''): ?>&middot; <?=h($locationSummary)?><?php else: ?>&middot; <?=count($locations)?> location<?=count($locations) === 1 ? '' : 's'?><?php endif; ?>
     &middot; <?=count($dates)?> class date<?=count($dates) === 1 ? '' : 's'?>
     &middot; <?=count($columns)?> teacher assignment<?=count($columns) === 1 ? '' : 's'?>
     &middot; <?=count($reservations)?> reservation<?=count($reservations) === 1 ? '' : 's'?>

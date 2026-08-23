@@ -25,10 +25,8 @@ $semester = SemesterManagement::find($semesterId);
 
 // The weekly spine — the same one the lead-conversion slot picker draws from.
 $grid = ScheduleGridData::semesterWeeklyGrid($semesterId);
-$columns = $grid['columns'];
 $balances = $grid['balances'];
 $cellIndex = $grid['cellIndex'];
-$rows = schedule_row_slots($grid['days'], $grid['bounds']);
 
 $cellFn = function (array $column, array $row) use ($cellIndex, $balances) {
     $columnKey = $column['location_id'] . ':' . $column['teacher_user_id'];
@@ -148,7 +146,7 @@ header_html('Semester Schedule', ['wide' => true]);
   <span><span class="swatch" style="background:var(--res-hold-bg);"></span>Hold block</span>
 </div>
 
-<?=schedule_grid_html($columns, $rows, $cellFn)?>
+<?=schedule_day_grids_html($grid['bands'], $cellFn, 'schedule')?>
 
 <p class="small" style="margin-top:10px;">Click an empty cell to reserve it for a student or hold it
 for the teacher; click a filled cell to change or remove it. Press <strong>Edit</strong> to drag a
