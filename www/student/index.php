@@ -45,15 +45,11 @@ header_html('My Schedule');
       . ($lastLesson['substitute_last_name'] ?? null ?: $lastLesson['teacher_last_name'])))?><?=LessonManagement::isCancelled($lastLesson) ? ' · cancelled' : ''?>
   </p>
   <?php if ($lastLessonNotes): ?>
+    <div class="lesson-notes">
     <?php foreach ($lastLessonNotes as $note): ?>
-    <div style="padding:10px 12px;margin-bottom:8px;background:var(--color-surface-sunk);border-radius:var(--radius-sm);">
-      <div style="white-space:pre-wrap;"><?=h($note['body'])?></div>
-      <div class="small" style="margin-top:4px;color:var(--color-text-muted);">
-        — <?=h($note['author_first_name'] . ' ' . $note['author_last_name'])?>,
-        <?=h(date('M j, g:i a', strtotime($note['created_at'])))?>
-      </div>
-    </div>
+      <?=LessonDetailUIManager::noteBubbleHtml($note)?>
     <?php endforeach; ?>
+    </div>
   <?php else: ?>
     <p class="small">No notes were left for this class yet.</p>
   <?php endif; ?>

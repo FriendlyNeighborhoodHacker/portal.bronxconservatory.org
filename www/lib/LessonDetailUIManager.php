@@ -21,7 +21,7 @@ class LessonDetailUIManager {
 
     // ── Fragments ─────────────────────────────────────────────────────────
 
-    /** A lesson's notes, oldest first, each signed and dated. */
+    /** A lesson's notes, oldest first, each a chat bubble signed underneath. */
     public static function notesHtml(int $lessonId): string {
         $notes = NotesManagement::lessonNotesForLesson($lessonId);
         if (!$notes) {
@@ -29,14 +29,19 @@ class LessonDetailUIManager {
         }
         $html = '';
         foreach ($notes as $note) {
-            $author = trim((string)$note['author_first_name'] . ' ' . (string)$note['author_last_name']);
-            $html .= '<div class="lesson-note">'
-                . '<div class="lesson-note-by">' . h($author) . ' · '
-                . h(date('M j, Y g:i A', strtotime((string)$note['created_at']))) . '</div>'
-                . '<div>' . nl2br(h((string)$note['body'])) . '</div>'
-                . '</div>';
+            $html .= self::noteBubbleHtml($note);
         }
         return $html;
+    }
+
+    /** One note as a speech bubble: the message, then who said it and when. */
+    public static function noteBubbleHtml(array $note): string {
+        $author = trim((string)$note['author_first_name'] . ' ' . (string)$note['author_last_name']);
+        return '<div class="lesson-note">'
+            . '<div>' . nl2br(h((string)$note['body'])) . '</div>'
+            . '<div class="lesson-note-by">— ' . h($author) . ', '
+            . h(date('M j, Y g:i A', strtotime((string)$note['created_at']))) . '</div>'
+            . '</div>';
     }
 
     /**
@@ -174,10 +179,21 @@ class LessonDetailUIManager {
                 body.innerHTML = '<p class="error">We could not load this lesson just now. Please try again.</p>';
               });
           });
+
+          // A note or material added in the modal changes what the page
+          // behind it should show (an "Add Note" link becomes a Notes &
+          // Materials button, counts change), so when the modal closes after
+          // a save — however it is closed — the page refreshes itself.
+          new MutationObserver(function () {
+            if (modal.classList.contains('hidden') && window.bcmLessonDataChanged) {
+              window.location.reload();
+            }
+          }).observe(modal, { attributes: true, attributeFilter: ['class'] });
         });
         </script>
         <?php
         self::renderNotesScript();
+        self::renderResourceModal();
     }
 
     /**
@@ -201,7 +217,7 @@ class LessonDetailUIManager {
         <?=self::notesBlockHtml($lessonId, true, 'Add a note — a question for the teacher, or how practice went…')?>
 
         <h4>Materials</h4>
-        <?=self::resourcesBlockHtml($lessonId, false)?>
+        <?=self::resourcesBlockHtml($lessonId, true)?>
         <?php
     }
 
@@ -247,6 +263,7 @@ class LessonDetailUIManager {
                 if (list) list.innerHTML = res.text;
                 if (box) box.value = '';
                 if (state) state.textContent = 'Note saved.';
+                window.bcmLessonDataChanged = true;
               })
               .catch(function () {
                 if (button) button.disabled = false;
@@ -267,8 +284,17 @@ class LessonDetailUIManager {
      * One form, one save: ticking Remove stages a deletion rather than firing
      * it, so a teacher can clear out last week's recording and attach this
      * week's in a single trip, and back out of the whole thing with Cancel.
+     *
+     * Render-once guarded, because renderModal() includes it for the family
+     * pages while the teacher pages also call it directly.
      */
+    private static bool $resourceModalRendered = false;
+
     public static function renderResourceModal(): void {
+        if (self::$resourceModalRendered) {
+            return;
+        }
+        self::$resourceModalRendered = true;
         ?>
         <div id="lessonResourceModal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true"
              aria-labelledby="lrTitle">
@@ -398,6 +424,7 @@ class LessonDetailUIManager {
                 } else {
                   window.location.reload();
                 }
+                window.bcmLessonDataChanged = true;
                 modal.classList.add('hidden');
                 modal.setAttribute('aria-hidden', 'true');
               })

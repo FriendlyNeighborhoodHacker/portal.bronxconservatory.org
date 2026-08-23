@@ -32,7 +32,10 @@ students, who are simply users with a student profile of their own.
 Notes-related buttons are light green throughout, so "where the notes live"
 reads at a glance on every card.
 
-Every lesson, past or upcoming, opens its notes and materials in a modal —
-and the student can add a note of their own to the thread, on the same terms
-as their teacher and parents (see
-[Lesson Notes & Resources](/data-model/lesson-notes-resources)).
+Every lesson, past or upcoming, opens its notes and materials in a modal.
+Notes render as light-green chat bubbles — the thread reads like a
+conversation — and the student can add both **notes and materials** of their
+own (a practice recording, a link), on the same terms as their teacher and
+parents (see [Lesson Notes & Resources](/data-model/lesson-notes-resources)).
+After adding, the page refreshes itself when the modal closes, so a lesson's
+Notes & Materials button appears immediately.

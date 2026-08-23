@@ -31,7 +31,7 @@ class ResourceManagement {
 
     /**
      * Store an uploaded file ($_FILES entry) as a resource on a lesson.
-     * The lesson's effective teacher and admins may add materials.
+     * Anyone who may see the lesson may add materials (like notes).
      */
     public static function addFileResource(?UserContext $ctx, int $lessonId, string $title, array $file): int {
         $lesson = self::assertCanAddToLesson($ctx, $lessonId);
@@ -199,8 +199,11 @@ class ResourceManagement {
         if (!$lesson) {
             throw new InvalidArgumentException('Lesson not found.');
         }
-        if (!$ctx->admin && !LessonManagement::isEffectiveTeacher($ctx->id, $lesson)) {
-            throw new RuntimeException('Only the lesson\'s teacher may add materials.');
+        // Same circle as notes: anyone who may see the lesson may add to it —
+        // its teacher, an admin, the student, and their parents — so a student
+        // can attach their own practice recording to the thread.
+        if (!$ctx->admin && !LessonManagement::canUserViewLesson($ctx->id, $lessonId)) {
+            throw new RuntimeException('Only people on this lesson may add materials.');
         }
         return $lesson;
     }

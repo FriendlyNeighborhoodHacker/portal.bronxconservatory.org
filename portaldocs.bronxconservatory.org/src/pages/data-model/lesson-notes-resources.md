@@ -38,6 +38,9 @@ an external link, each with a `title`.
   the requester by checking their relationship to the lesson (student, parent,
   teacher, or admin) via the lesson's reservation.
 
-Resources surface in three places: on the teacher's lesson card (where "Add a
-resource" lives), in the family's lesson modal, and collected on the student's
-My Materials page in lesson-date order.
+Adding materials works on the same terms as notes: anyone who may see the
+lesson — teacher, student, parent, admin — may attach to it; removing a
+material is limited to whoever added it, or an admin. Resources surface in
+three places: on the teacher's lesson card (where "Add a resource" lives), in
+the family's lesson modal (which offers the same editor), and collected on
+the student's My Materials page in lesson-date order.

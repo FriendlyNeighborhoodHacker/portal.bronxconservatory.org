@@ -58,9 +58,23 @@ final class ResourceManagementTest extends TestCase
         $this->assertSame('link', $materials[1]['resource_type']);
     }
 
-    public function testOnlyTheLessonsTeacherMayAdd(): void
+    public function testAnyoneOnTheLessonMayAddButOutsidersMayNot(): void
     {
-        [, , , $lessonIds] = $this->makeLesson();
+        [, $student, , $lessonIds] = $this->makeLesson();
+        $parent = fx_parent_of($student);
+
+        // The same circle as notes: the student and their parents may attach
+        // materials (a practice recording, say), not just the teacher.
+        $studentId = ResourceManagement::addLinkResource(new UserContext($student, false), $lessonIds[0], 'My practice', 'https://example.org/s');
+        $parentId = ResourceManagement::addLinkResource(new UserContext($parent, false), $lessonIds[0], 'From home', 'https://example.org/p');
+        $this->assertEqualsCanonicalizing(
+            ['My practice', 'From home'],
+            array_column(ResourceManagement::resourcesForLesson($lessonIds[0]), 'title')
+        );
+        $this->assertGreaterThan(0, $studentId);
+        $this->assertGreaterThan(0, $parentId);
+
+        // A teacher with no connection to the lesson is still refused.
         $other = fx_teacher('Olga', 'Other');
         $this->expectException(RuntimeException::class);
         ResourceManagement::addLinkResource(new UserContext($other, false), $lessonIds[0], 'X', 'https://example.org');

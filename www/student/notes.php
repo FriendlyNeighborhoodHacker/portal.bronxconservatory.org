@@ -62,15 +62,9 @@ header_html('Notes from All Classes');
     <a href="#" data-lesson-detail="<?=(int)$lesson['id']?>" class="button notes" style="white-space:nowrap;">Notes &amp; Materials</a>
   </div>
   <?php if ($notes): ?>
-    <div style="margin-top:12px;">
+    <div class="lesson-notes" style="margin-top:12px;">
     <?php foreach ($notes as $note): ?>
-      <div style="padding:10px 12px;margin-bottom:8px;background:var(--color-surface-sunk);border-radius:var(--radius-sm);">
-        <div style="white-space:pre-wrap;"><?=h($note['body'])?></div>
-        <div class="small" style="margin-top:4px;color:var(--color-text-muted);">
-          — <?=h($note['author_first_name'] . ' ' . $note['author_last_name'])?>,
-          <?=h(date('M j, g:i a', strtotime($note['created_at'])))?>
-        </div>
-      </div>
+      <?=LessonDetailUIManager::noteBubbleHtml($note)?>
     <?php endforeach; ?>
     </div>
   <?php else: ?>

@@ -30,6 +30,10 @@
   --color-spice-text: #b3421d; /* the coral, darkened enough to read as text */
   --color-callout: #1F9D5C;      /* the friendly asides ("Questions? Call us…") */
   --color-callout-soft: #e9f6ef;
+  --color-notes-bg: #eef9f0;     /* notes: very light green — buttons and bubbles */
+  --color-notes-bg-hover: #e0f3e5;
+  --color-notes-border: #d2ecd9;
+  --color-notes-text: #0b5b2a;
   --color-accent: #0062DC;
   --color-accent-soft: #e6f0fd;
   --color-danger: #c0392b;
@@ -563,16 +567,16 @@ button.danger,
    on every schedule and lesson card. */
 button.notes,
 .button.notes {
-  background: #d9f2dc;
-  border-color: #a9dcb4;
-  color: #0b5b2a;
+  background: var(--color-notes-bg);
+  border-color: var(--color-notes-border);
+  color: var(--color-notes-text);
 }
 
 button.notes:hover,
 .button.notes:hover {
-  background: #c7ebcd;
-  border-color: #8fd19e;
-  color: #0b5b2a;
+  background: var(--color-notes-bg-hover);
+  border-color: #b9e0c3;
+  color: var(--color-notes-text);
 }
 
 button:disabled,
@@ -1088,19 +1092,59 @@ body.auth .brand-logo {
 }
 
 /* A lesson's notes: a short thread anyone on the lesson can add to, each
-   entry signed and dated (LessonDetailUIManager). */
+   entry signed and dated (LessonDetailUIManager). Each note renders as a
+   chat-style speech bubble in the notes light green, tail at lower left. */
 .lesson-notes {
   margin: 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .lesson-note {
-  padding: 6px 0;
-  border-bottom: 1px solid var(--color-border);
+  position: relative;
+  max-width: 92%;
+  margin-left: 8px;
+  padding: 8px 12px;
+  background: var(--color-notes-bg);
+  border: 1px solid var(--color-notes-border);
+  border-radius: 12px;
+  border-bottom-left-radius: 3px;
+}
+
+/* The bubble's tail: a bordered triangle (border color) with a fill triangle
+   (bubble color) laid one pixel inside it. */
+.lesson-note::before,
+.lesson-note::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.lesson-note::before {
+  left: -8px;
+  bottom: 4px;
+  border-width: 0 9px 9px 0;
+  border-color: transparent var(--color-notes-border) transparent transparent;
+}
+
+.lesson-note::after {
+  left: -5px;
+  bottom: 5px;
+  border-width: 0 7px 7px 0;
+  border-color: transparent var(--color-notes-bg) transparent transparent;
 }
 
 .lesson-note-by {
   font-size: 12px;
   color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+.lesson-notes-empty {
+  margin: 4px 0;
 }
 
 .lesson-note-form {
