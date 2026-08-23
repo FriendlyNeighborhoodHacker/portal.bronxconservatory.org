@@ -166,6 +166,78 @@ final class ImportFlowsTest extends TestCase
         $this->assertSame(['parent', 'student'], Application::rolesForUser($ana));
     }
 
+    public function testPeopleImportRecordsTheOptionalDemographicColumn(): void
+    {
+        // The column is optional, case-insensitive, and student-only.
+        $validated = PeopleCsvImport::validateRows([
+            ['first_name' => 'Rosa', 'last_name' => 'Ramos', 'email' => 'rosa@example.org'],
+            ['first_name' => 'Lucia', 'last_name' => 'Ramos', 'class_of' => '2031',
+             'demographic' => 'aapi', 'parents' => 'Rosa Ramos'],
+            ['first_name' => 'Marco', 'last_name' => 'Ramos', 'class_of' => '2033',
+             'demographic' => ' L ', 'parents' => 'Rosa Ramos'],
+            // No demographic at all — the common case, and still valid.
+            ['first_name' => 'Nina', 'last_name' => 'Ramos', 'class_of' => '2035', 'parents' => 'Rosa Ramos'],
+        ]);
+
+        $this->assertSame(['valid', 'valid', 'valid', 'valid'], array_column($validated, 'status'));
+        $this->assertStringContainsString('set demographic AAPI', $validated[1]['changes']);
+        $this->assertStringContainsString('set demographic L', $validated[2]['changes']);
+        $this->assertStringNotContainsString('demographic', $validated[3]['changes']);
+
+        PeopleCsvImport::commit($this->ctx, $validated);
+        $ctx = $this->ctx;
+        $id = fn(string $first) => (int)pdo()->query("SELECT id FROM users WHERE first_name='$first'")->fetchColumn();
+        $this->assertSame('AAPI', StudentTeacherManagement::demographicForStudent($ctx, $id('Lucia')));
+        $this->assertSame('L', StudentTeacherManagement::demographicForStudent($ctx, $id('Marco')));
+        $this->assertNull(StudentTeacherManagement::demographicForStudent($ctx, $id('Nina')));
+    }
+
+    public function testPeopleImportRejectsAnUnknownDemographic(): void
+    {
+        $validated = PeopleCsvImport::validateRows([
+            ['first_name' => 'Bad', 'last_name' => 'Code', 'demographic' => 'Black'],
+        ]);
+        $this->assertSame('error', $validated[0]['status']);
+        $this->assertStringContainsString('Unknown demographic "Black"', $validated[0]['messages'][0]);
+        $this->assertStringContainsString('B, L, W, AAPI, O', $validated[0]['messages'][0]);
+    }
+
+    public function testPeopleImportSaysWhenADemographicIsIgnoredOnAParentRow(): void
+    {
+        // A file that records a demographic for the whole family: the parent
+        // row has nowhere to put it, and must not silently become a student.
+        $validated = PeopleCsvImport::validateRows([
+            ['first_name' => 'Rosa', 'last_name' => 'Ramos', 'email' => 'rosa@example.org',
+             'demographic' => 'L'],
+            ['first_name' => 'Lucia', 'last_name' => 'Ramos', 'class_of' => '2031',
+             'demographic' => 'L', 'parents' => 'Rosa Ramos'],
+        ]);
+
+        $this->assertSame(['valid', 'valid'], array_column($validated, 'status'));
+        $this->assertStringContainsString('Create parent', $validated[0]['changes']);
+        $this->assertStringNotContainsString('student', $validated[0]['changes']);
+        $this->assertStringContainsString('ignored', $validated[0]['messages'][0]);
+
+        PeopleCsvImport::commit($this->ctx, $validated);
+        $rosa = (int)pdo()->query("SELECT id FROM users WHERE email='rosa@example.org'")->fetchColumn();
+        $this->assertSame(['parent'], Application::rolesForUser($rosa));
+        $this->assertSame([], pdo()->query("SELECT user_id FROM student_profiles WHERE user_id=$rosa")->fetchAll());
+    }
+
+    public function testPeopleImportLeavesAnExistingDemographicAloneWhenTheCellIsBlank(): void
+    {
+        $rows = [['first_name' => 'Lucia', 'last_name' => 'Ramos', 'class_of' => '2031',
+                  'demographic' => 'W']];
+        PeopleCsvImport::commit($this->ctx, PeopleCsvImport::validateRows($rows));
+        $lucia = (int)pdo()->query("SELECT id FROM users WHERE first_name='Lucia'")->fetchColumn();
+
+        // Re-importing the same person with the column left empty must not
+        // wipe what is already recorded — blank means "leave alone" here.
+        $rows[0]['demographic'] = '';
+        PeopleCsvImport::commit($this->ctx, PeopleCsvImport::validateRows($rows));
+        $this->assertSame('W', StudentTeacherManagement::demographicForStudent($this->ctx, $lucia));
+    }
+
     public function testPeopleImportIsIdempotentAndGuardsAmbiguity(): void
     {
         // Existing student matched by exact name (no email/phone).

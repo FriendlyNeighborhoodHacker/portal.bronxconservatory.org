@@ -22,6 +22,7 @@ if (!$user) {
 }
 
 $parents = StudentTeacherManagement::parentsOfStudent($userId);
+$demographic = StudentTeacherManagement::demographicForStudent(UserContext::getLoggedInUserContext(), $userId);
 $allInstruments = InstrumentCatalog::all();
 $studentInstruments = InstrumentCatalog::namesForStudent($userId);
 $semesterId = Application::adminSelectedSemesterId();
@@ -86,6 +87,27 @@ header_html('Edit ' . $name);
       </form>
     </div>
   <?php endforeach; ?>
+</div>
+
+<div class="card">
+  <h3>Demographics</h3>
+  <p class="small">Recorded for the conservatory's own reporting. This is shown
+    on this admin screen only — never to the family, the student, or the teacher.</p>
+  <form method="post" action="/admin/student_demographic_eval.php" class="stack">
+    <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+    <input type="hidden" name="id" value="<?=$userId?>">
+    <label>Demographic
+      <select name="demographic">
+        <option value="">Not recorded</option>
+        <?php foreach (StudentTeacherManagement::DEMOGRAPHIC_LABELS as $code => $label): ?>
+          <option value="<?=h($code)?>" <?=$demographic === $code ? 'selected' : ''?>>
+            <?=h($code . ' — ' . $label)?>
+          </option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <div class="actions"><button type="submit" class="button">Save Demographics</button></div>
+  </form>
 </div>
 
 <div class="card">

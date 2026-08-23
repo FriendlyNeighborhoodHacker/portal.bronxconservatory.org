@@ -217,6 +217,7 @@ function import_columns_help_html(array $flow): string {
                 ['Grade', 'optional', 'students — e.g. 7'],
                 ['School Name', 'optional', 'students'],
                 ['Instruments', 'optional', 'students — separated by ; or , — e.g. "Piano; Violin"'],
+                ['Demographic', 'optional', 'students — one of B, L, W, AAPI, O (admin-only)'],
             ];
             $example = "First Name,Last Name,Email,Class Of,Instruments,Parents\n"
                 . "Rosa,Ramos,rosa@example.org,,,\n"

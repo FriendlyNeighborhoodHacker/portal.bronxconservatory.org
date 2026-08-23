@@ -51,7 +51,16 @@ row on their own `users` row; there is no separate "adult student" concept.
 
 Columns: `date_of_birth`, `class_of` (a `YEAR` — expected graduation),
 `experience_level` ENUM(`none`,`beginner`,`intermediate`,`advanced`),
-`school_name`, `grade`.
+`school_name`, `grade`, `demographic`.
+
+`demographic` is ENUM(`B`,`L`,`W`,`AAPI`,`O`), NULL when not recorded, and is
+**admin-only**: it is read and written solely through
+`StudentTeacherManagement::demographicForStudent` / `setStudentDemographic`,
+which both require an admin `UserContext`, and it is deliberately left out of
+`childrenOfParent`, `listStudentsFiltered`, and every other query behind a
+family- or teacher-facing screen. Unlike the other columns here it is not
+part of `ensureStudentProfile`, whose `COALESCE` upsert could never clear a
+value back to "not recorded".
 
 ## `teacher_profiles`
 

@@ -17,6 +17,10 @@ require_once __DIR__ . '/InstrumentCatalog.php';
  * already in the system, so one file builds the whole family graph and row
  * order never matters.
  *
+ * Student-only columns (grade, instruments, Demographic, ...) are ignored on
+ * a row that turns out to be a parent only, with a notice on the validation
+ * step saying so.
+ *
  * Roles fall out of the references: a row someone lists as a parent is a
  * parent; every other row is a student (a referenced row with student
  * fields — grade, instruments, ... — becomes both, e.g. an adult student
@@ -24,6 +28,11 @@ require_once __DIR__ . '/InstrumentCatalog.php';
  */
 class PeopleCsvImport {
 
+    // What makes a referenced (parent) row a student as well. Demographic is
+    // deliberately NOT here: it would turn every parent in a file that records
+    // demographics for the whole family into a student. A demographic on a row
+    // that stays parent-only is reported as ignored rather than dropped
+    // silently (see pass 3).
     private const STUDENT_FIELDS = ['date_of_birth', 'class_of', 'grade', 'school_name', 'instruments'];
 
     public static function targetFields(): array {
@@ -46,6 +55,7 @@ class PeopleCsvImport {
             'grade' => 'Grade',
             'school_name' => 'School Name',
             'instruments' => 'Instruments',
+            'demographic' => 'Demographic',
             'parents' => 'Parents',
         ];
     }
@@ -103,6 +113,18 @@ class PeopleCsvImport {
                     $messages[] = 'Invalid date of birth "' . $dob . '".';
                 } else {
                     $row['date_of_birth'] = $parsed;
+                }
+            }
+
+            $demographic = trim((string)($row['demographic'] ?? ''));
+            if ($demographic !== '') {
+                $code = self::normalizeDemographic($demographic);
+                if ($code === null) {
+                    $status = 'error';
+                    $messages[] = 'Unknown demographic "' . $demographic . '" — use one of '
+                        . implode(', ', array_keys(StudentTeacherManagement::DEMOGRAPHIC_LABELS)) . '.';
+                } else {
+                    $row['demographic'] = $code;
                 }
             }
 
@@ -172,6 +194,17 @@ class PeopleCsvImport {
             foreach ($entry['data']['_parent_refs'] as $ref) {
                 $changeBits[] = 'link parent ' . $ref['label'];
             }
+            $demographic = trim((string)($row['demographic'] ?? ''));
+            if ($demographic !== '') {
+                if ($isStudent) {
+                    $changeBits[] = 'set demographic ' . $demographic;
+                } else {
+                    // Demographics live on the student profile, and this row
+                    // has none. Say so rather than dropping the value quietly.
+                    $entry['messages'][] = 'Demographic "' . $demographic . '" ignored — '
+                        . 'demographics are recorded on students, and this row is a parent only.';
+                }
+            }
             $entry['changes'] = implode('; ', $changeBits);
             $entry['data']['_is_parent'] = $isParent;
             $entry['data']['_is_student'] = $isStudent;
@@ -239,6 +272,14 @@ class PeopleCsvImport {
                     ]);
                     if (!empty($row['_instrument_ids'])) {
                         InstrumentCatalog::addStudentInstruments($ctx, $userId, $row['_instrument_ids']);
+                    }
+                    // Only when the file actually carries a code: a blank cell
+                    // leaves whatever is on file alone, like every other column
+                    // here. (setStudentDemographic requires an admin, which
+                    // commit() has already asserted.)
+                    $demographic = trim((string)($row['demographic'] ?? ''));
+                    if ($demographic !== '') {
+                        StudentTeacherManagement::setStudentDemographic($ctx, $userId, $demographic);
                     }
                 }
             }
@@ -433,6 +474,16 @@ class PeopleCsvImport {
 
     private static function norm(string $name): string {
         return preg_replace('/\s+/', ' ', strtolower(trim($name))) ?? '';
+    }
+
+    /**
+     * "aapi" / " B " -> the canonical demographic code, or null if it is not
+     * one of them. Case and surrounding space are forgiven; spelled-out
+     * labels are not — the codes are the vocabulary.
+     */
+    public static function normalizeDemographic(string $raw): ?string {
+        $code = strtoupper(trim($raw));
+        return isset(StudentTeacherManagement::DEMOGRAPHIC_LABELS[$code]) ? $code : null;
     }
 
     /** Accepts "2014-03-05" and "3/5/2014"; returns Y-m-d or null. */

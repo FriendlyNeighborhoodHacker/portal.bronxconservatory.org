@@ -198,6 +198,7 @@ CREATE TABLE student_profiles (
   experience_level ENUM('none','beginner','intermediate','advanced') DEFAULT NULL,
   school_name VARCHAR(200) DEFAULT NULL,
   grade VARCHAR(20) DEFAULT NULL,
+  demographic ENUM('B','L','W','AAPI','O') DEFAULT NULL COMMENT 'Admin-only: never shown to families or teachers. NULL = not recorded.',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_sp_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

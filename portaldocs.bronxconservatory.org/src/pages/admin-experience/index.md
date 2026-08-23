@@ -53,12 +53,20 @@ Actions; the teachers list shows Name / Contact / Actions. Add buttons sit
 top-right.
 
 **Edit Student** — photo, basic info, parents (with Add Parent),
-instruments, and **Charges and Payments**: the current balance, a line-item
-breakdown of this semester's charges and payments, and — if those don't
-reconcile to the balance — the earlier entries that explain it. From here an
-admin records [payments and adjustments](/admin-experience/accept-a-check).
-Deleting flags `is_deleted` after a confirmation; nothing is actually
-removed.
+**Demographics**, instruments, and **Charges and Payments**: the current
+balance, a line-item breakdown of this semester's charges and payments, and
+— if those don't reconcile to the balance — the earlier entries that explain
+it. From here an admin records [payments and
+adjustments](/admin-experience/accept-a-check). Deleting flags `is_deleted`
+after a confirmation; nothing is actually removed.
+
+Demographics is a single code — `B`, `L`, `W`, `AAPI`, or `O`, plus "Not
+recorded" — kept for the conservatory's own reporting. It appears on this
+screen and nowhere else: the accessors behind it require an admin, and the
+column is absent from every query a parent, student, or teacher page runs. The
+Students & Parents CSV import has a matching optional `Demographic` column,
+so a roster can be loaded with the codes already in it; a blank cell leaves
+whatever is on file alone.
 
 **Edit Teacher** — photo, basic info, this semester's students (linked),
 soft delete.

@@ -12,6 +12,21 @@ require_once __DIR__ . '/KeywordSearch.php';
  * roles) and the parent-child relationships between users.
  */
 class StudentTeacherManagement {
+    /**
+     * student_profiles.demographic, code => label. Recorded for the
+     * conservatory's own reporting and shown ONLY in the admin interface:
+     * both accessors below demand an admin UserContext, and the column is
+     * left out of every family- and teacher-facing query on purpose.
+     * A student with no code recorded is simply NULL.
+     */
+    public const DEMOGRAPHIC_LABELS = [
+        'B'    => 'Black / African American',
+        'L'    => 'Latino / Hispanic',
+        'W'    => 'White',
+        'AAPI' => 'Asian American / Pacific Islander',
+        'O'    => 'Other',
+    ];
+
     private static function pdo(): PDO {
         return pdo();
     }
@@ -58,6 +73,52 @@ class StudentTeacherManagement {
             self::orNull($fields['gender'] ?? null),
         ]);
         self::log($ctx, 'teacher.profile_saved', ['user_id' => $userId]);
+    }
+
+    /**
+     * The student's recorded demographic code, or null when none is on file.
+     * Admin-only: this is not information the family or the teacher sees.
+     */
+    public static function demographicForStudent(?UserContext $ctx, int $userId): ?string {
+        if (!$ctx || !$ctx->admin) {
+            throw new RuntimeException('Admins only');
+        }
+        $st = self::pdo()->prepare('SELECT demographic FROM student_profiles WHERE user_id = ?');
+        $st->execute([$userId]);
+        $code = $st->fetchColumn();
+        return ($code === false || $code === null || $code === '') ? null : (string)$code;
+    }
+
+    /**
+     * Record (or clear, with null) a student's demographic code. Unlike
+     * ensureStudentProfile's COALESCE upsert, this one CAN clear the value —
+     * an admin who picked the wrong code has to be able to take it back.
+     *
+     * The code is checked against DEMOGRAPHIC_LABELS rather than left to the
+     * ENUM, which would silently truncate an unknown value to ''.
+     */
+    public static function setStudentDemographic(?UserContext $ctx, int $userId, ?string $code): void {
+        if (!$ctx || !$ctx->admin) {
+            throw new RuntimeException('Admins only');
+        }
+        $code = self::orNull($code);
+        if ($code !== null && !isset(self::DEMOGRAPHIC_LABELS[$code])) {
+            throw new InvalidArgumentException('Unknown demographic: ' . $code);
+        }
+        $st = self::pdo()->prepare('UPDATE student_profiles SET demographic = ? WHERE user_id = ?');
+        $st->execute([$code, $userId]);
+        if ($st->rowCount() === 0) {
+            // No profile row means the user is not a student; saying so beats
+            // a silent no-op that looks like a save.
+            $exists = self::pdo()->prepare('SELECT 1 FROM student_profiles WHERE user_id = ?');
+            $exists->execute([$userId]);
+            if (!$exists->fetchColumn()) {
+                throw new RuntimeException('That user is not a student.');
+            }
+        }
+        // The code itself stays out of the activity log: who changed it and
+        // for whom is what an audit needs, not the value.
+        self::log($ctx, 'student.demographic_saved', ['user_id' => $userId, 'cleared' => $code === null]);
     }
 
     public static function removeStudentProfile(?UserContext $ctx, int $userId): void {

@@ -146,6 +146,78 @@ final class StudentTeacherManagementTest extends TestCase
             StudentTeacherManagement::parentsOfStudent($child)));
     }
 
+    public function testDemographicIsRecordedClearedAndValidated(): void
+    {
+        $ctx = fx_admin_ctx();
+        $student = fx_student('Dee', 'Mographic');
+
+        // Nothing on file until an admin records something.
+        $this->assertNull(StudentTeacherManagement::demographicForStudent($ctx, $student));
+
+        StudentTeacherManagement::setStudentDemographic($ctx, $student, 'AAPI');
+        $this->assertSame('AAPI', StudentTeacherManagement::demographicForStudent($ctx, $student));
+
+        // Changed, then taken back off — an admin must be able to undo a mistake.
+        StudentTeacherManagement::setStudentDemographic($ctx, $student, 'B');
+        $this->assertSame('B', StudentTeacherManagement::demographicForStudent($ctx, $student));
+        StudentTeacherManagement::setStudentDemographic($ctx, $student, '');
+        $this->assertNull(StudentTeacherManagement::demographicForStudent($ctx, $student));
+
+        // An unknown code is refused rather than silently truncated by the ENUM.
+        $this->expectException(InvalidArgumentException::class);
+        StudentTeacherManagement::setStudentDemographic($ctx, $student, 'X');
+    }
+
+    public function testDemographicIsRefusedToNonAdmins(): void
+    {
+        $student = fx_student('Dee', 'Mographic');
+        StudentTeacherManagement::setStudentDemographic(fx_admin_ctx(), $student, 'L');
+
+        $parent = new UserContext(fx_parent_of($student), false);
+        foreach ([null, $parent] as $ctx) {
+            try {
+                StudentTeacherManagement::demographicForStudent($ctx, $student);
+                $this->fail('Reading a demographic without an admin context should throw');
+            } catch (RuntimeException $e) {
+                $this->assertSame('Admins only', $e->getMessage());
+            }
+            try {
+                StudentTeacherManagement::setStudentDemographic($ctx, $student, 'W');
+                $this->fail('Writing a demographic without an admin context should throw');
+            } catch (RuntimeException $e) {
+                $this->assertSame('Admins only', $e->getMessage());
+            }
+        }
+        // The refused writes changed nothing.
+        $this->assertSame('L', StudentTeacherManagement::demographicForStudent(fx_admin_ctx(), $student));
+    }
+
+    public function testDemographicRefusesAUserWhoIsNotAStudent(): void
+    {
+        $ctx = fx_admin_ctx();
+        $notAStudent = fx_user('Pat', 'Parent');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('That user is not a student.');
+        StudentTeacherManagement::setStudentDemographic($ctx, $notAStudent, 'O');
+    }
+
+    /** The family-facing student queries must not carry the column. */
+    public function testDemographicStaysOutOfFamilyFacingQueries(): void
+    {
+        $ctx = fx_admin_ctx();
+        $student = fx_student('Dee', 'Mographic');
+        $parent = fx_parent_of($student);
+        StudentTeacherManagement::setStudentDemographic($ctx, $student, 'W');
+
+        foreach (StudentTeacherManagement::childrenOfParent($parent) as $child) {
+            $this->assertArrayNotHasKey('demographic', $child);
+        }
+        foreach (StudentTeacherManagement::listStudentsFiltered('') as $row) {
+            $this->assertArrayNotHasKey('demographic', $row);
+        }
+    }
+
     public function testParentNamesComeBackPerStudentInOneLookup(): void
     {
         $withTwo = fx_student('Kid', 'Reyes');
