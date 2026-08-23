@@ -16,8 +16,8 @@ header_html('New Semester');
 <div class="wizard-steps">
   <span class="wizard-step active"><span class="wizard-step-num">1</span> Semester</span>
   <span class="wizard-step"><span class="wizard-step-num">2</span> Locations</span>
-  <span class="wizard-step"><span class="wizard-step-num">3</span> Class Dates</span>
-  <span class="wizard-step"><span class="wizard-step-num">4</span> Teachers per Location</span>
+  <span class="wizard-step"><span class="wizard-step-num">3</span> Class Days</span>
+  <span class="wizard-step"><span class="wizard-step-num">4</span> Class Dates</span>
 </div>
 
 <?php if ($err): ?><p class="error"><?=h($err)?></p><?php endif; ?>

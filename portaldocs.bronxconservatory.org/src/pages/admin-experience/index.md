@@ -24,7 +24,7 @@ Each operational flow has its own detailed page:
 
 | Flow | What it covers |
 | --- | --- |
-| [Create a Semester](/admin-experience/create-a-semester) | The wizard, the five CSV imports, pre-populating from a previous semester |
+| [Create a Semester](/admin-experience/create-a-semester) | The wizard, the six CSV imports, pre-populating from a previous semester |
 | [View the Semester Schedule](/admin-experience/view-semester-schedule) | The weekly grid, cell colors, confirming reservations (lessons + charges), drag-to-move |
 | [View the Calendar & a Week](/admin-experience/view-week-schedule) | The semester date list and the weekly grid of real lessons |
 | [Process Leads & Uncompleted Forms](/admin-experience/process-leads) | The queues, statuses, append-only notes, account invites |
