@@ -83,7 +83,7 @@ signs in with the password they already have.
 The sibling queue lists `incomplete_inquiries` rows — families who started
 either public form and never finished. Each row shows which form (an
 Inquiry or Registration pill) and how far they got — "Contact only" /
-"Contact and address" for inquiries; "Family info", "Students entered",
+"Contact and address" for inquiries; "Email or phone only", "Family info", "Students entered",
 "Policies agreed", or "Payment plan chosen" for registration drop-offs, so
 staff know exactly what to say when they call. The queue is purely
 reverse-chronological; there are no filters.

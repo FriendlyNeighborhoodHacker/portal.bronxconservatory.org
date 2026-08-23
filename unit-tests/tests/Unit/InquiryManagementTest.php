@@ -240,6 +240,19 @@ final class InquiryManagementTest extends TestCase
         ];
     }
 
+    public function testPhoneOnlyCaptureStartsADraftWithoutAnEmail(): void
+    {
+        // A callable phone number alone is worth a draft — email may be blank.
+        $id = InquiryManagement::recordRegistrationDraft(null, null, [
+            'phone' => '718-555-0142', 'first_name' => 'Rosa',
+        ], 1);
+        $row = InquiryManagement::find($id);
+        $this->assertSame('registration', $row['source']);
+        $this->assertSame('', $row['email']);
+        $this->assertSame('718-555-0142', $row['phone']);
+        $this->assertSame(1, (int)$row['last_step_completed']);
+    }
+
     public function testEmailOnlyCaptureStartsADraftTheFamilyStepCompletes(): void
     {
         // Typing an email on the family page captures a stage-1 draft with

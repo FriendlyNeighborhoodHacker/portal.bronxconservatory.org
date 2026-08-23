@@ -715,7 +715,7 @@ CREATE TABLE incomplete_inquiries (
   address_city VARCHAR(100) DEFAULT NULL,
   address_state VARCHAR(100) DEFAULT NULL COMMENT 'US state code, or a free-text province',
   address_zip VARCHAR(20) DEFAULT NULL,
-  last_step_completed TINYINT NOT NULL DEFAULT 1 COMMENT 'Inquiry: 1 contact, 2 address. Registration: 1 email only, 2 family info, 3 students, 4 policies, 5 payment plan',
+  last_step_completed TINYINT NOT NULL DEFAULT 1 COMMENT 'Inquiry: 1 contact, 2 address. Registration: 1 email/phone only, 2 family info, 3 students, 4 policies, 5 payment plan',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;

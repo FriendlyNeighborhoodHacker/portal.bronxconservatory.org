@@ -40,9 +40,9 @@ told registration is closed.
 7. **Done** (`done.php`).
 
 The wizard **saves as the family goes**, the same drop-off capture the
-inquiry flow pioneered — starting the moment a plausible **email is typed**
-on the family page: a background save writes a draft row to
-`incomplete_inquiries` (source `registration`, stage "Email only") before
+inquiry flow pioneered — starting the moment a plausible **email or phone
+number is typed** on the family page: a background save writes a draft row to
+`incomplete_inquiries` (source `registration`, stage "Email or phone only") before
 Continue is ever pressed. Completing the family step fills the draft in, and
 each later step bumps its progress marker — so a family who starts
 registering and stops appears in Admin › Leads › Uncompleted Forms, showing

@@ -85,11 +85,12 @@ ApplicationUI::minimalHeaderHtml('Register — Family');
 </div>
 
 <script>
-// The moment a plausible email is on the form, save a drop-off draft in the
-// background — a family who types their email and walks away is already
-// worth a phone call. Fires on leaving any contact field once the email
-// looks real; repeats update the same draft (session-keyed server side).
-// Entirely silent: nothing here may interrupt someone still typing.
+// The moment a plausible email OR phone number is on the form, save a
+// drop-off draft in the background — a family who types either and walks
+// away is already worth a phone call. Fires on leaving any contact field
+// once one of the two looks real; repeats update the same draft
+// (session-keyed server side). Entirely silent: nothing here may interrupt
+// someone still typing.
 (function () {
   var form = document.querySelector('form[action="/register/family_eval.php"]');
   if (!form) return;
@@ -100,7 +101,9 @@ ApplicationUI::minimalHeaderHtml('Register — Family');
 
   function maybeCapture() {
     var email = (fields[3].value || '').trim();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
+    var phoneDigits = (fields[2].value || '').replace(/\D/g, '');
+    var emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+    if (!emailOk && phoneDigits.length < 10) return;
     var payload = fields.map(function (f) { return f.value.trim(); }).join('|');
     if (payload === lastSent) return; // nothing new to save
     lastSent = payload;
