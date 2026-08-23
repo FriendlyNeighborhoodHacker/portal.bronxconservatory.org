@@ -28,8 +28,12 @@ Reset first with `./reset_db.sh`, then upload in this order:
 
 ## 2. Fall 2026
 
-3. Create the semester (Fall 2026, 2026-09-08 – 2026-12-20), pick both
-   locations, then:
+3. Create the semester (Fall 2026, 2026-09-08 – 2026-12-20), then on the
+   Locations step pick both locations and declare their class days:
+   Access Bronx Charter School — Saturday 9:00 am – 5:00 pm; Bronx Community
+   College — Saturday 9:00 am – 5:00 pm **and** Tuesday 3:30 – 8:00 pm. The
+   class-dates CSV in the next step is validated against these days, and rows
+   with blank times inherit these hours. Then:
 4. **fall_semester/location_dates.csv** — semester wizard step 3. The
    conservatory runs two class days a week: Saturdays Sep 5 – Dec 19
    (9:00 am – 5:00 pm at both locations, with Thanksgiving weekend inactive)
@@ -95,7 +99,9 @@ click empty cells to add more.
 
 The same setup steps against the same roster, which is the point — nothing in
 **general/** gets re-uploaded. Create the semester (Spring 2027, 2027-01-25 –
-2027-05-23), pick both locations, then upload
+2027-05-23), pick both locations with their spring days (Access — Saturday
+9:00 am – 5:00 pm; BCC — Saturday 10:00 am – 4:00 pm and Tuesday 3:30 –
+8:00 pm), then upload
 **spring_semester/location_dates.csv**, **location_teachers.csv** and
 **hold_blocks.csv**.
 

@@ -58,6 +58,7 @@ export const navItems: NavItem[] = [
       { title: 'Cancellations & One-Off Changes', slug: 'admin-experience/cancellations-and-one-offs' },
     ],
   },
+  { title: 'Sample Data', slug: 'sample-data' },
 ];
 
 /**

@@ -98,6 +98,24 @@ final class ScheduleGridDataTest extends TestCase
         $this->assertNotNull($reservationId);
     }
 
+    public function testADeclaredDayGetsItsBandBeforeAnyDatesExist(): void
+    {
+        // Declare Tuesday evenings alongside the fixture's Saturday — no
+        // Tuesday class dates imported yet.
+        SemesterManagement::setLocationWeekdays($this->ctx, $this->semesterId, $this->locationId, [
+            [6, '09:00', '17:00'],
+            [2, '15:30', '20:00'],
+        ]);
+
+        $grid = ScheduleGridData::semesterWeeklyGrid($this->semesterId);
+
+        $this->assertSame([6, 2], array_column($grid['bands'], 'day'));
+        $tuesday = $grid['bands'][1];
+        // Declared hours drive the band's window: 3:30 pm through the 7:30 pm
+        // slot (an 8:00 pm close means 7:30 is the last slot a lesson starts).
+        $this->assertSame([15 * 60 + 30, 19 * 60 + 30], $tuesday['bounds']);
+    }
+
     public function testEmptySemesterFallsBackToSaturday(): void
     {
         $bareSemester = fx_semester($this->ctx, 'spring', 2031, '2031-01-05', '2031-05-20');

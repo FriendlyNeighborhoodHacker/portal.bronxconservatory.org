@@ -251,6 +251,39 @@ final class ImportFlowsTest extends TestCase
         $this->assertSame(['2030-09-07', '2030-09-21'], array_column($st->fetchAll(), 'd'));
     }
 
+    public function testLocationDatesImportEnforcesDeclaredWeekdays(): void
+    {
+        // The fixture declares Saturday (of 2030-09-07) for its location.
+        [$semesterId, $locationId] = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 2);
+        $locationName = (string)pdo()->query("SELECT name FROM locations WHERE id=$locationId")->fetchColumn();
+
+        $validated = LocationDatesCsvImport::validateRows([
+            // Saturday: fine.
+            ['location_name' => $locationName, 'date' => '9/21/2030', 'start_time' => '9:00 am', 'end_time' => '5:00 pm', 'status' => '', 'notes' => ''],
+            // Wednesday: not a declared day.
+            ['location_name' => $locationName, 'date' => '9/18/2030', 'start_time' => '9:00 am', 'end_time' => '5:00 pm', 'status' => '', 'notes' => ''],
+            // Saturday with blank times: inherits the declared 9-5.
+            ['location_name' => $locationName, 'date' => '9/28/2030', 'start_time' => '', 'end_time' => '', 'status' => '', 'notes' => ''],
+        ], ['semester_id' => $semesterId]);
+
+        $this->assertSame(['valid', 'error', 'valid'], array_column($validated, 'status'));
+        $this->assertStringContainsString('not open on Wednesdays', $validated[1]['messages'][0]);
+        $this->assertStringContainsString('declared days: Saturday', $validated[1]['messages'][0]);
+        $this->assertSame('09:00:00', $validated[2]['data']['_start_time']);
+        $this->assertSame('17:00:00', $validated[2]['data']['_end_time']);
+
+        // A location with NO declarations is unchecked (legacy), but blank
+        // times still error there.
+        $bare = fx_semester($this->ctx, 'spring', 2031, '2031-01-05', '2031-05-20');
+        SemesterManagement::setActiveLocations($this->ctx, $bare, [$locationId]);
+        $legacy = LocationDatesCsvImport::validateRows([
+            ['location_name' => $locationName, 'date' => '1/15/2031', 'start_time' => '9:00 am', 'end_time' => '5:00 pm', 'status' => '', 'notes' => ''],
+            ['location_name' => $locationName, 'date' => '1/22/2031', 'start_time' => '', 'end_time' => '', 'status' => '', 'notes' => ''],
+        ], ['semester_id' => $bare]);
+        $this->assertSame(['valid', 'error'], array_column($legacy, 'status'));
+        $this->assertStringContainsString('Start and end time are required', $legacy[1]['messages'][0]);
+    }
+
     // ── Location teachers ──────────────────────────────────────────────────
 
     public function testLocationTeachersImportMatchesByFullName(): void
@@ -298,13 +331,16 @@ final class ImportFlowsTest extends TestCase
         );
         $locationName = (string)pdo()->query("SELECT name FROM locations WHERE id=$locationId")->fetchColumn();
 
-        // An explicit day assigns just that day.
+        // An explicit day assigns just that day; a day the location is not
+        // open on (neither declared nor dated) is rejected.
         $validated = LocationTeachersCsvImport::validateRows([
             ['teacher_name' => 'Nia Harp', 'location_name' => $locationName, 'day' => 'Tuesday'],
             ['teacher_name' => 'Nia Harp', 'location_name' => $locationName, 'day' => 'Someday'],
+            ['teacher_name' => 'Nia Harp', 'location_name' => $locationName, 'day' => 'Wednesday'],
         ], ['semester_id' => $semesterId]);
-        $this->assertSame(['valid', 'error'], array_column($validated, 'status'));
+        $this->assertSame(['valid', 'error', 'error'], array_column($validated, 'status'));
         $this->assertStringContainsString('Unknown day', $validated[1]['messages'][0]);
+        $this->assertStringContainsString('not open on Wednesdays', $validated[2]['messages'][0]);
         LocationTeachersCsvImport::commit($this->ctx, $validated, ['semester_id' => $semesterId]);
         $this->assertTrue(SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $teacher, 2));
         $this->assertFalse(SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $teacher, 6));

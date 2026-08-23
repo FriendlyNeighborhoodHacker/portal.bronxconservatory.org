@@ -33,8 +33,12 @@ DELETE FROM semester_location_weekdays;
 DELETE FROM semester_locations;
 DELETE FROM semesters;
 
--- Leads and incomplete forms (cascade to lead_students, lead_notes, incomplete_inquiry_notes)
+-- Leads and incomplete forms. Children first, explicitly: with
+-- FOREIGN_KEY_CHECKS off, ON DELETE CASCADE does not fire.
+DELETE FROM lead_notes;
+DELETE FROM lead_students;
 DELETE FROM leads;
+DELETE FROM incomplete_inquiry_notes;
 DELETE FROM incomplete_inquiries;
 
 -- Money

@@ -33,13 +33,15 @@ Five ideas explain most of the system. Everything else is detail.
 ### The semester is the organizing unit
 
 A semester is a season (`fall`/`spring`/`summer`/`test`) plus a year. It owns its
-own start/end dates, its own **fees**, its active **locations**, and — per
-location — a **calendar of class dates** (each active, or inactive for a break,
-titled e.g. "Holiday Week"). A location may meet on more than one weekday —
-Saturdays at both sites and Tuesday evenings at one, say — and each date
-carries its own hours. Teachers are assigned per (location, **day**), so a
-Saturday-only teacher never shows up on a Tuesday grid. Schedules, lessons,
-and money all hang off a semester.
+own start/end dates, its own **fees**, its active **locations** — each with a
+**declaration of which weekdays it holds classes and that day's standard
+hours** — and — per location — a **calendar of class dates** (each active, or
+inactive for a break, titled e.g. "Holiday Week"). A location may meet on more
+than one weekday — Saturdays at both sites and Tuesday evenings at one, say —
+and each date carries its own hours, defaulting to the declared ones. Imported
+class dates must fall on the declared weekdays. Teachers are assigned per
+(location, **day**), so a Saturday-only teacher never shows up on a Tuesday
+grid. Schedules, lessons, and money all hang off a semester.
 
 *Current semester resolution* (`SemesterManagement::resolveDefaultSemester`):
 the semester containing today → else the next future one → else the most recent
@@ -400,7 +402,8 @@ site base URL used for links inside emails, and the footer phone number.
 
 ### Create a semester
 
-Seven steps: meta info **and fees** → active locations → then five CSV imports
+Seven steps: meta info **and fees** → active locations **with their class days
+and hours** → then five CSV imports
 (class dates, location-teachers, hold blocks, the schedule, opening
 charges/payments). Every import is Upload → Map columns → Validate → Commit,
 validates row by row with a plain-English description of what each row will do,

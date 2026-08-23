@@ -1,0 +1,70 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { listSampleDirectories } from '../../lib/sample-data';
+
+// Read straight from the repo's sample_data/ at build time — the downloads
+// on this page are the same bytes the repo carries.
+const directories = listSampleDirectories();
+
+const DIRECTORY_NOTES: Record<string, { title: string; note: string }> = {
+  general: {
+    title: 'general/',
+    note: 'Data that outlives any one semester: locations, teachers, and the parent/student roster. Upload once.',
+  },
+  fall_semester: {
+    title: 'fall_semester/',
+    note: 'The semester-scoped files for Fall 2026, including the schedule itself and the opening ledger.',
+  },
+  spring_semester: {
+    title: 'spring_semester/',
+    note: 'The setup files for Spring 2027. Deliberately no schedule or ledger file — spring exercises Pre-populate from Previous.',
+  },
+};
+
+function formatBytes(bytes: number): string {
+  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+const frontmatter = {
+  title: 'Sample Data',
+  description: 'Downloadable sample CSVs for walking through semester setup end to end.',
+};
+---
+
+<DocsLayout frontmatter={frontmatter}>
+  <h1>Sample Data</h1>
+
+  <p>
+    Realistic test CSVs for walking the portal through first-time setup end to
+    end — the same files that live in the repository's <code>sample_data/</code>
+    directory (these downloads are generated from them at build time). The
+    <a href="/admin-experience/create-a-semester">Create a Semester</a> guide
+    covers where each file is uploaded; <code>sample_data/README.md</code> in
+    the repository is the step-by-step walkthrough.
+  </p>
+
+  {directories.map((dir) => (
+    <section>
+      <h2>{DIRECTORY_NOTES[dir.name]?.title ?? dir.name + '/'}</h2>
+      <p>{DIRECTORY_NOTES[dir.name]?.note}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Rows</th>
+            <th>Size</th>
+          </tr>
+        </thead>
+        <tbody>
+          {dir.files.map((file) => (
+            <tr>
+              <td><a href={`/sample-data/${file.path}`} download>{file.name}</a></td>
+              <td>{file.rows}</td>
+              <td>{formatBytes(file.bytes)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  ))}
+</DocsLayout>
