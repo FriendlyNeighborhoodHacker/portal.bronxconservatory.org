@@ -270,9 +270,12 @@ CREATE TABLE semesters (
   created_by_user_id INT DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   registration_fee DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Charged once per student when their semester reservation is confirmed',
-  lesson_fee_30_minutes DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Full-semester price for weekly 30-minute private lessons',
-  lesson_fee_60_minutes DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Full-semester price for weekly 60-minute private lessons',
-  guitar_ensemble_fee DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Full-semester price for 30-minute Guitar Ensemble',
+  lesson_fee_30_minutes DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Bronx residents: full-semester price for weekly 30-minute private lessons',
+  lesson_fee_60_minutes DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Bronx residents: full-semester price for weekly 60-minute private lessons',
+  guitar_ensemble_fee DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Bronx residents: full-semester price for 30-minute Guitar Ensemble',
+  lesson_fee_30_minutes_nonresident DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Non-residents / online students: 30-minute lessons per semester',
+  lesson_fee_60_minutes_nonresident DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Non-residents / online students: 60-minute lessons per semester',
+  guitar_ensemble_fee_nonresident DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Non-residents / online students: Guitar Ensemble per semester',
   recital_fee DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'Charged per lesson block',
   installment_plan_fee DECIMAL(8,2) NOT NULL DEFAULT 0.00 COMMENT 'One-time fee for paying tuition in two installments',
   lessons_per_semester INT NOT NULL DEFAULT 15 COMMENT 'Used for per-lesson price display on registration form',
@@ -824,3 +827,6 @@ VALUES ('Brian','Rosenthal','brian.rosenthal@gmail.com','$2y$12$2IMMsNZ3pwUpTPmc
 
 INSERT INTO users (first_name,last_name,email,password_hash,is_admin,is_developer,email_verified_at)
 VALUES ('Lilly','Rosenthal','lillyjrosenthal123@gmail.com','$2y$12$2IMMsNZ3pwUpTPmcXKQFr.P2grgudYlZZ/m2Y4jTxV1tjGDI9bX7.',1,1,NOW());
+
+INSERT INTO users (first_name,last_name,email,password_hash,is_admin,is_developer,email_verified_at)
+VALUES ('Michele','Slifka','m.michaelis@gmail.com','$2y$12$2IMMsNZ3pwUpTPmcXKQFr.P2grgudYlZZ/m2Y4jTxV1tjGDI9bX7.',1,1,NOW());

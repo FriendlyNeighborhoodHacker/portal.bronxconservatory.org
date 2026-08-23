@@ -27,12 +27,14 @@ class SemesterManagement {
         $pricing = self::validatePricingFields($pricing);
         try {
             self::pdo()->prepare(
-                'INSERT INTO semesters (season, year, start_date, end_date, registration_fee, lesson_fee_30_minutes, lesson_fee_60_minutes, guitar_ensemble_fee, recital_fee, installment_plan_fee, lessons_per_semester, created_by_user_id)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+                'INSERT INTO semesters (season, year, start_date, end_date, registration_fee, lesson_fee_30_minutes, lesson_fee_60_minutes, guitar_ensemble_fee, lesson_fee_30_minutes_nonresident, lesson_fee_60_minutes_nonresident, guitar_ensemble_fee_nonresident, recital_fee, installment_plan_fee, lessons_per_semester, created_by_user_id)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
             )->execute([
                 $season, $year, $start, $end,
                 $pricing['registration_fee'], $pricing['lesson_fee_30_minutes'], $pricing['lesson_fee_60_minutes'],
-                $pricing['guitar_ensemble_fee'], $pricing['recital_fee'], $pricing['installment_plan_fee'],
+                $pricing['guitar_ensemble_fee'], $pricing['lesson_fee_30_minutes_nonresident'],
+                $pricing['lesson_fee_60_minutes_nonresident'], $pricing['guitar_ensemble_fee_nonresident'],
+                $pricing['recital_fee'], $pricing['installment_plan_fee'],
                 $pricing['lessons_per_semester'], $ctx?->id
             ]);
         } catch (PDOException $e) {
@@ -69,11 +71,13 @@ class SemesterManagement {
         $pricing = self::validatePricingFields($pricing);
         try {
             self::pdo()->prepare(
-                'UPDATE semesters SET season=?, year=?, start_date=?, end_date=?, registration_fee=?, lesson_fee_30_minutes=?, lesson_fee_60_minutes=?, guitar_ensemble_fee=?, recital_fee=?, installment_plan_fee=?, lessons_per_semester=? WHERE id=?'
+                'UPDATE semesters SET season=?, year=?, start_date=?, end_date=?, registration_fee=?, lesson_fee_30_minutes=?, lesson_fee_60_minutes=?, guitar_ensemble_fee=?, lesson_fee_30_minutes_nonresident=?, lesson_fee_60_minutes_nonresident=?, guitar_ensemble_fee_nonresident=?, recital_fee=?, installment_plan_fee=?, lessons_per_semester=? WHERE id=?'
             )->execute([
                 $season, $year, $start, $end,
                 $pricing['registration_fee'], $pricing['lesson_fee_30_minutes'], $pricing['lesson_fee_60_minutes'],
-                $pricing['guitar_ensemble_fee'], $pricing['recital_fee'], $pricing['installment_plan_fee'],
+                $pricing['guitar_ensemble_fee'], $pricing['lesson_fee_30_minutes_nonresident'],
+                $pricing['lesson_fee_60_minutes_nonresident'], $pricing['guitar_ensemble_fee_nonresident'],
+                $pricing['recital_fee'], $pricing['installment_plan_fee'],
                 $pricing['lessons_per_semester'], $semesterId
             ]);
         } catch (PDOException $e) {
@@ -120,11 +124,16 @@ class SemesterManagement {
             'lesson_fee_30_minutes' => '0.00',
             'lesson_fee_60_minutes' => '0.00',
             'guitar_ensemble_fee' => '0.00',
+            'lesson_fee_30_minutes_nonresident' => '0.00',
+            'lesson_fee_60_minutes_nonresident' => '0.00',
+            'guitar_ensemble_fee_nonresident' => '0.00',
             'recital_fee' => '0.00',
             'installment_plan_fee' => '0.00',
             'lessons_per_semester' => 15,
         ];
-        foreach (['registration_fee', 'lesson_fee_30_minutes', 'lesson_fee_60_minutes', 'guitar_ensemble_fee', 'recital_fee', 'installment_plan_fee'] as $key) {
+        foreach (['registration_fee', 'lesson_fee_30_minutes', 'lesson_fee_60_minutes', 'guitar_ensemble_fee',
+                  'lesson_fee_30_minutes_nonresident', 'lesson_fee_60_minutes_nonresident',
+                  'guitar_ensemble_fee_nonresident', 'recital_fee', 'installment_plan_fee'] as $key) {
             $val = (string)($pricing[$key] ?? '0');
             $val = trim(str_replace(['$', ','], '', $val));
             if ($val === '' || !is_numeric($val)) {

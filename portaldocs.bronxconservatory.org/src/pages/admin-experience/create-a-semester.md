@@ -35,10 +35,13 @@ through the prerequisites:
 ## Step 1 — the semester itself
 
 `/admin/semester/new.php`: season (fall / spring / summer / test), year,
-start and end dates, and **all the pricing** — registration fee, 30- and
-60-minute lesson fees, guitar ensemble fee, recital fee, installment plan
-fee, and lessons-per-semester (default 15, used for per-lesson price
-display and duration-change math). Duplicate season+year is rejected
+start and end dates, and **all the pricing** — the registration fee (one per
+family), tuition in two schedules (**Bronx residents** and **non-residents /
+online students**: 30- and 60-minute lesson fees and the guitar ensemble fee
+for each), the recital & logistics fee, installment plan fee, and
+lessons-per-semester (default 15, used for per-lesson price display and
+duration-change math). Automatic charge-posting currently uses the resident
+rates; the non-resident schedule is stored for quoting and reference. Duplicate season+year is rejected
 ("Fall 2026 already exists"). On success the new semester immediately
 becomes the admin's selected semester.
 

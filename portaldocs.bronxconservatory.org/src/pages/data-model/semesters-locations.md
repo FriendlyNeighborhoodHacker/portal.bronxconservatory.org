@@ -33,9 +33,12 @@ so each term can have its own prices):
 | Column | Meaning |
 | --- | --- |
 | `registration_fee` | Charged once per student when their reservation is confirmed |
-| `lesson_fee_30_minutes` | Full-semester price for weekly 30-minute private lessons |
-| `lesson_fee_60_minutes` | Full-semester price for weekly 60-minute private lessons |
-| `guitar_ensemble_fee` | Full-semester price for 30-minute Guitar Ensemble |
+| `lesson_fee_30_minutes` | Bronx residents: full-semester price for weekly 30-minute private lessons |
+| `lesson_fee_60_minutes` | Bronx residents: full-semester price for weekly 60-minute private lessons |
+| `guitar_ensemble_fee` | Bronx residents: full-semester price for 30-minute Guitar Ensemble |
+| `lesson_fee_30_minutes_nonresident` | Non-residents / online students: 30-minute lessons |
+| `lesson_fee_60_minutes_nonresident` | Non-residents / online students: 60-minute lessons |
+| `guitar_ensemble_fee_nonresident` | Non-residents / online students: Guitar Ensemble |
 | `recital_fee` | Charged per lesson block |
 | `installment_plan_fee` | One-time fee for paying tuition in two installments |
 | `lessons_per_semester` | Default 15; used for per-lesson price display on the registration form |

@@ -45,9 +45,13 @@ header_html('New Semester');
       <label>End date
         <input type="date" name="end_date" required value="<?=h($old['end_date'] ?? '')?>">
       </label>
-      <label>Registration fee ($)
+      <label>Registration fee ($, one per family)
         <input type="text" name="pricing[registration_fee]" value="<?=h($old['pricing']['registration_fee'] ?? '')?>">
       </label>
+    </div>
+
+    <h3>Fees for Bronx residents</h3>
+    <div class="grid-2">
       <label>30-minute lesson fee ($/semester)
         <input type="text" name="pricing[lesson_fee_30_minutes]" value="<?=h($old['pricing']['lesson_fee_30_minutes'] ?? '')?>">
       </label>
@@ -57,7 +61,23 @@ header_html('New Semester');
       <label>Guitar Ensemble fee ($/semester)
         <input type="text" name="pricing[guitar_ensemble_fee]" value="<?=h($old['pricing']['guitar_ensemble_fee'] ?? '')?>">
       </label>
-      <label>Recital fee ($)
+    </div>
+
+    <h3>Fees for Bronx non-residents and/or online students</h3>
+    <div class="grid-2">
+      <label>30-minute lesson fee ($/semester)
+        <input type="text" name="pricing[lesson_fee_30_minutes_nonresident]" value="<?=h($old['pricing']['lesson_fee_30_minutes_nonresident'] ?? '')?>">
+      </label>
+      <label>60-minute lesson fee ($/semester)
+        <input type="text" name="pricing[lesson_fee_60_minutes_nonresident]" value="<?=h($old['pricing']['lesson_fee_60_minutes_nonresident'] ?? '')?>">
+      </label>
+      <label>Guitar Ensemble fee ($/semester)
+        <input type="text" name="pricing[guitar_ensemble_fee_nonresident]" value="<?=h($old['pricing']['guitar_ensemble_fee_nonresident'] ?? '')?>">
+      </label>
+    </div>
+
+    <div class="grid-2">
+      <label>Recital &amp; Logistics fee ($, per lesson block)
         <input type="text" name="pricing[recital_fee]" value="<?=h($old['pricing']['recital_fee'] ?? '')?>">
       </label>
       <label>Installment plan fee ($)

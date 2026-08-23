@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-DEV_EMAILS="'brian.rosenthal@gmail.com','lillyjrosenthal123@gmail.com'"
+DEV_EMAILS="'brian.rosenthal@gmail.com','lillyjrosenthal123@gmail.com','m.michaelis@gmail.com'"
 
 eval "$(php -r "require 'www/config.local.php';
   printf('DB_HOST=%s DB_NAME=%s DB_USER=%s DB_PASS=%s',
