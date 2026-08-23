@@ -119,9 +119,10 @@ $last_name = trim($_POST['last_name'] ?? '');
 $email = trim($_POST['email'] ?? '');
 $canGrantAdmin = $canEditAdmin && $hasLogin; // no-login users cannot be admins
 $is_admin = $canGrantAdmin && !empty($_POST['is_admin']) ? 1 : ($canGrantAdmin ? 0 : (int)$user['is_admin']);
-// The developer flag rides the same gate: it only means anything alongside
-// admin, and nobody may drop their own (that would lock them out of Maintenance).
-$is_developer = $canGrantAdmin && !empty($_POST['is_developer']) ? 1 : ($canGrantAdmin ? 0 : (int)$user['is_developer']);
+// Only developers may grant or revoke the developer flag on others, and
+// nobody may drop their own (that would lock them out of Maintenance).
+$canGrantDeveloper = $canGrantAdmin && is_developer();
+$is_developer = $canGrantDeveloper && !empty($_POST['is_developer']) ? 1 : ($canGrantDeveloper ? 0 : (int)$user['is_developer']);
 
 // Validation
 $errors = [];
@@ -173,6 +174,8 @@ try {
     // Update admin / developer flags if allowed
     if ($canGrantAdmin) {
         UserManagement::setAdminFlag($ctx, $userId, (bool)$is_admin);
+    }
+    if ($canGrantDeveloper) {
         UserManagement::setDeveloperFlag($ctx, $userId, (bool)$is_developer);
     }
 

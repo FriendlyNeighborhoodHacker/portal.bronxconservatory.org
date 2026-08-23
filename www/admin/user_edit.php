@@ -146,11 +146,15 @@ if (isset($_GET['photo_err'])) { $err = 'Photo upload failed.'; }
             Admin user
           </label>
           <span class="small">Access to the admin side of the portal.</span>
-          <label class="inline">
-            <input type="checkbox" name="is_developer" value="1" <?= !empty($form['is_developer']) ? 'checked' : '' ?>>
-            Developer
-          </label>
-          <span class="small">With Admin, access to Admin &gt; Maintenance (migrations, activity log, email log).</span>
+          <?php if (is_developer()): ?>
+            <label class="inline">
+              <input type="checkbox" name="is_developer" value="1" <?= !empty($form['is_developer']) ? 'checked' : '' ?>>
+              Developer
+            </label>
+            <span class="small">With Admin, access to Admin &gt; Maintenance (migrations, activity log, email log).</span>
+          <?php else: ?>
+            <span class="small">Developer: <?= !empty($user['is_developer']) ? 'Yes' : 'No' ?> (only developers can change this)</span>
+          <?php endif; ?>
         </div>
       <?php elseif (!$hasLogin): ?>
         <div class="small" style="color:var(--color-text-muted);">
