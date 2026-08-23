@@ -1,0 +1,124 @@
+---
+import { navItems, pathToSlug } from '../lib/nav';
+
+interface Props {
+  /** Current path, used to highlight the active link. */
+  pathname: string;
+  /** When true, renders the overlay variant (used inside the mobile menu). */
+  overlay?: boolean;
+}
+
+const { pathname } = Astro.props;
+const current = pathToSlug(pathname);
+
+function isActive(slug: string) {
+  return current === slug;
+}
+
+/** The current page is this item or one of its children. */
+function inSection(item: (typeof navItems)[number]) {
+  return (
+    current === item.slug ||
+    (item.children?.some((child) => current === child.slug) ?? false)
+  );
+}
+---
+
+<nav class="sidebar-nav" aria-label="Documentation">
+  <ul class="nav-list">
+    {
+      navItems.map((item) => (
+        <li class="nav-item">
+          <a
+            href={`/${item.slug}`}
+            class:list={['nav-link', { active: isActive(item.slug) }]}
+            data-nav-link
+          >
+            {item.title}
+          </a>
+          {item.children && (!item.collapsible || inSection(item)) && (
+            <ul class="nav-sublist">
+              {item.children.map((child) => (
+                <li>
+                  <a
+                    href={`/${child.slug}`}
+                    class:list={['nav-sublink', { active: isActive(child.slug) }]}
+                    data-nav-link
+                  >
+                    {child.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </li>
+      ))
+    }
+  </ul>
+</nav>
+
+<style>
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .nav-list,
+  .nav-sublist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .nav-item {
+    margin-bottom: 0.15rem;
+  }
+
+  .nav-link {
+    display: block;
+    padding: 0.45rem 0.7rem;
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    text-decoration: none;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .nav-link:hover {
+    background: var(--bg-subtle);
+    color: var(--text);
+    text-decoration: none;
+  }
+  .nav-link.active {
+    background: var(--accent-pastel-gold);
+    color: var(--color-navy);
+    font-weight: 600;
+  }
+
+  .nav-sublist {
+    margin: 0.15rem 0 0.4rem 0.75rem;
+    border-left: 2px solid var(--border);
+    padding-left: 0.4rem;
+  }
+
+  .nav-sublink {
+    display: block;
+    padding: 0.35rem 0.6rem;
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-size: 0.93rem;
+    text-decoration: none;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .nav-sublink:hover {
+    background: var(--bg-subtle);
+    color: var(--text);
+    text-decoration: none;
+  }
+  .nav-sublink.active {
+    background: var(--accent-pastel-blue);
+    color: var(--color-blue);
+    font-weight: 600;
+  }
+</style>

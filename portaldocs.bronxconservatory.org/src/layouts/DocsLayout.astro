@@ -1,0 +1,285 @@
+---
+import '../styles/global.css';
+import Sidebar from '../components/Sidebar.astro';
+import logo from '../assets/images/bcm-logo-white.png';
+
+// This layout is referenced from each doc's `layout:` front matter key, so
+// Astro passes the parsed front matter as `Astro.props.frontmatter`.
+const { frontmatter } = Astro.props;
+const title = frontmatter?.title;
+const description = frontmatter?.description;
+const pathname = Astro.url.pathname;
+const pageTitle = `${title} · BCM Portal Docs`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="generator" content={Astro.generator} />
+    {description && <meta name="description" content={description} />}
+    <title>{pageTitle}</title>
+  </head>
+  <body>
+    <div class="layout">
+      <!-- Header: navy like the portal's own top bar, with the white BCM logo. -->
+      <header class="site-header">
+        <a class="brand" href="/" aria-label="BCM Portal Docs home">
+          <img class="brand-logo" src={logo.src} alt="Bronx Conservatory of Music" />
+          <span class="brand-slash">/</span>
+          <span class="brand-docs">Portal Docs</span>
+        </a>
+
+        <button
+          class="hamburger"
+          id="open-menu"
+          aria-label="Open navigation menu"
+          aria-expanded="false"
+        >
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+      </header>
+
+      <div class="body-grid">
+        <!-- Desktop sidebar -->
+        <aside class="sidebar-desktop">
+          <Sidebar pathname={pathname} />
+        </aside>
+
+        <!-- Main content -->
+        <main class="content">
+          <article class="doc">
+            <slot />
+          </article>
+        </main>
+      </div>
+    </div>
+
+    <!-- Mobile overlay menu. Hidden by default; only opens when the hamburger
+         is tapped (the [hidden] attribute keeps it closed on initial load). -->
+    <div class="menu-overlay" id="menu-overlay" hidden>
+      <div class="menu-panel" role="dialog" aria-modal="true" aria-label="Browse">
+        <div class="menu-panel-header">
+          <span class="menu-title">Browse</span>
+          <button class="menu-close" id="close-menu" aria-label="Close menu">×</button>
+        </div>
+        <div class="menu-panel-body">
+          <Sidebar pathname={pathname} overlay />
+        </div>
+      </div>
+    </div>
+
+    <style>
+      .layout {
+        min-height: 100vh;
+      }
+
+      /* Header */
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        height: var(--header-height);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 1.5rem;
+        background: var(--color-navy);
+        color: var(--text-on-navy);
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        text-decoration: none;
+        color: var(--text-on-navy);
+      }
+      .brand:hover {
+        text-decoration: none;
+        color: var(--text-on-navy);
+      }
+      .brand-logo {
+        height: 38px;
+        width: auto;
+        display: block;
+      }
+      .brand-slash {
+        color: var(--color-gold);
+        font-size: 1.5rem;
+        font-weight: 300;
+      }
+      .brand-docs {
+        font-family: var(--font-title);
+        font-weight: 500;
+        font-size: 1.25rem;
+        color: var(--text-on-navy);
+      }
+
+      .hamburger {
+        display: none;
+        background: none;
+        border: none;
+        color: var(--text-on-navy);
+        cursor: pointer;
+        padding: 0.35rem;
+        border-radius: 8px;
+      }
+      .hamburger:hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      /* Body grid */
+      .body-grid {
+        display: grid;
+        grid-template-columns: var(--sidebar-width) 1fr;
+        align-items: start;
+      }
+
+      .sidebar-desktop {
+        position: sticky;
+        top: var(--header-height);
+        align-self: start;
+        height: calc(100vh - var(--header-height));
+        overflow-y: auto;
+        padding: 1.5rem 1.25rem;
+        background: var(--bg-sidebar);
+        border-right: 1px solid var(--border);
+      }
+
+      .content {
+        padding: 2.5rem 2rem 5rem;
+        display: flex;
+        justify-content: center;
+      }
+      .doc {
+        width: 100%;
+        max-width: var(--content-max);
+      }
+
+      /* Mobile overlay.
+         The [hidden] attribute keeps it closed by default; this rule only
+         applies when it is *not* hidden (i.e. after the hamburger is tapped). */
+      .menu-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        background: var(--overlay-scrim);
+        display: flex;
+        justify-content: flex-start;
+      }
+      /* Guarantee a closed default even if a [hidden] global reset is missing. */
+      .menu-overlay[hidden] {
+        display: none !important;
+      }
+      .menu-panel {
+        width: min(86vw, 360px);
+        height: 100%;
+        background: var(--bg);
+        display: flex;
+        flex-direction: column;
+        box-shadow: 4px 0 24px rgba(0, 19, 42, 0.2);
+        animation: slide-in 0.18s ease;
+      }
+      @keyframes slide-in {
+        from { transform: translateX(-100%); }
+        to { transform: translateX(0); }
+      }
+      .menu-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .menu-title {
+        font-family: var(--font-title);
+        font-weight: 600;
+        font-size: 1.2rem;
+        color: var(--color-navy);
+      }
+      .menu-close {
+        background: none;
+        border: none;
+        font-size: 1.8rem;
+        line-height: 1;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 0 0.25rem;
+        border-radius: 8px;
+      }
+      .menu-close:hover {
+        background: var(--bg-subtle);
+        color: var(--text);
+      }
+      .menu-panel-body {
+        padding: 1.25rem;
+        overflow-y: auto;
+      }
+
+      /* Responsive: collapse sidebar under 900px */
+      @media (max-width: 900px) {
+        .body-grid {
+          grid-template-columns: 1fr;
+        }
+        .sidebar-desktop {
+          display: none;
+        }
+        .hamburger {
+          display: inline-flex;
+        }
+        .content {
+          padding: 1.75rem 1.25rem 5rem;
+        }
+      }
+
+      @media (min-width: 901px) {
+        .menu-overlay {
+          display: none !important;
+        }
+      }
+    </style>
+
+    <script>
+      const openBtn = document.getElementById('open-menu');
+      const closeBtn = document.getElementById('close-menu');
+      const overlay = document.getElementById('menu-overlay');
+
+      function openMenu() {
+        overlay?.removeAttribute('hidden');
+        openBtn?.setAttribute('aria-expanded', 'true');
+        document.body.style.overflow = 'hidden';
+      }
+      function closeMenu() {
+        overlay?.setAttribute('hidden', '');
+        openBtn?.setAttribute('aria-expanded', 'false');
+        document.body.style.overflow = '';
+      }
+
+      openBtn?.addEventListener('click', openMenu);
+      closeBtn?.addEventListener('click', closeMenu);
+
+      // Close when clicking the scrim (outside the panel).
+      overlay?.addEventListener('click', (e) => {
+        if (e.target === overlay) closeMenu();
+      });
+
+      // Close when a nav link inside the overlay is clicked.
+      overlay?.querySelectorAll('[data-nav-link]').forEach((link) => {
+        link.addEventListener('click', closeMenu);
+      });
+
+      // Close on Escape.
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !overlay?.hasAttribute('hidden')) closeMenu();
+      });
+    </script>
+  </body>
+</html>
