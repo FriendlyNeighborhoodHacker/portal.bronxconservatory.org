@@ -44,11 +44,18 @@ warning that changing the date range does **not** add or remove lessons
 (lessons come from the imported class dates), and a count of class dates
 that would fall outside the new range.
 
-## Step 2 — active locations
+## Step 2 — active locations and their class days
 
 Checkbox list of which locations are in use this semester (a new semester
-pre-checks everything). Saving builds the import chain and sends the admin
-into it. Removing a location later does not clean up its dates, teacher
+pre-checks everything), and — per location — **which days of the week it
+holds classes, with that day's standard hours** (e.g. Bronx Community College:
+Saturday 9:00 am–5:00 pm and Tuesday 3:30–8:00 pm). Every selected location
+needs at least one day. The class-dates import (step 3) rejects dates that
+fall on undeclared days, and rows with blank times inherit these hours.
+Re-opening this page prefills what is already declared (or, for a location
+predating declarations, the days its imported dates imply), so re-saving
+never silently drops a day. Saving builds the import chain and sends the
+admin into it. Removing a location later does not clean up its dates, teacher
 assignments, or reservations — prune those yourself.
 
 ## Steps 3–7 — the CSV imports

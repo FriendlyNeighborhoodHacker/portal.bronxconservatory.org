@@ -49,6 +49,21 @@ Which locations are in use for a semester — step 2 of the semester creation
 wizard. Just the unique (`semester_id`, `location_id`) pair, cascading from
 both sides.
 
+## `semester_location_weekdays`
+
+The **declared class days**: which weekdays each location holds classes on
+for a semester, with that day's standard hours — declared alongside the
+locations on wizard step 2, unique on (`semester_id`, `location_id`,
+`day_of_week`) with `start_time`/`end_time`. This is the explicit,
+higher-level statement the rest of the semester hangs off: the class-dates
+import rejects a date on an undeclared weekday (and blank times inherit the
+declared hours), an explicit day in the location-teachers import must be a
+day the location is open, and the schedule grid draws a day's band over these
+hours as soon as the day is declared — before any dates are imported.
+Derivations use the **union** of declared weekdays and actual class-date
+weekdays, so a one-off date on an odd weekday still counts. Locations that
+predate declarations (none declared) are simply unchecked.
+
 ## `semester_location_dates`
 
 The **class calendar per location**, imported by CSV in the wizard (step 3).
