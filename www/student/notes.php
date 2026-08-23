@@ -1,8 +1,8 @@
 <?php
-// Notes from every one of the student's classes — upcoming and past, latest
-// class first — the "See all notes" page linked from the student home. Each
-// class shows its whole note thread; the Notes & Materials button opens the
-// lesson modal, where the student can add a note of their own.
+// The "See all notes" page linked from the student home: every note and
+// material from every one of the student's classes as one chronological
+// chat — previous lessons collapsed at the top, the upcoming lesson's notes
+// front and center.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
 require_once __DIR__ . '/../lib/LessonDetailUIManager.php';
@@ -19,8 +19,7 @@ if (!in_array('student', $roles, true) && empty($me['is_admin'])) {
 }
 
 // Every class, future and past alike — a parent may write on next week's
-// lesson before it happens, and that note belongs here too. Latest first,
-// so upcoming classes lead and history trails off below.
+// lesson before it happens, and that note belongs here too.
 $allLessons = LessonManagement::recentLessonsForStudent((int)$me['id'], '9999-12-31', 100);
 $notesByLesson = [];
 foreach (NotesManagement::notesForLessons(array_column($allLessons, 'id')) as $note) {
@@ -38,35 +37,63 @@ header_html('Notes from All Classes');
 <p class="small"><a href="/student/">&larr; Back to My Schedule</a></p>
 
 <?php
-// One continuous chat: every note and material the student has, in class
-// order (latest class first), each class marked only by a slim date
-// separator the way messaging apps mark days. Classes with nothing written
-// on them don't appear at all — this page is the notes, not the schedule.
-$anyBubbles = false;
-?>
-<div class="card">
-<?php foreach ($allLessons as $lesson): ?>
-<?php
+// One continuous chat, chronological like a message history: older classes
+// above, the nearest upcoming class's notes on top of what is visible.
+// Notes from previous lessons start collapsed behind a "View notes from
+// previous lessons" button at the top, so the first thing a student sees is
+// the most relevant thing — what has been written about the lesson coming
+// up. Classes with nothing written on them don't appear at all — this page
+// is the notes, not the schedule.
+$previousBlocks = [];
+$relevantBlocks = [];
+foreach (array_reverse($allLessons) as $lesson) { // oldest class first
     // The batch queries return newest-first; a conversation reads oldest-first.
     $notes = array_reverse($notesByLesson[(int)$lesson['id']] ?? []);
     $resources = array_reverse($resourcesByLesson[(int)$lesson['id']] ?? []);
     if (!$notes && !$resources) {
         continue;
     }
-    $anyBubbles = true;
     $cancelled = LessonManagement::isCancelled($lesson);
     $upcoming = strtotime($lesson['start_datetime']) > time();
+    $block = '<div class="small" style="text-align:center;color:var(--color-text-muted);margin:18px 0 8px;">'
+        . h(date('l, F j', strtotime($lesson['start_datetime'])))
+        . ($cancelled ? ' · cancelled' : ($upcoming ? ' · upcoming' : ''))
+        . '</div>'
+        . '<div class="lesson-notes">' . LessonDetailUIManager::threadBubblesHtml($notes, $resources) . '</div>';
+    if ($upcoming) {
+        $relevantBlocks[] = $block;
+    } else {
+        $previousBlocks[] = $block;
+    }
+}
+// Nothing coming up: the most recent past class is the most relevant thing
+// there is, so it stays visible and only the rest collapses.
+if (!$relevantBlocks && $previousBlocks) {
+    $relevantBlocks[] = array_pop($previousBlocks);
+}
 ?>
-  <div class="small" style="text-align:center;color:var(--color-text-muted);margin:18px 0 8px;">
-    <?=h(date('l, F j', strtotime($lesson['start_datetime'])))?><?=$cancelled ? ' · cancelled' : ($upcoming ? ' · upcoming' : '')?>
+<div class="card">
+<?php if ($previousBlocks): ?>
+  <div class="actions" style="justify-content:center;">
+    <button type="button" class="button" id="showPreviousNotes">View notes from previous lessons</button>
   </div>
-  <div class="lesson-notes">
-    <?=LessonDetailUIManager::threadBubblesHtml($notes, $resources)?>
+  <div id="previousNotes" hidden>
+    <?=implode('', $previousBlocks)?>
   </div>
-<?php endforeach; ?>
-<?php if (!$anyBubbles): ?>
+<?php endif; ?>
+<?=implode('', $relevantBlocks)?>
+<?php if (!$relevantBlocks): ?>
   <p class="small" style="margin:0;">No notes yet — what you and your teachers write about your lessons will appear here.</p>
 <?php endif; ?>
 </div>
+
+<?php if ($previousBlocks): ?>
+<script>
+document.getElementById('showPreviousNotes').addEventListener('click', function () {
+  document.getElementById('previousNotes').removeAttribute('hidden');
+  this.closest('.actions').remove();
+});
+</script>
+<?php endif; ?>
 
 <?php footer_html(); ?>
