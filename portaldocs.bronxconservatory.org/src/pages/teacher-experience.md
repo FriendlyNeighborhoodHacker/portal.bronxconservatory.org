@@ -23,7 +23,9 @@ decisions shape it:
   "Upcoming Lessons." Arrows move to the previous/next teaching day, and the
   Teaching Days view is the list.
 - **Attendance is easy to mark and easy to take back.** Each card has
-  attended/missed marking, and an "Unmark" action with a confirmation —
+  attended/missed marking — the chosen button colors itself, Present light
+  green and Absent light red, so a glance down the day shows how it went —
+  and an "Unmark" action with a confirmation —
   because a mis-tap between two lessons should not be permanent.
   (`lessons.attended`: NULL = unmarked, 1 = attended, 0 = missed.)
 

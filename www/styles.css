@@ -1251,6 +1251,27 @@ body.auth .brand-logo {
   font-weight: 700;
 }
 
+/* The chosen mark colors its button: Present goes light green, Absent light
+   red, so a glance down the day shows how it went. The buttons are disabled
+   once chosen (the mark is made), but must not fade like an ordinary
+   disabled button — the color IS the information. */
+.attendance-btn.active[data-attended="1"] {
+  background: var(--color-notes-bg);
+  border-color: var(--color-notes-border);
+  color: var(--color-notes-text);
+}
+
+.attendance-btn.active[data-attended="0"] {
+  background: #fdeaea;
+  border-color: #f0c4c0;
+  color: #a33227;
+}
+
+.attendance-btn.active:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
 /* Taking a present/absent mark back off — quieter than the two buttons it
    follows, since it undoes rather than answers. */
 .attendance-unmark {
