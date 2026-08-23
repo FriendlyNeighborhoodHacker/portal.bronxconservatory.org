@@ -7,6 +7,7 @@ require_once __DIR__ . '/../partials_semester_timeline.php';
 require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../lib/ScheduleTimeline.php';
 require_once __DIR__ . '/../lib/SemesterManagement.php';
+require_once __DIR__ . '/../lib/LessonDetailUIManager.php';
 Application::init();
 require_login();
 
@@ -31,6 +32,7 @@ header_html('Family Calendar');
         . ' ' . $lesson['student_last_name']);
     // The regular teacher; a covered week names the substitute on its own line.
     return $child . ' with ' . trim($lesson['teacher_first_name'] . ' ' . $lesson['teacher_last_name']);
-})?>
+}, withDetailLinks: true)?>
 
+<?php LessonDetailUIManager::renderModal(); ?>
 <?php footer_html(); ?>

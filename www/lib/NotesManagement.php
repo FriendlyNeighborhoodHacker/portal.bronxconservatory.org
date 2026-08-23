@@ -94,6 +94,31 @@ class NotesManagement {
         return $st->fetchAll();
     }
 
+    /**
+     * How many notes each of these lessons has, as [lesson_id => count], in
+     * one query — for the schedule views that show a count next to each
+     * lesson so a family knows whether opening it is worth the tap. Lessons
+     * with no notes are simply absent from the map.
+     */
+    public static function noteCountsForLessons(array $lessonIds): array {
+        $ids = array_values(array_unique(array_map('intval', $lessonIds)));
+        if (!$ids) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $st = self::pdo()->prepare(
+            "SELECT lesson_id, COUNT(*) AS n FROM lesson_notes
+             WHERE lesson_id IN ($placeholders) AND body <> ''
+             GROUP BY lesson_id"
+        );
+        $st->execute($ids);
+        $counts = [];
+        foreach ($st->fetchAll() as $row) {
+            $counts[(int)$row['lesson_id']] = (int)$row['n'];
+        }
+        return $counts;
+    }
+
     // A student's lesson notes, newest lesson first — the student and parent
     // dashboards' notes cards. Several notes on one lesson come back newest
     // first among themselves.

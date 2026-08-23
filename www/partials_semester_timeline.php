@@ -11,15 +11,26 @@
 require_once __DIR__ . '/partials.php';
 require_once __DIR__ . '/lib/ScheduleTimeline.php';
 require_once __DIR__ . '/lib/LessonManagement.php';
+require_once __DIR__ . '/lib/LessonUIHelper.php';
 
 /**
  * @param array    $entries  from ScheduleTimeline::forTeacher/forStudents
  * @param callable $whoFn    fn(array $lesson): string — "" to omit the line
+ * @param bool     $withDetailLinks  add a compact notes-and-materials link to
+ *   each lesson row — "2 notes · 1 material" where the lesson has any (so a
+ *   completed lesson's teacher notes are one tap away), "Add Note" where it
+ *   has none yet. The links open the lesson detail modal, so a page passing
+ *   true must also render LessonDetailUIManager::renderModal().
  */
-function semester_timeline_html(array $entries, callable $whoFn): string {
+function semester_timeline_html(array $entries, callable $whoFn, bool $withDetailLinks = false): string {
     if (!$entries) {
         return '<div class="card"><p>Nothing scheduled yet.</p></div>';
     }
+
+    $counts = $withDetailLinks
+        ? LessonUIHelper::countsForLessons(array_column(
+            array_filter($entries, fn($e) => $e['kind'] === 'lesson'), 'lesson'))
+        : [];
 
     $labels = ScheduleTimeline::semesterLabels($entries);
     $tagRows = count($labels) > 1;
@@ -73,6 +84,19 @@ function semester_timeline_html(array $entries, callable $whoFn): string {
         ]);
         if ($detail) {
             $html .= '<div class="sem-date-locations">' . h(implode(' · ', $detail)) . '</div>';
+        }
+        if ($withDetailLinks) {
+            $lessonCounts = $counts[(int)$lesson['id']] ?? ['notes' => 0, 'materials' => 0];
+            $countLabel = LessonUIHelper::countsLabel($lessonCounts['notes'], $lessonCounts['materials']);
+            if ($countLabel !== '') {
+                $html .= '<div class="small" style="margin-top:2px;"><a href="#" data-lesson-detail="'
+                    . (int)$lesson['id'] . '">' . h($countLabel) . '</a></div>';
+            } elseif (!$cancelled) {
+                // Nothing on the lesson yet: still a way in, quietly, to
+                // leave the first note.
+                $html .= '<div class="small" style="margin-top:2px;"><a href="#" data-lesson-detail="'
+                    . (int)$lesson['id'] . '">Add Note</a></div>';
+            }
         }
         $html .= '</div>';
     }

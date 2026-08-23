@@ -130,6 +130,30 @@ class ResourceManagement {
     }
 
     /**
+     * How many materials each of these lessons has, as [lesson_id => count],
+     * in one query — the companion to NotesManagement::noteCountsForLessons
+     * for schedule views. Lessons with no materials are absent from the map.
+     */
+    public static function resourceCountsForLessons(array $lessonIds): array {
+        $ids = array_values(array_unique(array_map('intval', $lessonIds)));
+        if (!$ids) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $st = self::pdo()->prepare(
+            "SELECT lesson_id, COUNT(*) AS n FROM lesson_resources
+             WHERE lesson_id IN ($placeholders)
+             GROUP BY lesson_id"
+        );
+        $st->execute($ids);
+        $counts = [];
+        foreach ($st->fetchAll() as $row) {
+            $counts[(int)$row['lesson_id']] = (int)$row['n'];
+        }
+        return $counts;
+    }
+
+    /**
      * A student's materials for a semester ("My Materials"), in chronological
      * order of the lesson each is attached to.
      */
