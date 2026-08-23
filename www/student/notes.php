@@ -37,40 +37,36 @@ header_html('Notes from All Classes');
 <h2>Notes from All Classes</h2>
 <p class="small"><a href="/student/">&larr; Back to My Schedule</a></p>
 
-<?php if (!$allLessons): ?>
+<?php
+// One continuous chat: every note and material the student has, in class
+// order (latest class first), each class marked only by a slim date
+// separator the way messaging apps mark days. Classes with nothing written
+// on them don't appear at all — this page is the notes, not the schedule.
+$anyBubbles = false;
+?>
 <div class="card">
-  <p class="small" style="margin:0;">No classes yet — notes from your lessons will appear here after your first one.</p>
-</div>
-<?php endif; ?>
-
 <?php foreach ($allLessons as $lesson): ?>
 <?php
-    $cancelled = LessonManagement::isCancelled($lesson);
-    $upcoming = strtotime($lesson['start_datetime']) > time();
     // The batch queries return newest-first; a conversation reads oldest-first.
     $notes = array_reverse($notesByLesson[(int)$lesson['id']] ?? []);
     $resources = array_reverse($resourcesByLesson[(int)$lesson['id']] ?? []);
+    if (!$notes && !$resources) {
+        continue;
+    }
+    $anyBubbles = true;
+    $cancelled = LessonManagement::isCancelled($lesson);
+    $upcoming = strtotime($lesson['start_datetime']) > time();
 ?>
-<div class="card"<?=$cancelled ? ' style="opacity:0.7;"' : ''?>>
-  <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap;">
-    <div>
-      <div style="font-size:16px;font-weight:500;">
-        <?=h(date('l F j, Y', strtotime($lesson['start_datetime'])))?><?=$cancelled ? ' · cancelled' : ($upcoming ? ' · upcoming' : '')?>
-      </div>
-      <div class="small" style="color:var(--color-text-muted);">
-        <?=h(date('g:i A', strtotime($lesson['start_datetime'])))?> ·
-        <?=h($lesson['location_name'] ?? '')?> ·
-        Teacher: <?=h(trim(($lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name']) . ' '
-          . ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])))?>
-      </div>
-    </div>
-    <a href="#" data-lesson-detail="<?=(int)$lesson['id']?>" class="button notes" style="white-space:nowrap;">Notes &amp; Materials</a>
+  <div class="small" style="text-align:center;color:var(--color-text-muted);margin:18px 0 8px;">
+    <?=h(date('l, F j', strtotime($lesson['start_datetime'])))?><?=$cancelled ? ' · cancelled' : ($upcoming ? ' · upcoming' : '')?>
   </div>
-  <div class="lesson-notes" style="margin-top:12px;">
+  <div class="lesson-notes">
     <?=LessonDetailUIManager::threadBubblesHtml($notes, $resources)?>
   </div>
-</div>
 <?php endforeach; ?>
+<?php if (!$anyBubbles): ?>
+  <p class="small" style="margin:0;">No notes yet — what you and your teachers write about your lessons will appear here.</p>
+<?php endif; ?>
+</div>
 
-<?php LessonDetailUIManager::renderModal(); ?>
 <?php footer_html(); ?>

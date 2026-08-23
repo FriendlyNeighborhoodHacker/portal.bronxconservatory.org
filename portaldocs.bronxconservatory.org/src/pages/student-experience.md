@@ -20,9 +20,11 @@ students, who are simply users with a student profile of their own.
    full note thread from the student's most recent class (today's included),
    with light-green **Notes & Materials** and **"See notes from all
    classes."** buttons. A white **"See all notes"** button also sits at the
-   top right of the page. Both open a page listing every class — upcoming
-   lessons included, latest first — each with its complete note thread;
-   notes are the heart of the student experience, so they lead the page.
+   top right of the page. Both open one continuous chat of every note and
+   material the student has — upcoming lessons included, latest class first,
+   each class marked only by a slim date separator the way messaging apps
+   mark days; notes are the heart of the student experience, so they lead
+   the page.
 2. **Next Lesson / Upcoming Lessons** — when and where, *including breaks*:
    inactive `semester_location_dates` on the student's weekday surface as
    "Holiday Week" instead of a silent gap. The Next Lesson card carries its
