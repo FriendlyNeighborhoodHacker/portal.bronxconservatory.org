@@ -56,7 +56,7 @@ ApplicationUI::minimalHeaderHtml('Request Information — Contact');
       <a href="https://www.bronxconservatory.org/privacy-policy/" target="_blank" rel="noopener">Privacy
       Policy and Terms of Service</a>.</p>
 
-    <?=recaptcha_widget_html()?>
+    <?=recaptcha_widget_html('inquiry_contact')?>
 
     <div class="actions">
       <button type="submit" class="btn-cta">Continue</button>

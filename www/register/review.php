@@ -81,7 +81,7 @@ ApplicationUI::minimalHeaderHtml('Register — Review');
 
   <form method="post" action="/register/submit_eval.php" class="stack">
     <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
-    <?=recaptcha_widget_html()?>
+    <?=recaptcha_widget_html('register_submit')?>
     <div class="actions">
       <a class="btn-outline" href="/register/payment_plan.php">Back</a>
       <button type="submit" class="btn-cta">

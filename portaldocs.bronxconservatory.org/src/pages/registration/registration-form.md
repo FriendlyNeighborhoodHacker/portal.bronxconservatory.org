@@ -32,8 +32,9 @@ told registration is closed.
    ensemble fee, recital fee, installment fee). The quote lines are stored on
    the lead as `quote_json` along with `amount_quoted_cents` and
    `amount_due_now_cents`.
-6. **Checkout** (`checkout.php` / `submit_eval.php`) — Stripe payment,
-   protected by reCAPTCHA. The browser returns via `return.php`; the Stripe
+6. **Checkout** (`checkout.php` / `submit_eval.php`) — Stripe payment. The
+   final submit is protected by invisible reCAPTCHA (Enterprise,
+   score-based). The browser returns via `return.php`; the Stripe
    webhook records the payment independently, and unique keys make sure only
    one of the two records it.
 7. **Done** (`done.php`).

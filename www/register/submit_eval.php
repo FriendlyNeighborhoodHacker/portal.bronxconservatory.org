@@ -16,7 +16,7 @@ require_csrf();
 
 $state = registration_require_step(5);
 
-$recaptchaError = recaptcha_verify_or_null();
+$recaptchaError = recaptcha_verify_or_null('register_submit');
 if ($recaptchaError !== null) {
     registration_fail($recaptchaError, '/register/review.php');
 }

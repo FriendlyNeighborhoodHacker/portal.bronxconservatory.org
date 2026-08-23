@@ -39,11 +39,17 @@ define('STRIPE_SECRET_KEY', '');
 define('STRIPE_PUBLISHABLE_KEY', '');
 define('STRIPE_WEBHOOK_SECRET', '');
 
-// Google reCAPTCHA v2 checkbox (https://www.google.com/recaptcha/admin) —
-// protects the public registration form against bots. Empty values hide the
-// widget and skip verification (fine for local development).
+// Google reCAPTCHA Enterprise, score-based/invisible — protects the public
+// registration and information-request forms against bots. SITE_KEY is the
+// Enterprise key; SECRET_KEY is that key's LEGACY SECRET KEY (Google Cloud
+// console > Security > reCAPTCHA > the key > Integration > "Use legacy
+// key"). Empty values disable it entirely and skip verification (fine for
+// local development, and the quick way to switch it off in production).
 define('RECAPTCHA_SITE_KEY', '');
 define('RECAPTCHA_SECRET_KEY', '');
+// Tokens scoring below this are refused (0.0 = certain bot, 1.0 = certain
+// human). Uncomment to loosen if real families are being refused.
+// define('RECAPTCHA_MIN_SCORE', 0.5);
 
 // ===== GitHub deploy webhook (gitwebhook.php) =====
 // Shared secret for the GitHub deploy webhook. Must match the secret

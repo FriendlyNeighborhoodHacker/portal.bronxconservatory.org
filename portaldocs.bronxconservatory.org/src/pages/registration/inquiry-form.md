@@ -15,7 +15,9 @@ price.
 A short multi-page flow, each page saving as it goes:
 
 1. **Contact** (`contact.php`) — parent name, email, phone, newsletter opt-in,
-   SMS consent. Submitting writes a row to `incomplete_inquiries`.
+   SMS consent. The submit is protected by invisible reCAPTCHA (Enterprise,
+   score-based; skipped entirely when no keys are configured). Passing it
+   writes a row to `incomplete_inquiries`.
 2. **Address** (`address.php`) — mailing address (nullable by design; the form
    tolerates non-US addresses). Updates the same row and bumps
    `last_step_completed` to 2.

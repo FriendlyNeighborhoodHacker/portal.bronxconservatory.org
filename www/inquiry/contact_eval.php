@@ -28,7 +28,7 @@ $state = inquiry_state();
 $state['contact'] = $contact;
 inquiry_save($state);
 
-$recaptchaError = recaptcha_verify_or_null();
+$recaptchaError = recaptcha_verify_or_null('inquiry_contact');
 if ($recaptchaError !== null) {
     inquiry_fail($recaptchaError, '/inquiry/contact.php');
 }
