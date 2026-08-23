@@ -562,7 +562,8 @@ class Billing {
         $st = self::pdo()->prepare(
             "SELECT le.semester_id, s.season, s.year, s.start_date, s.end_date,
                     COALESCE(SUM(CASE WHEN le.accounting_type='debit' THEN le.amount_cents ELSE 0 END), 0) AS charged_cents,
-                    COALESCE(SUM(CASE WHEN le.accounting_type='credit' THEN le.amount_cents ELSE 0 END), 0) AS paid_cents
+                    COALESCE(SUM(CASE WHEN le.accounting_type='credit' THEN le.amount_cents ELSE 0 END), 0) AS paid_cents,
+                    COALESCE(SUM(CASE WHEN le.accounting_type='debit' AND le.entry_type='installment_plan_fee' THEN le.amount_cents ELSE 0 END), 0) AS installment_fee_cents
              FROM ledger_entries le
              LEFT JOIN semesters s ON s.id = le.semester_id
              WHERE le.for_student_user_id = ?
@@ -590,6 +591,14 @@ class Billing {
                 ? self::lessonCountsForStudentInSemester($studentUserId, $semesterId, $today)
                 : ['total' => 0, 'elapsed' => 0];
 
+            $behindReason = $row['start_date'] !== null
+                ? self::semesterPaymentBehindReason(
+                    $balance, $charged, $paid, (string)$row['start_date'],
+                    $counts['elapsed'], $counts['total'],
+                    (int)$row['installment_fee_cents'] > 0, $today
+                )
+                : null;
+
             $rows[] = [
                 'semester_id' => $semesterId,
                 'label' => $semesterId !== null
@@ -602,10 +611,8 @@ class Billing {
                 'balance_cents' => $balance,
                 'lessons_total' => $counts['total'],
                 'lessons_elapsed' => $counts['elapsed'],
-                'behind' => $row['start_date'] !== null && self::isSemesterPaymentBehind(
-                    $balance, $charged, $paid, (string)$row['start_date'],
-                    $counts['elapsed'], $counts['total'], $today
-                ),
+                'behind' => $behindReason !== null,
+                'behind_reason' => $behindReason,
             ];
         }
         return $rows;
@@ -614,18 +621,23 @@ class Billing {
     /**
      * What a child's card shows: the balance, and whether any part of it has
      * fallen behind the schedule families are asked to keep.
-     *   ['balance_cents', 'due_cents', 'behind', 'behind_labels', 'semesters']
+     *   ['balance_cents', 'due_cents', 'behind', 'behind_labels',
+     *    'behind_reasons', 'semesters']
      * balance_cents is the all-time balance (negative = credit); due_cents is
      * what is actually owed once credits have been applied forward.
+     * behind_reasons: one ['label', 'reason'] per past-due term, so a page can
+     * say which deadline was missed rather than just "past due".
      */
     public static function balanceSummaryForStudent(int $studentUserId, ?string $today = null): array {
         $semesters = self::semesterBalancesForStudent($studentUserId, $today);
         $due = 0;
         $behindLabels = [];
+        $behindReasons = [];
         foreach ($semesters as $row) {
             $due += $row['balance_cents'];
             if ($row['behind']) {
                 $behindLabels[] = $row['label'];
+                $behindReasons[] = ['label' => $row['label'], 'reason' => (string)$row['behind_reason']];
             }
         }
         return [
@@ -633,20 +645,77 @@ class Billing {
             'due_cents' => $due,
             'behind' => (bool)$behindLabels,
             'behind_labels' => $behindLabels,
+            'behind_reasons' => $behindReasons,
             'semesters' => $semesters,
         ];
     }
 
     /**
-     * Is an unpaid semester balance behind what the family was asked to pay?
+     * Is an unpaid semester balance behind what the family was asked to pay,
+     * and if so, which deadline did it miss? Null when it is not behind;
+     * otherwise a sentence fragment naming the missed deadline, ready to
+     * follow the term's label on the Billing page.
      *
-     * Families are asked for half the term's charges by two weeks before it
-     * starts, and the rest by the lesson before its half-way point (of 14
-     * lessons, by the 6th). So a balance is behind when the term is close
-     * enough to count and either of those two moments has passed unpaid.
+     * The payment schedule:
+     *   - half the term's charges are due two weeks before it starts;
+     *   - the rest before the first lesson — unless the family is on the
+     *     installment plan ($onInstallmentPlan: an installment plan fee on
+     *     this term's ledger), which extends it to the lesson before the
+     *     term's half-way point (of 14 lessons, before the 6th).
      *
      * Pure on purpose — the caller supplies the term's totals and lesson
      * counts, so the rule can be read (and tested) on its own.
+     */
+    public static function semesterPaymentBehindReason(
+        int $balanceCents,
+        int $chargedCents,
+        int $paidCents,
+        string $semesterStartDate,
+        int $lessonsElapsed,
+        int $lessonsTotal,
+        bool $onInstallmentPlan,
+        ?string $today = null
+    ): ?string {
+        if ($balanceCents <= 0) {
+            return null;
+        }
+        $todayTs = strtotime($today ?? date('Y-m-d'));
+        $startTs = strtotime($semesterStartDate);
+        if ($startTs === false || $todayTs === false) {
+            return null;
+        }
+        // Still more than two weeks out: nothing is late yet.
+        if ($startTs > $todayTs + 14 * 86400) {
+            return null;
+        }
+        // Half the term should be paid for by now.
+        if ($chargedCents > 0 && $paidCents * 2 < $chargedCents) {
+            return 'half of the semester balance was due by '
+                . date('M j, Y', $startTs - 14 * 86400) . ', two weeks before the semester start';
+        }
+        if (!$onInstallmentPlan) {
+            // Without the installment plan, the full balance is due before
+            // the first lesson.
+            return $lessonsElapsed >= 1
+                ? 'the full balance was due before the first lesson (accounts without an installment plan pay in full before lessons begin)'
+                : null;
+        }
+        // On the installment plan: the rest by the lesson before the
+        // half-way point.
+        if ($lessonsTotal > 0 && $lessonsElapsed >= ($lessonsTotal / 2) - 1) {
+            $dueBeforeLesson = (int)ceil(($lessonsTotal / 2) - 1);
+            return $dueBeforeLesson >= 1
+                ? 'under the installment plan, the full balance was due before the '
+                    . self::ordinal($dueBeforeLesson) . ' lesson'
+                : 'under the installment plan, the full balance was due before lessons began';
+        }
+        return null;
+    }
+
+    /**
+     * Is an unpaid semester balance behind what the family was asked to pay?
+     * The boolean face of semesterPaymentBehindReason(), on the installment
+     * schedule (the more lenient of the two).
      */
     public static function isSemesterPaymentBehind(
         int $balanceCents,
@@ -657,24 +726,19 @@ class Billing {
         int $lessonsTotal,
         ?string $today = null
     ): bool {
-        if ($balanceCents <= 0) {
-            return false;
+        return self::semesterPaymentBehindReason(
+            $balanceCents, $chargedCents, $paidCents, $semesterStartDate,
+            $lessonsElapsed, $lessonsTotal, true, $today
+        ) !== null;
+    }
+
+    /** 1 → "1st", 2 → "2nd", 6 → "6th", 12 → "12th". */
+    private static function ordinal(int $n): string {
+        $mod100 = $n % 100;
+        if ($mod100 >= 11 && $mod100 <= 13) {
+            return $n . 'th';
         }
-        $todayTs = strtotime($today ?? date('Y-m-d'));
-        $startTs = strtotime($semesterStartDate);
-        if ($startTs === false || $todayTs === false) {
-            return false;
-        }
-        // Still more than two weeks out: nothing is late yet.
-        if ($startTs > $todayTs + 14 * 86400) {
-            return false;
-        }
-        // Half the term should be paid for by now.
-        if ($chargedCents > 0 && $paidCents * 2 < $chargedCents) {
-            return true;
-        }
-        // And the rest by the lesson before the half-way point.
-        return $lessonsTotal > 0 && $lessonsElapsed >= ($lessonsTotal / 2) - 1;
+        return $n . ([1 => 'st', 2 => 'nd', 3 => 'rd'][$n % 10] ?? 'th');
     }
 
     /**

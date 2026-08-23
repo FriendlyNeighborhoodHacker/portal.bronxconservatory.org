@@ -48,9 +48,14 @@ header_html('Billing');
   <?php else: ?>
     <h3>You have a balance of <?=h(Billing::formatCents($totalDue))?>.</h3>
     <?php if ($summary['behind']): ?>
-      <p class="balance-behind">Some of this is past due. If that is a problem right now,
-        call us at <a href="tel:+17188417415"><?=h(Settings::contactPhone())?></a> — we will
-        work it out together.</p>
+      <p class="balance-behind" style="margin-bottom:4px;">Some of this is past due:</p>
+      <ul class="small" style="margin-top:0;">
+        <?php foreach ($summary['behind_reasons'] as $behindReason): ?>
+          <li><strong><?=h($behindReason['label'])?></strong> — <?=h($behindReason['reason'])?>.</li>
+        <?php endforeach; ?>
+      </ul>
+      <p class="small">Please call us at <a href="tel:+17188417415"><?=h(Settings::contactPhone())?></a>
+        to discuss your account.</p>
     <?php endif; ?>
 
     <?php if (StripeCheckout::isConfigured()): ?>
@@ -165,7 +170,7 @@ header_html('Billing');
           <td style="text-align:right;"><?=h(Billing::formatCents($term['balance_cents']))?></td>
           <td class="small">
             <?php if ($term['balance_cents'] <= 0): ?>Paid
-            <?php elseif ($term['behind']): ?><span class="balance-behind">Past due</span>
+            <?php elseif ($term['behind']): ?><span class="balance-behind" title="<?=h(ucfirst((string)$term['behind_reason']))?>.">Past due</span>
             <?php else: ?>Not due yet<?php endif; ?>
           </td>
         </tr>

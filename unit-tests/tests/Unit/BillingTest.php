@@ -160,6 +160,59 @@ final class BillingTest extends TestCase
         $this->assertFalse(Billing::isSemesterPaymentBehind(0, 37500, 37500, $start, 14, 14, '2031-01-01'));
     }
 
+    public function testSemesterPaymentBehindReasonNamesTheMissedDeadline(): void
+    {
+        $start = '2030-09-07';
+        // The deposit deadline names its date, two weeks before the start.
+        $reason = Billing::semesterPaymentBehindReason(37500, 37500, 0, $start, 0, 14, true, '2030-08-30');
+        $this->assertStringContainsString('half of the semester balance', $reason);
+        $this->assertStringContainsString('Aug 24, 2030', $reason);
+        // Without the installment plan, the rest was due before the first lesson…
+        $reason = Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 1, 14, false, '2030-09-10');
+        $this->assertStringContainsString('before the first lesson', $reason);
+        // …but until that lesson, half paid is on schedule.
+        $this->assertNull(Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 0, 14, false, '2030-09-05'));
+        // The installment plan extends the deadline to the half-way lesson.
+        $this->assertNull(Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 5, 14, true, '2030-10-13'));
+        $reason = Billing::semesterPaymentBehindReason(18750, 37500, 18750, $start, 6, 14, true, '2030-10-20');
+        $this->assertStringContainsString('installment plan', $reason);
+        $this->assertStringContainsString('6th lesson', $reason);
+    }
+
+    public function testABehindTermCarriesTheReasonForItsMissedDeadline(): void
+    {
+        $student = fx_student();
+        // 14 weekly lessons; ten weeks in, well past the half-way lesson.
+        $firstDate = date('Y-m-d', strtotime('-10 weeks'));
+        [$semesterId] = $this->confirmReservationFor($student, $firstDate, 14);
+
+        // Confirmation posted the installment plan fee, so this family is on
+        // the installment schedule; with less than half paid, the deposit
+        // deadline is the one named.
+        $term = Billing::balanceSummaryForStudent($student)['semesters'][0];
+        $this->assertTrue($term['behind']);
+        $this->assertStringContainsString('half of the semester balance', $term['behind_reason']);
+
+        // Half paid: the missed deadline is now the installment plan's
+        // half-way lesson.
+        Billing::recordManualPayment($this->ctx, $student, 22000, date('Y-m-d'), $semesterId, 'Check #1');
+        $term = Billing::balanceSummaryForStudent($student)['semesters'][0];
+        $this->assertTrue($term['behind']);
+        $this->assertStringContainsString('installment plan', $term['behind_reason']);
+        $this->assertStringContainsString('6th lesson', $term['behind_reason']);
+
+        // The summary hands the same reasons up, labeled by term.
+        $summary = Billing::balanceSummaryForStudent($student);
+        $this->assertSame($term['label'], $summary['behind_reasons'][0]['label']);
+        $this->assertSame($term['behind_reason'], $summary['behind_reasons'][0]['reason']);
+
+        // Paying it off clears the reason with the flag.
+        Billing::recordManualPayment($this->ctx, $student, 20500, date('Y-m-d'), $semesterId, 'Check #2');
+        $term = Billing::balanceSummaryForStudent($student)['semesters'][0];
+        $this->assertFalse($term['behind']);
+        $this->assertNull($term['behind_reason']);
+    }
+
     public function testSemesterBalancesRollASurplusCreditForward(): void
     {
         $student = fx_student();
