@@ -30,6 +30,9 @@ Notes:
   page sets `layout: ../layouts/DocsLayout.astro` plus `title` and
   `description` in front matter.
 - The sidebar nav is hand-written in `src/lib/nav.ts` — add new pages there.
+- `/sample-data` and its CSV downloads are generated at build time straight
+  from the repo's `sample_data/` directory (`src/lib/sample-data.ts` + the
+  `src/pages/sample-data/` endpoint) — no copies to keep in sync.
 - Design tokens (BCM navy/gold/blue palette) live in `src/styles/global.css`.
 - `schema.sql` and `docs/app_spec.md` at the repo root are the sources of
   truth the Data Model and experience pages summarize — update the docs when

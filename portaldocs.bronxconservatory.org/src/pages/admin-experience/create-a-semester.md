@@ -11,6 +11,9 @@ imports. Each import's Cancel button goes to the *next* step, so an admin who
 has nothing to upload yet can walk straight through and come back later —
 every step can be re-run any time from **Admin › Semesters**.
 
+Ready-made CSVs for every step are on the [Sample Data](/sample-data) page —
+useful for trying the whole flow on a fresh install.
+
 ## Before the first semester: bootstrap
 
 On a fresh install, Schedule and Calendar redirect to
