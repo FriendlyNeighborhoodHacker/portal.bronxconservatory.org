@@ -44,6 +44,19 @@ if ($leadId === 0 || !LeadManagement::findLead($leadId)) {
     }
     $_SESSION['registration_lead_id'] = $leadId;
 
+    // The lead is the record now — retire the drop-off draft, carrying any
+    // notes staff wrote while the form sat unfinished onto the lead. Best
+    // effort: the registration must finish even if this hiccups.
+    $draftId = registration_draft_id();
+    if ($draftId !== null) {
+        try {
+            InquiryManagement::finishRegistrationDraft(null, $draftId, $leadId);
+        } catch (\Throwable $e) {
+            // The draft stays in the queue; staff will see the lead exists.
+        }
+        unset($_SESSION['registration_draft_id']);
+    }
+
     // Confirmation email is best-effort — logged either way, never blocking.
     try {
         $lead = LeadManagement::findLead($leadId);

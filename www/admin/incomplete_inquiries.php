@@ -37,8 +37,8 @@ header_html('Uncompleted Forms', ['wide' => true]);
   <a href="/admin/incomplete_inquiries.php" class="active">Uncompleted Forms (<?=$total?>)</a>
 </div>
 
-<p class="small">Someone started the public Request Information form and stopped before telling us
-about a student. They may still enroll — a phone call is usually all it takes.</p>
+<p class="small">Someone started one of the public forms — Request Information or Registration —
+and stopped before finishing. They may still enroll — a phone call is usually all it takes.</p>
 
 <?php if (!$rows): ?>
   <p class="small">Nothing here right now.</p>
@@ -46,7 +46,7 @@ about a student. They may still enroll — a phone call is usually all it takes.
   <div class="card" style="overflow-x:auto;">
     <table class="list">
       <thead>
-        <tr><th>Name</th><th>Contact</th><th>Address</th><th>Stopped after</th><th>Started</th></tr>
+        <tr><th>Name</th><th>Contact</th><th>Address</th><th>Form</th><th>Stopped after</th><th>Started</th></tr>
       </thead>
       <tbody>
         <?php foreach ($rows as $row): ?>
@@ -54,6 +54,7 @@ about a student. They may still enroll — a phone call is usually all it takes.
           <td><a href="/admin/incomplete_inquiry.php?id=<?=(int)$row['id']?>"><strong><?=h($row['first_name'] . ' ' . $row['last_name'])?></strong></a></td>
           <td class="small"><?=h($row['phone'])?><br><?=h($row['email'])?></td>
           <td class="small"><?=h(lead_address_line($row))?></td>
+          <td class="small"><span class="badge"><?=h(incomplete_inquiry_source_label($row))?></span></td>
           <td class="small"><?=h(incomplete_inquiry_stage_label($row))?></td>
           <td class="small"><?=h(date('M j, Y', strtotime((string)$row['created_at'])))?></td>
         </tr>

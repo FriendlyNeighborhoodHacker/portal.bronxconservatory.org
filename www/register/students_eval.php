@@ -101,6 +101,7 @@ if (!$scheduling['availability_blocks']) {
     registration_fail('Please check at least one time block you can attend.', '/register/students.php');
 }
 
+InquiryManagement::recordRegistrationStep(registration_draft_id(), 3);
 registration_save(registration_mark_completed($state, 2));
 header('Location: /register/policies.php');
 exit;

@@ -21,6 +21,7 @@ if ($choice !== '0' && $choice !== '1') {
     registration_fail('Please choose whether you want the installment plan.', '/register/payment_plan.php');
 }
 $state['installment'] = (int)$choice;
+InquiryManagement::recordRegistrationStep(registration_draft_id(), 5);
 registration_save(registration_mark_completed($state, 4));
 header('Location: /register/review.php');
 exit;

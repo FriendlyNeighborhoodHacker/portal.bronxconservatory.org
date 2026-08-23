@@ -39,6 +39,15 @@ told registration is closed.
    one of the two records it.
 7. **Done** (`done.php`).
 
+The wizard **saves as the family goes**, the same drop-off capture the
+inquiry flow pioneered: the moment the family step validates, a draft row is
+written to `incomplete_inquiries` (source `registration`), and each later
+step bumps its progress marker — so a family who starts registering and
+stops appears in Admin › Leads › Uncompleted Forms, showing exactly where
+they stopped ("Policies agreed", "Payment plan chosen"…), and a phone call
+can finish the job. The final submit deletes the draft, carrying any staff
+notes onto the lead.
+
 Submitting creates a lead with `source='registration'` and one
 `lead_students` row per student. **Any payment is held on the lead** —
 `amount_paid_cents`, `stripe_checkout_session_id`, `paid_at` — until an admin

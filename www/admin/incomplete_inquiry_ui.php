@@ -6,11 +6,21 @@ require_once __DIR__ . '/../lib/InquiryManagement.php';
 require_once __DIR__ . '/../lib/LeadManagement.php';
 
 // How far the visitor got before they stopped — the one thing that decides
-// what to say when you call them.
+// what to say when you call them. The two forms count steps differently.
 function incomplete_inquiry_stage_label(array $row): string {
-    return (int)($row['last_step_completed'] ?? 1) >= 2
-        ? 'Contact and address'
-        : 'Contact only';
+    $step = (int)($row['last_step_completed'] ?? 1);
+    if (($row['source'] ?? 'inquiry') === 'registration') {
+        if ($step >= 5) return 'Payment plan chosen';
+        if ($step >= 4) return 'Policies agreed';
+        if ($step >= 3) return 'Students entered';
+        return 'Family info';
+    }
+    return $step >= 2 ? 'Contact and address' : 'Contact only';
+}
+
+// Which public form the visitor was filling out.
+function incomplete_inquiry_source_label(array $row): string {
+    return ($row['source'] ?? 'inquiry') === 'registration' ? 'Registration' : 'Inquiry';
 }
 
 /**

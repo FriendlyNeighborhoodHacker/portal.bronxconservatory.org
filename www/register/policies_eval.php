@@ -22,6 +22,7 @@ if (!$state['policies_agreed']) {
     registration_fail('Please read and agree to the policies to continue.', '/register/policies.php');
 }
 
+InquiryManagement::recordRegistrationStep(registration_draft_id(), 4);
 registration_save(registration_mark_completed($state, 3));
 header('Location: /register/payment_plan.php');
 exit;

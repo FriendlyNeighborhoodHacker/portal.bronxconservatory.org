@@ -54,7 +54,8 @@ header_html($row['first_name'] . ' ' . $row['last_name'] . ' — uncompleted for
 <?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
 <?php if ($flashError): ?><p class="error"><?=h($flashError)?></p><?php endif; ?>
 
-<p class="small">Started the Request Information form on
+<p class="small">Started the
+<strong><?=($row['source'] ?? 'inquiry') === 'registration' ? 'Registration' : 'Request Information'?></strong> form on
 <?=h(date('M j, Y g:i A', strtotime((string)$row['created_at'])))?> and stopped after
 <strong><?=h(strtolower(incomplete_inquiry_stage_label($row)))?></strong>. Fill in the rest —
 a student is all it takes — and <strong>Complete</strong> turns this into a lead.</p>

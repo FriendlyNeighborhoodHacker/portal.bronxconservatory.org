@@ -81,10 +81,12 @@ signs in with the password they already have.
 ## Uncompleted Forms
 
 The sibling queue lists `incomplete_inquiries` rows — families who started
-the public `/inquiry/` flow, gave contact info, and never named a student.
-Each row shows how far they got ("Contact only" vs. "Contact and address")
-and when they started. The queue is purely reverse-chronological; there are
-no filters.
+either public form and never finished. Each row shows which form (an
+Inquiry or Registration pill) and how far they got — "Contact only" /
+"Contact and address" for inquiries; "Family info", "Students entered",
+"Policies agreed", or "Payment plan chosen" for registration drop-offs, so
+staff know exactly what to say when they call. The queue is purely
+reverse-chronological; there are no filters.
 
 On the detail page (`/admin/incomplete_inquiry.php?id=N`) the admin —
 typically on the phone with the family — can:

@@ -77,13 +77,22 @@ migrated from the old single `leads.admin_notes` column.
 
 ## `incomplete_inquiries`
 
-Drop-off capture for the public `/inquiry/` flow. Page 1 (contact info) writes
-a row here so staff can reach out to a visitor who never finishes; page 2
-(address) updates it (`last_step_completed`: 1 = contact only, 2 = address
-too). Page 3 (student info) **promotes the row into a real lead and deletes
-it** — so a row in this table always means "this family never told us about a
-student." They appear in Admin &gt; Leads &gt; Uncompleted Forms as a peer to
-leads, but are never converted directly.
+Drop-off capture for **both** public flows, discriminated by `source`
+ENUM(`inquiry`,`registration`):
+
+- **Inquiry:** page 1 (contact info) writes a row so staff can reach out to a
+  visitor who never finishes; page 2 (address) updates it
+  (`last_step_completed`: 1 = contact only, 2 = address too). Page 3 (student
+  info) **promotes the row into a real lead and deletes it**.
+- **Registration:** the wizard's family step writes a row (contact + address
+  at once, so it starts at step 2), and later steps bump the marker
+  (3 = students, 4 = policies, 5 = payment plan) so staff can see exactly
+  where the family stopped. Creating the registration lead at final submit
+  deletes it, carrying any staff notes onto the lead.
+
+So a row here always means "this family started a form and never finished."
+They appear in Admin &gt; Leads &gt; Uncompleted Forms as a peer to leads
+(with a pill saying which form), but are never converted directly.
 
 ## `incomplete_inquiry_notes`
 

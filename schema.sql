@@ -671,14 +671,18 @@ CREATE TABLE lead_notes (
 
 CREATE INDEX idx_lead_notes_lead ON lead_notes(lead_id, created_at);
 
--- ===== Uncompleted information-request forms =====
--- Page 1 of the public /inquiry/ flow writes a row here so staff can reach out
--- to a visitor who drops off; page 2 updates it. Page 3 promotes it into a real
--- lead (leads + lead_students) and DELETES this row, so a row here always means
--- "this family never told us about a student." Peer to leads in the admin
--- (Admin > Leads > Uncompleted Forms); never converted directly.
+-- ===== Uncompleted public forms =====
+-- Drop-off capture for both public flows. The /inquiry/ flow writes a row on
+-- page 1 (contact) and updates it on page 2 (address); page 3 promotes it
+-- into a real lead (leads + lead_students) and DELETES this row. The
+-- /register/ wizard writes a row after its family step and bumps
+-- last_step_completed as the family advances; creating the registration lead
+-- at final submit deletes it. So a row here always means "this family started
+-- a form and never finished" — staff can reach out. Peer to leads in the
+-- admin (Admin > Leads > Uncompleted Forms); never converted directly.
 CREATE TABLE incomplete_inquiries (
   id INT AUTO_INCREMENT PRIMARY KEY,
+  source ENUM('inquiry','registration') NOT NULL DEFAULT 'inquiry' COMMENT 'Which public form the visitor was filling out',
   first_name VARCHAR(100) NOT NULL,
   last_name VARCHAR(100) NOT NULL,
   email VARCHAR(255) NOT NULL,
@@ -691,7 +695,7 @@ CREATE TABLE incomplete_inquiries (
   address_city VARCHAR(100) DEFAULT NULL,
   address_state VARCHAR(100) DEFAULT NULL COMMENT 'US state code, or a free-text province',
   address_zip VARCHAR(20) DEFAULT NULL,
-  last_step_completed TINYINT NOT NULL DEFAULT 1 COMMENT '1 = contact only, 2 = address too',
+  last_step_completed TINYINT NOT NULL DEFAULT 1 COMMENT 'Inquiry: 1 contact, 2 address. Registration: 2 family info, 3 students, 4 policies, 5 payment plan',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;

@@ -42,6 +42,19 @@ if ($family['address_street_1'] === '' || $family['address_city'] === ''
     registration_fail('Please fill in your address.', '/register/family.php');
 }
 
+// Save a drop-off draft (the same early save the inquiry flow does), so
+// staff can reach out to a family who starts registering and stops. Best
+// effort: a draft hiccup must never block a registration. Skipped once a
+// lead exists — the lead is the record then.
+if (empty($_SESSION['registration_lead_id'])) {
+    try {
+        $_SESSION['registration_draft_id'] =
+            InquiryManagement::recordRegistrationDraft(null, registration_draft_id(), $family);
+    } catch (\Throwable $e) {
+        // The activity log has anything the library recorded; carry on.
+    }
+}
+
 registration_save(registration_mark_completed($state, 1));
 header('Location: /register/students.php');
 exit;

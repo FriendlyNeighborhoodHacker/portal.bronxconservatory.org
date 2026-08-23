@@ -227,6 +227,63 @@ final class InquiryManagementTest extends TestCase
         $this->assertSame(2, (int)$row['last_step_completed']);
     }
 
+    // ===== Registration-wizard drop-off drafts =====
+
+    private function family(array $overrides = []): array
+    {
+        return $overrides + [
+            'first_name' => 'Rosa', 'last_name' => 'Ramos',
+            'email' => 'rosa.ramos@example.com', 'phone' => '718-555-0199',
+            'sms_consent' => 1,
+            'address_street_1' => '900 Walton Ave', 'address_street_2' => '',
+            'address_city' => 'Bronx', 'address_state' => 'NY', 'address_zip' => '10451',
+        ];
+    }
+
+    public function testRegistrationDraftIsSavedUpdatedAndStaged(): void
+    {
+        $id = InquiryManagement::recordRegistrationDraft(null, null, $this->family());
+        $row = InquiryManagement::find($id);
+        $this->assertSame('registration', $row['source']);
+        $this->assertSame('rosa.ramos@example.com', $row['email']);
+        $this->assertSame('900 Walton Ave', $row['address_street_1']);
+        $this->assertSame(2, (int)$row['last_step_completed'], 'family step = contact and address');
+
+        // Going Back and resubmitting updates in place, never forks.
+        $again = InquiryManagement::recordRegistrationDraft(null, $id, $this->family(['phone' => '718-555-0200']));
+        $this->assertSame($id, $again);
+        $this->assertSame(1, InquiryManagement::countIncomplete());
+        $this->assertSame('718-555-0200', InquiryManagement::find($id)['phone']);
+
+        // Later steps move the marker forward, never backward.
+        InquiryManagement::recordRegistrationStep($id, 4);
+        InquiryManagement::recordRegistrationStep($id, 3);
+        $this->assertSame(4, (int)InquiryManagement::find($id)['last_step_completed']);
+    }
+
+    public function testFinishRegistrationDraftCarriesNotesToTheLeadAndDeletes(): void
+    {
+        $id = InquiryManagement::recordRegistrationDraft(null, null, $this->family());
+        $admin = fx_admin_ctx();
+        InquiryManagement::addNote($admin, $id, 'Left a voicemail about the missing payment step.');
+
+        $leadId = LeadManagement::createLead(null, fx_semester(fx_admin_ctx()), [
+            'first_name' => 'Rosa', 'last_name' => 'Ramos',
+            'email' => 'rosa.ramos@example.com', 'phone' => '718-555-0199',
+        ], [['first_name' => 'Lucia', 'last_name' => 'Ramos', 'instrument' => 'Piano', 'lesson_length_minutes' => 30]], [], false);
+
+        InquiryManagement::finishRegistrationDraft(null, $id, $leadId);
+
+        $this->assertNull(InquiryManagement::find($id), 'the lead is the record now');
+        $notes = LeadManagement::notesForLead($leadId);
+        $this->assertCount(1, $notes);
+        $this->assertStringContainsString('missing payment step', $notes[0]['body']);
+
+        // A stale draft id (double submit) is a quiet no-op.
+        InquiryManagement::finishRegistrationDraft(null, $id, $leadId);
+        $this->assertCount(1, LeadManagement::notesForLead($leadId));
+    }
+
     public function testPromoteToLeadCreatesTheLeadAndRemovesTheDraft(): void
     {
         $id = InquiryManagement::startInquiry(null, $this->contact());

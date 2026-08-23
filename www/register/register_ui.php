@@ -8,6 +8,7 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../recaptcha.php';
 require_once __DIR__ . '/../lib/SemesterManagement.php';
 require_once __DIR__ . '/../lib/LeadManagement.php';
+require_once __DIR__ . '/../lib/InquiryManagement.php';
 
 const REGISTRATION_STEPS = ['Family', 'Students', 'Policies', 'Payment Plan', 'Review', 'Checkout'];
 
@@ -64,7 +65,15 @@ function registration_save(array $state): void {
 }
 
 function registration_reset(): void {
-    unset($_SESSION['registration_wizard']);
+    unset($_SESSION['registration_wizard'], $_SESSION['registration_draft_id']);
+}
+
+// The drop-off draft (incomplete_inquiries row) this wizard has been saving
+// to, kept in the session — never in a form field, so one visitor can never
+// address another's row. Null until the family step first validates.
+function registration_draft_id(): ?int {
+    $id = (int)($_SESSION['registration_draft_id'] ?? 0);
+    return $id > 0 ? $id : null;
 }
 
 // Step numbers: 1 family, 2 students, 3 policies, 4 payment plan, 5 review.

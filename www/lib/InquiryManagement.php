@@ -7,13 +7,16 @@ require_once __DIR__ . '/ActivityLog.php';
 require_once __DIR__ . '/LeadManagement.php';
 
 /**
- * The public "Request More Information" flow (/inquiry/).
+ * The public "Request More Information" flow (/inquiry/), plus the drop-off
+ * capture the registration wizard borrows from it.
  *
  * The point of the flow is that it saves early: page 1 writes an uncompleted
  * form so staff can reach out to a family who never finishes, and page 3
- * promotes that form into a real lead and deletes it. So a row in
- * incomplete_inquiries always means exactly one thing — "this family never
- * told us about a student."
+ * promotes that form into a real lead and deletes it. The registration
+ * wizard does the same through recordRegistrationDraft() and friends, its
+ * draft deleted when the final submit creates the registration lead. So a
+ * row in incomplete_inquiries always means exactly one thing — "this family
+ * started a form and never finished it."
  *
  * This class owns all incomplete_inquiries SQL; the leads/lead_students writes
  * live in LeadManagement, which owns those tables.
@@ -120,6 +123,109 @@ class InquiryManagement {
         )->execute(array_merge(array_values(self::normalizeAddress($address)), [$id]));
 
         self::log($ctx, 'inquiry.draft_address_saved', ['incomplete_inquiry_id' => $id]);
+    }
+
+    // ===== Registration-wizard drop-off capture =====
+
+    /**
+     * The registration wizard's family step, saved as a draft the moment it
+     * validates — the same early save the inquiry flow does, so a family who
+     * starts registering and stops is never lost. The wizard collects contact
+     * and address in one step, so the draft starts at last_step_completed = 2;
+     * later steps bump it via recordRegistrationStep().
+     *
+     * The wizard has already validated $family its own way, and this draft is
+     * best-effort capture for a phone call — so it stores what the wizard
+     * accepted rather than re-judging it. Upserts: pass the session's draft id
+     * to update in place, null to create. Returns the draft id.
+     */
+    public static function recordRegistrationDraft(?UserContext $ctx, ?int $draftId, array $family): int {
+        $contactParams = self::contactParams([
+            'first_name' => $family['first_name'] ?? '',
+            'last_name' => $family['last_name'] ?? '',
+            'email' => $family['email'] ?? '',
+            'phone' => $family['phone'] ?? '',
+            'newsletter_opt_in' => false,
+            'sms_consent' => !empty($family['sms_consent']),
+        ]);
+        $addressParams = array_values(self::normalizeAddress([
+            'address_country' => self::DEFAULT_COUNTRY,
+            'address_street_1' => $family['address_street_1'] ?? '',
+            'address_street_2' => $family['address_street_2'] ?? '',
+            'address_city' => $family['address_city'] ?? '',
+            'address_state' => $family['address_state'] ?? '',
+            'address_zip' => $family['address_zip'] ?? '',
+        ]));
+
+        if ($draftId !== null && self::find($draftId)) {
+            self::pdo()->prepare(
+                'UPDATE incomplete_inquiries SET
+                   first_name = ?, last_name = ?, email = ?, phone = ?, newsletter_opt_in = ?, sms_consent = ?,
+                   address_country = ?, address_street_1 = ?, address_street_2 = ?,
+                   address_city = ?, address_state = ?, address_zip = ?
+                 WHERE id = ?'
+            )->execute(array_merge($contactParams, $addressParams, [$draftId]));
+            self::log($ctx, 'registration.draft_updated', ['incomplete_inquiry_id' => $draftId]);
+            return $draftId;
+        }
+
+        self::pdo()->prepare(
+            "INSERT INTO incomplete_inquiries
+               (source, first_name, last_name, email, phone, newsletter_opt_in, sms_consent,
+                address_country, address_street_1, address_street_2, address_city, address_state, address_zip,
+                last_step_completed)
+             VALUES ('registration',?,?,?,?,?,?,?,?,?,?,?,?,2)"
+        )->execute(array_merge($contactParams, $addressParams));
+        $id = (int)self::pdo()->lastInsertId();
+        self::log($ctx, 'registration.draft_started', ['incomplete_inquiry_id' => $id]);
+        return $id;
+    }
+
+    /**
+     * A later wizard step was completed (3 students, 4 policies, 5 payment
+     * plan) — recorded so staff can see exactly where the family stopped.
+     * The marker only ever moves forward.
+     */
+    public static function recordRegistrationStep(?int $draftId, int $step): void {
+        if ($draftId === null) {
+            return;
+        }
+        self::pdo()->prepare(
+            'UPDATE incomplete_inquiries SET last_step_completed = GREATEST(last_step_completed, ?) WHERE id = ?'
+        )->execute([$step, $draftId]);
+    }
+
+    /**
+     * The registration lead exists — the draft has served its purpose. Any
+     * notes staff wrote while chasing the family are carried onto the lead as
+     * one entry (as promoteToLead does), then the draft is deleted, in one
+     * transaction. Safe to call with a stale id: an already-deleted draft is
+     * a no-op.
+     */
+    public static function finishRegistrationDraft(?UserContext $ctx, int $draftId, int $leadId): void {
+        $draft = self::find($draftId);
+        if (!$draft) {
+            return;
+        }
+        $notes = self::notesFor($draftId); // read before the delete cascades them
+
+        $pdo = self::pdo();
+        $pdo->beginTransaction();
+        try {
+            if ($notes) {
+                $pdo->prepare('INSERT INTO lead_notes (lead_id, created_by_user_id, body) VALUES (?,?,?)')
+                    ->execute([$leadId, $ctx?->id, self::combinedNoteBody($notes)]);
+            }
+            $pdo->prepare('DELETE FROM incomplete_inquiries WHERE id = ?')->execute([$draftId]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+
+        self::log($ctx, 'registration.draft_finished', [
+            'incomplete_inquiry_id' => $draftId, 'lead_id' => $leadId, 'notes_carried' => count($notes),
+        ]);
     }
 
     /**
