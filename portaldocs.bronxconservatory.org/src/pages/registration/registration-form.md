@@ -40,13 +40,15 @@ told registration is closed.
 7. **Done** (`done.php`).
 
 The wizard **saves as the family goes**, the same drop-off capture the
-inquiry flow pioneered: the moment the family step validates, a draft row is
-written to `incomplete_inquiries` (source `registration`), and each later
-step bumps its progress marker — so a family who starts registering and
-stops appears in Admin › Leads › Uncompleted Forms, showing exactly where
-they stopped ("Policies agreed", "Payment plan chosen"…), and a phone call
-can finish the job. The final submit deletes the draft, carrying any staff
-notes onto the lead.
+inquiry flow pioneered — starting the moment a plausible **email is typed**
+on the family page: a background save writes a draft row to
+`incomplete_inquiries` (source `registration`, stage "Email only") before
+Continue is ever pressed. Completing the family step fills the draft in, and
+each later step bumps its progress marker — so a family who starts
+registering and stops appears in Admin › Leads › Uncompleted Forms, showing
+exactly where they stopped ("Email only", "Policies agreed", "Payment plan
+chosen"…), and a phone call can finish the job. The final submit deletes the
+draft, carrying any staff notes onto the lead.
 
 Submitting creates a lead with `source='registration'` and one
 `lead_students` row per student. **Any payment is held on the lead** —

@@ -83,4 +83,40 @@ ApplicationUI::minimalHeaderHtml('Register — Family');
     </div>
   </form>
 </div>
+
+<script>
+// The moment a plausible email is on the form, save a drop-off draft in the
+// background — a family who types their email and walks away is already
+// worth a phone call. Fires on leaving any contact field once the email
+// looks real; repeats update the same draft (session-keyed server side).
+// Entirely silent: nothing here may interrupt someone still typing.
+(function () {
+  var form = document.querySelector('form[action="/register/family_eval.php"]');
+  if (!form) return;
+  var fields = ['first_name', 'last_name', 'phone', 'email'].map(function (name) {
+    return form.querySelector('[name="' + name + '"]');
+  });
+  var lastSent = '';
+
+  function maybeCapture() {
+    var email = (fields[3].value || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
+    var payload = fields.map(function (f) { return f.value.trim(); }).join('|');
+    if (payload === lastSent) return; // nothing new to save
+    lastSent = payload;
+    var data = new FormData();
+    data.append('csrf', form.querySelector('input[name=csrf]').value);
+    data.append('first_name', fields[0].value);
+    data.append('last_name', fields[1].value);
+    data.append('phone', fields[2].value);
+    data.append('email', email);
+    fetch('/register/draft_eval.php', { method: 'POST', body: data, credentials: 'same-origin' })
+      .catch(function () {});
+  }
+
+  fields.forEach(function (field) {
+    field.addEventListener('blur', maybeCapture);
+  });
+})();
+</script>
 <?php ApplicationUI::minimalFooterHtml(); ?>

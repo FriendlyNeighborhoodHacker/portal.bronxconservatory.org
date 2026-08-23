@@ -13,7 +13,8 @@ function incomplete_inquiry_stage_label(array $row): string {
         if ($step >= 5) return 'Payment plan chosen';
         if ($step >= 4) return 'Policies agreed';
         if ($step >= 3) return 'Students entered';
-        return 'Family info';
+        if ($step >= 2) return 'Family info';
+        return 'Email only';
     }
     return $step >= 2 ? 'Contact and address' : 'Contact only';
 }

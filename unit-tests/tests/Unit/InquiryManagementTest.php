@@ -240,6 +240,28 @@ final class InquiryManagementTest extends TestCase
         ];
     }
 
+    public function testEmailOnlyCaptureStartsADraftTheFamilyStepCompletes(): void
+    {
+        // Typing an email on the family page captures a stage-1 draft with
+        // whatever else is on the form so far — names may be blank.
+        $id = InquiryManagement::recordRegistrationDraft(null, null, [
+            'email' => 'rosa.ramos@example.com', 'first_name' => 'Rosa',
+        ], 1);
+        $row = InquiryManagement::find($id);
+        $this->assertSame('registration', $row['source']);
+        $this->assertSame(1, (int)$row['last_step_completed']);
+        $this->assertSame('', $row['last_name']);
+
+        // Completing the family step updates the same draft and moves it to
+        // stage 2; a later email-only save can never move it back down.
+        $again = InquiryManagement::recordRegistrationDraft(null, $id, $this->family());
+        $this->assertSame($id, $again);
+        $this->assertSame(2, (int)InquiryManagement::find($id)['last_step_completed']);
+        InquiryManagement::recordRegistrationDraft(null, $id, $this->family(), 1);
+        $this->assertSame(2, (int)InquiryManagement::find($id)['last_step_completed']);
+        $this->assertSame(1, InquiryManagement::countIncomplete());
+    }
+
     public function testRegistrationDraftIsSavedUpdatedAndStaged(): void
     {
         $id = InquiryManagement::recordRegistrationDraft(null, null, $this->family());

@@ -137,9 +137,12 @@ class InquiryManagement {
      * The wizard has already validated $family its own way, and this draft is
      * best-effort capture for a phone call — so it stores what the wizard
      * accepted rather than re-judging it. Upserts: pass the session's draft id
-     * to update in place, null to create. Returns the draft id.
+     * to update in place, null to create. $step is the stage this save
+     * represents (1 = email captured while typing, 2 = the family step
+     * completed); like everywhere else the marker only moves forward.
+     * Returns the draft id.
      */
-    public static function recordRegistrationDraft(?UserContext $ctx, ?int $draftId, array $family): int {
+    public static function recordRegistrationDraft(?UserContext $ctx, ?int $draftId, array $family, int $step = 2): int {
         $contactParams = self::contactParams([
             'first_name' => $family['first_name'] ?? '',
             'last_name' => $family['last_name'] ?? '',
@@ -162,9 +165,10 @@ class InquiryManagement {
                 'UPDATE incomplete_inquiries SET
                    first_name = ?, last_name = ?, email = ?, phone = ?, newsletter_opt_in = ?, sms_consent = ?,
                    address_country = ?, address_street_1 = ?, address_street_2 = ?,
-                   address_city = ?, address_state = ?, address_zip = ?
+                   address_city = ?, address_state = ?, address_zip = ?,
+                   last_step_completed = GREATEST(last_step_completed, ?)
                  WHERE id = ?'
-            )->execute(array_merge($contactParams, $addressParams, [$draftId]));
+            )->execute(array_merge($contactParams, $addressParams, [$step, $draftId]));
             self::log($ctx, 'registration.draft_updated', ['incomplete_inquiry_id' => $draftId]);
             return $draftId;
         }
@@ -174,8 +178,8 @@ class InquiryManagement {
                (source, first_name, last_name, email, phone, newsletter_opt_in, sms_consent,
                 address_country, address_street_1, address_street_2, address_city, address_state, address_zip,
                 last_step_completed)
-             VALUES ('registration',?,?,?,?,?,?,?,?,?,?,?,?,2)"
-        )->execute(array_merge($contactParams, $addressParams));
+             VALUES ('registration',?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        )->execute(array_merge($contactParams, $addressParams, [$step]));
         $id = (int)self::pdo()->lastInsertId();
         self::log($ctx, 'registration.draft_started', ['incomplete_inquiry_id' => $id]);
         return $id;
