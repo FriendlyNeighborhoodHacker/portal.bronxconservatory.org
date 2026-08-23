@@ -33,6 +33,10 @@ class LedgerEntriesCsvImport {
         'recital' => ['recital_fee', 'debit'],
         'recital fee' => ['recital_fee', 'debit'],
         'recital_fee' => ['recital_fee', 'debit'],
+        'installment' => ['installment_plan_fee', 'debit'],
+        'installment fee' => ['installment_plan_fee', 'debit'],
+        'installment plan fee' => ['installment_plan_fee', 'debit'],
+        'installment_plan_fee' => ['installment_plan_fee', 'debit'],
         'payment' => ['payment', 'credit'],
         'scholarship' => ['scholarship_application', 'credit'],
         'scholarship application' => ['scholarship_application', 'credit'],
@@ -46,6 +50,7 @@ class LedgerEntriesCsvImport {
         'registration' => 'Semester registration',
         'lessons' => 'Semester lessons',
         'recital_fee' => 'Recital fee',
+        'installment_plan_fee' => 'Installment plan fee',
         'payment' => 'Payment received',
         'scholarship_application' => 'Scholarship',
         'other' => 'Adjustment',
@@ -109,7 +114,7 @@ class LedgerEntriesCsvImport {
                 if ($known === null) {
                     $status = 'error';
                     $messages[] = 'Unknown entry type "' . $entryTypeRaw
-                        . '" — use registration, lessons, recital fee, payment, scholarship or other.';
+                        . '" — use registration, lessons, recital fee, installment plan fee, payment, scholarship or other.';
                 } else {
                     [$entryType, $defaultSide] = $known;
                 }

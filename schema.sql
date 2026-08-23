@@ -530,7 +530,7 @@ CREATE TABLE ledger_entries (
   for_student_user_id INT NOT NULL,
   entry_date DATE NOT NULL,
   accounting_type ENUM('debit','credit') NOT NULL,
-  entry_type ENUM('registration','lessons','recital_fee','payment','scholarship_application','other') NOT NULL,
+  entry_type ENUM('registration','lessons','recital_fee','installment_plan_fee','payment','scholarship_application','other') NOT NULL,
   amount_cents INT UNSIGNED NOT NULL,
   semester_id INT DEFAULT NULL,
   description VARCHAR(500) DEFAULT NULL,

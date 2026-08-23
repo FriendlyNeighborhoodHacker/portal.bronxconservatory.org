@@ -60,7 +60,7 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
     <form method="post" action="/admin/lead_invite_eval.php">
       <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
       <input type="hidden" name="lead_id" value="<?=$leadId?>">
-      <button type="submit" class="button" data-confirm="Email this parent a set-up-your-account invitation?">Send Account Invite</button>
+      <button type="submit" class="button" data-confirm="This will send an email to <?=h($convertedParent['email'])?> inviting them to set up their account. Send it?">Send Account Invite</button>
     </form>
   <?php endif; ?>
 </div>

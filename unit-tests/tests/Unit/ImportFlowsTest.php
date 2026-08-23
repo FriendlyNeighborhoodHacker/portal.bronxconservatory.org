@@ -777,8 +777,8 @@ final class ImportFlowsTest extends TestCase
         $this->assertFileExists($path);
         $parsed = CsvImport::parseCsv((string)file_get_contents($path), ',');
         $this->assertSame(array_values(LedgerEntriesCsvImport::targetFields()), $parsed['headers']);
-        // 10 confirmed students x 3 charges, plus 3 payments.
-        $this->assertCount(33, $parsed['rows']);
+        // 10 confirmed students x 3 charges, one installment fee, plus 3 payments.
+        $this->assertCount(34, $parsed['rows']);
     }
 
     public function testTimeAndDateParsing(): void

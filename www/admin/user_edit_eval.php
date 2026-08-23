@@ -74,7 +74,7 @@ if ($action === 'send_verification') {
         $sent = send_verification_email($user['email'], $token, $user['first_name']);
         
         if ($sent) {
-            header('Location: /admin/user_edit.php?id=' . $userId . '&msg=' . urlencode('Email verification sent successfully.'));
+            header('Location: /admin/user_edit.php?id=' . $userId . '&msg=' . urlencode('Verification email sent to ' . $user['email'] . '.'));
             exit;
         } else {
             header('Location: /admin/user_edit.php?id=' . $userId . '&err=' . urlencode('Failed to send verification email.'));
@@ -101,7 +101,7 @@ if ($action === 'send_reset') {
         $token = UserManagement::setPasswordResetToken($user['email']);
         
         if ($token) {
-            header('Location: /admin/user_edit.php?id=' . $userId . '&msg=' . urlencode('Password reset email sent successfully.'));
+            header('Location: /admin/user_edit.php?id=' . $userId . '&msg=' . urlencode('Password reset email sent to ' . $user['email'] . '.'));
             exit;
         } else {
             header('Location: /admin/user_edit.php?id=' . $userId . '&err=' . urlencode('Failed to send password reset email.'));

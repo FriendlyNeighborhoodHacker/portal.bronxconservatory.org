@@ -71,6 +71,29 @@ class NotesManagement {
         return $st->fetchAll();
     }
 
+    /**
+     * Notes for a set of lessons in one query, newest first within each
+     * lesson — the raw material for a "most recent note" preview that a
+     * caller groups by lesson_id, so a page listing several lessons does not
+     * pay one query per lesson.
+     */
+    public static function notesForLessons(array $lessonIds): array {
+        $ids = array_values(array_unique(array_map('intval', $lessonIds)));
+        if (!$ids) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $st = self::pdo()->prepare(
+            "SELECT ln.*, u.first_name AS author_first_name, u.last_name AS author_last_name
+             FROM lesson_notes ln
+             JOIN users u ON u.id = ln.created_by_user_id
+             WHERE ln.lesson_id IN ($placeholders) AND ln.body <> ''
+             ORDER BY ln.lesson_id, ln.created_at DESC, ln.id DESC"
+        );
+        $st->execute($ids);
+        return $st->fetchAll();
+    }
+
     // A student's lesson notes, newest lesson first — the student and parent
     // dashboards' notes cards. Several notes on one lesson come back newest
     // first among themselves.

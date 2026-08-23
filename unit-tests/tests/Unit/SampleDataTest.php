@@ -50,7 +50,7 @@ final class SampleDataTest extends TestCase
         SemesterManagement::setActiveLocations($this->ctx, $spring, $locationIds);
         $this->importSemesterFiles($spring, 'spring_semester');
 
-        $this->assertCount(30, SemesterManagement::locationDates($fall));   // 15 Saturdays x 2 locations
+        $this->assertCount(32, SemesterManagement::locationDates($fall));   // 16 Saturdays x 2 locations (incl. one inactive holiday week)
         $this->assertCount(34, SemesterManagement::locationDates($spring)); // 17 Saturdays x 2 locations
         $this->assertCount(7, SemesterManagement::locationTeachers($fall));
         $this->assertCount(8, SemesterManagement::locationTeachers($spring));
@@ -70,15 +70,20 @@ final class SampleDataTest extends TestCase
 
         // Money arrives only from the ledger file — the schedule import bills
         // nobody — and lands on exactly the ten confirmed students.
-        $this->assertSame(33, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+        $this->assertSame(34, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
         $balances = Billing::semesterBalancesByStudent(
             $fall, array_map('intval', array_column($fallReservations, 'student_user_id'))
         );
         $charged = array_filter($balances, fn(array $b) => $b['semester_debit_cents'] > 0);
         $this->assertCount(10, $charged);
-        foreach ($charged as $balance) {
-            $this->assertSame(47500, $balance['semester_debit_cents']); // 35 + 15 + 425
-        }
+        // Eight 30-minute students at 35 + 15 + 420; Angel at 60 min
+        // (35 + 15 + 840); Devon at 60 min plus the $20 installment fee.
+        $debits = array_map(fn(array $b) => $b['semester_debit_cents'], $charged);
+        sort($debits);
+        $this->assertSame(
+            [47000, 47000, 47000, 47000, 47000, 47000, 47000, 47000, 89000, 91000],
+            $debits
+        );
 
         // What the grid actually colours: paid, half-paid, owing, and the
         // pending students who were never charged.
@@ -109,7 +114,7 @@ final class SampleDataTest extends TestCase
         $springReservations = ReservationManagement::reservationsForSemester($spring);
         $this->assertSame(['pending_reach_out' => 14], $this->countByStatus($springReservations));
         // Fall's ledger is the only ledger: carrying forward charges nobody.
-        $this->assertSame(33, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+        $this->assertSame(34, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
         $this->assertSame(0, (int)pdo()->query(
             "SELECT COUNT(*) FROM ledger_entries WHERE semester_id = $spring"
         )->fetchColumn());

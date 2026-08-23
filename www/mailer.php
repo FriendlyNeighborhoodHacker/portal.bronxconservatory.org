@@ -4,6 +4,32 @@ require_once __DIR__ . '/lib/UserContext.php';
 require_once __DIR__ . '/lib/EmailLog.php';
 
 /**
+ * Demo/staging safety net. When EMAIL_REDIRECT_TO is set (config.local.php),
+ * every outgoing email is delivered to that address instead of its real
+ * recipient, so a live demo can never accidentally email a family. Recipients
+ * on EMAIL_REDIRECT_ALLOWLIST are still delivered normally. Returns the
+ * address to actually deliver to, or null to deliver as addressed. The email
+ * log keeps the intended recipient either way; the subject is tagged with it
+ * so the demo inbox shows who each message was for.
+ */
+function email_redirect_target(string $toEmail): ?string {
+  if (!defined('EMAIL_REDIRECT_TO') || trim((string)EMAIL_REDIRECT_TO) === '') {
+    return null;
+  }
+  $needle = strtolower(trim($toEmail));
+  $allowlist = (defined('EMAIL_REDIRECT_ALLOWLIST') && is_array(EMAIL_REDIRECT_ALLOWLIST))
+    ? EMAIL_REDIRECT_ALLOWLIST : [];
+  foreach ($allowlist as $allowed) {
+    if (strtolower(trim((string)$allowed)) === $needle) {
+      return null;
+    }
+  }
+  $redirect = trim((string)EMAIL_REDIRECT_TO);
+  // Already going to the redirect address: nothing to rewrite.
+  return strtolower($redirect) === $needle ? null : $redirect;
+}
+
+/**
  * Send an HTML email via SMTP (supports SSL 465 and STARTTLS 587).
  * Returns true on success, false on failure.
  */
@@ -101,6 +127,14 @@ function send_smtp_mail(string $toEmail, string $toName, string $subject, string
  */
 function send_email_with_error(string $toEmail, string $subject, string $html, string $toName = '', string &$errorMessage = '', ?array $smtp = null, string $replyTo = ''): bool {
   if ($toName === '') $toName = $toEmail;
+
+  // Every send in the app funnels through here, so the demo redirect cannot
+  // be bypassed by a code path that forgot about it.
+  $redirect = email_redirect_target($toEmail);
+  if ($redirect !== null) {
+    $subject = '[Redirected — was to ' . $toEmail . '] ' . $subject;
+    $toEmail = $redirect;
+  }
 
   if ($smtp !== null) {
     // SMTP override:

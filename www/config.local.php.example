@@ -20,6 +20,15 @@ define('SMTP_SECURE', 'tls');          // 'tls' or 'ssl'
 define('SMTP_FROM_EMAIL', '');         // often the same as SMTP_USER
 define('SMTP_FROM_NAME', 'Bronx Conservatory of Music'); // From name seen in emails
 
+// Demo safety net: when EMAIL_REDIRECT_TO is a non-empty address, EVERY email
+// the portal sends is delivered there instead of to its real recipient, with
+// the subject tagged "[Redirected — was to <address>]" — so a demo can never
+// accidentally email a family. Leave '' to send normally. Addresses on
+// EMAIL_REDIRECT_ALLOWLIST are still delivered normally while the redirect is
+// on (case-insensitive). Stripe's own payment receipts are not covered.
+define('EMAIL_REDIRECT_TO', '');
+define('EMAIL_REDIRECT_ALLOWLIST', []);
+
 // HMAC key for remember me tokens (REQUIRED for persistent login).
 // Set to a long random string, e.g., bin2hex(random_bytes(32)).
 define('REMEMBER_TOKEN_KEY', '');

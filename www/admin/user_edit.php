@@ -67,9 +67,17 @@ if (isset($_GET['photo_err'])) { $err = 'Photo upload failed.'; }
         <div id="adminActionsMenu" class="admin-menu hidden" role="menu" aria-hidden="true">
           <a href="#" role="menuitem" onclick="if(confirm('Delete this user? This cannot be undone.')) { document.getElementById('deleteForm').submit(); } return false;">Delete User</a>
           <?php if ($hasEmail): ?>
-            <a href="#" role="menuitem" onclick="document.getElementById('sendVerificationForm').submit(); return false;"><?= $hasLogin ? 'Send Email Verification' : 'Send Account Activation' ?></a>
+            <?php
+              // Every email action states who it will email before sending.
+              $emailAddr = (string)($user['email'] ?? '');
+              $verifyMsg = $hasLogin
+                  ? "This will send an email to {$emailAddr} asking them to verify their email address. Send it?"
+                  : "This will send an email to {$emailAddr} with a link to set their password and activate their account. Send it?";
+              $resetMsg = "This will send a password-reset email to {$emailAddr}. Send it?";
+            ?>
+            <a href="#" role="menuitem" onclick="if(confirm(<?= h(json_encode($verifyMsg)) ?>)) { document.getElementById('sendVerificationForm').submit(); } return false;"><?= $hasLogin ? 'Send Email Verification' : 'Send Account Activation' ?></a>
             <?php if ($hasLogin): ?>
-              <a href="#" role="menuitem" onclick="document.getElementById('sendResetForm').submit(); return false;">Send Password Reset</a>
+              <a href="#" role="menuitem" onclick="if(confirm(<?= h(json_encode($resetMsg)) ?>)) { document.getElementById('sendResetForm').submit(); } return false;">Send Password Reset</a>
             <?php endif; ?>
           <?php endif; ?>
         </div>

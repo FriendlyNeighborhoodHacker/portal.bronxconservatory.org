@@ -13,8 +13,8 @@ final class EmailTemplateManagementTest extends TestCase
         // email_templates is seeded reference data (like settings and
         // instruments), so it is not truncated. Each test writes its own
         // baseline instead, and cannot be affected by what a sibling left.
-        pdo()->prepare('UPDATE email_templates SET subject = ?, body_html = ?, updated_by_user_id = NULL WHERE template_key = ?')
-            ->execute(['Hello {{parent_first_name}}', '<p>Hi {{parent_first_name}}, about {{student_first_name}}.</p>', self::KEY]);
+        pdo()->prepare('UPDATE email_templates SET subject = ?, body_markdown = ?, updated_by_user_id = NULL WHERE template_key = ?')
+            ->execute(['Hello {{parent_first_name}}', 'Hi {{parent_first_name}}, about {{student_first_name}}.', self::KEY]);
     }
 
     // ===== Rendering =====
@@ -26,14 +26,14 @@ final class EmailTemplateManagementTest extends TestCase
         ]);
 
         $this->assertSame('Hello Maria', $rendered['subject']);
-        $this->assertSame('<p>Hi Maria, about Luis.</p>', $rendered['body_html']);
+        $this->assertSame("<p>Hi Maria, about Luis.</p>\n", $rendered['body_html']);
     }
 
     public function testUnsuppliedPlaceholderRendersEmptyRatherThanLeaking(): void
     {
         $rendered = EmailTemplateManagement::render(self::KEY, ['parent_first_name' => 'Maria']);
 
-        $this->assertSame('<p>Hi Maria, about .</p>', $rendered['body_html']);
+        $this->assertSame("<p>Hi Maria, about .</p>\n", $rendered['body_html']);
         $this->assertStringNotContainsString('{{', $rendered['body_html']);
     }
 
@@ -85,11 +85,11 @@ final class EmailTemplateManagementTest extends TestCase
     public function testUpdateStoresTheWordingAndWhoChangedIt(): void
     {
         $ctx = fx_admin_ctx();
-        EmailTemplateManagement::update($ctx, self::KEY, 'A new subject', '<p>New body</p>');
+        EmailTemplateManagement::update($ctx, self::KEY, 'A new subject', 'New body');
 
         $template = EmailTemplateManagement::find(self::KEY);
         $this->assertSame('A new subject', $template['subject']);
-        $this->assertSame('<p>New body</p>', $template['body_html']);
+        $this->assertSame('New body', $template['body_markdown']);
         $this->assertSame($ctx->id, (int)$template['updated_by_user_id']);
         $this->assertNotSame('', trim((string)$template['updated_by_first_name']));
 
@@ -194,7 +194,7 @@ final class EmailTemplateManagementTest extends TestCase
             $template = EmailTemplateManagement::find($key);
             $this->assertNotNull($template, $key . ' should ship with schema.sql');
             $this->assertSame([], EmailTemplateManagement::unknownPlaceholders(
-                $key, (string)$template['subject'], (string)$template['body_html']
+                $key, (string)$template['subject'], (string)$template['body_markdown']
             ), $key . ' uses a variable the code does not supply');
 
             $rendered = EmailTemplateManagement::render($key, EmailTemplateManagement::sampleVariables($key));
