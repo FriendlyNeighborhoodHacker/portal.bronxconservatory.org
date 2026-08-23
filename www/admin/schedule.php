@@ -150,7 +150,7 @@ header_html('Semester Schedule', ['wide' => true]);
 
 <p class="small" style="margin-top:10px;">Click an empty cell to reserve it for a student or hold it
 for the teacher; click a filled cell to change or remove it. Press <strong>Edit</strong> to drag a
-student's weekly slot to a different teacher or time.</p>
+student's weekly slot or a hold block to a different teacher or time.</p>
 
 <?php ReservationUIManager::renderModals($semesterId); ?>
 <?php render_schedule_edit_mode([
@@ -163,7 +163,18 @@ student's weekly slot to a different teacher or time.</p>
         'day_of_week' => 'day',
         'start_time' => 'time',
     ],
-    'noun' => 'weekly slot',
+    'noun' => 'weekly slot or hold block',
+    'hold' => [
+        'endpoint' => '/admin/hold_block_move.php',
+        'item_attr' => 'holdReservationId',
+        'id_field' => 'hold_block_reservation_id',
+        'fields' => [
+            'location_id' => 'locationId',
+            'teacher_user_id' => 'teacherId',
+            'day_of_week' => 'day',
+            'start_time' => 'time',
+        ],
+    ],
 ]); ?>
 
 <?php footer_html(); ?>

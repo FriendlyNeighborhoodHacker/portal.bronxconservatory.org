@@ -26,8 +26,27 @@ function schedule_edit_toggle_html(): string {
  *   'id_field'  string  the POST field that carries it
  *   'fields'    array   POST field => dataset key on the target cell
  *   'noun'      string  what is being moved, for the messages
+ *   'hold'      array?  a second draggable kind (same endpoint/item_attr/
+ *                       id_field/fields keys) — the Semester Schedule uses it
+ *                       to move hold blocks alongside student reservations.
  */
 function render_schedule_edit_mode(array $config): void {
+    // The script treats every draggable kind alike; a drop posts to the
+    // endpoint of whichever kind the dragged box belongs to.
+    $kinds = [[
+        'itemAttr' => $config['item_attr'],
+        'idField' => $config['id_field'],
+        'endpoint' => $config['endpoint'],
+        'fields' => $config['fields'],
+    ]];
+    if (isset($config['hold'])) {
+        $kinds[] = [
+            'itemAttr' => $config['hold']['item_attr'],
+            'idField' => $config['hold']['id_field'],
+            'endpoint' => $config['hold']['endpoint'],
+            'fields' => $config['hold']['fields'],
+        ];
+    }
     ?>
     <div class="edit-mode-bar hidden" id="scheduleEditBar">
       <span><strong>Edit mode.</strong> Drag a <?=h($config['noun'])?> to an empty slot to move it.
@@ -38,17 +57,13 @@ function render_schedule_edit_mode(array $config): void {
 
     <script>
     document.addEventListener('DOMContentLoaded', function () {
-      var config = <?=json_encode([
-          'endpoint' => $config['endpoint'],
-          'itemAttr' => $config['item_attr'],
-          'idField' => $config['id_field'],
-          'fields' => $config['fields'],
-      ])?>;
+      var kinds = <?=json_encode($kinds)?>;
       var toggle = document.getElementById('scheduleEditToggle');
       var bar = document.getElementById('scheduleEditBar');
       var errEl = document.getElementById('scheduleEditErr');
       var csrf = <?=json_encode(csrf_token())?>;
       var dragged = null;
+      var draggedKind = null;
       // A successful move reloads the page so the grid recomputes server-side.
       // This flag carries edit mode across that reload, so you can move several
       // things and stop when you say Done — rather than being dropped out after
@@ -72,9 +87,11 @@ function render_schedule_edit_mode(array $config): void {
         toggle.setAttribute('aria-pressed', on ? 'true' : 'false');
         toggle.classList.toggle('primary', on);
         clearError();
-        document.querySelectorAll('.cell-item[data-' + dashed(config.itemAttr) + ']').forEach(function (item) {
-          if (on) { item.setAttribute('draggable', 'true'); }
-          else { item.removeAttribute('draggable'); }
+        kinds.forEach(function (kind) {
+          document.querySelectorAll('.cell-item[data-' + dashed(kind.itemAttr) + ']').forEach(function (item) {
+            if (on) { item.setAttribute('draggable', 'true'); }
+            else { item.removeAttribute('draggable'); }
+          });
         });
       }
 
@@ -123,19 +140,26 @@ function render_schedule_edit_mode(array $config): void {
       document.addEventListener('dragstart', function (e) {
         if (!document.body.classList.contains('schedule-edit-mode')) return;
         var item = e.target.closest ? e.target.closest('.cell-item') : null;
-        if (!item || !item.dataset[config.itemAttr]) return;
+        if (!item) return;
+        var kind = null;
+        for (var i = 0; i < kinds.length; i++) {
+          if (item.dataset[kinds[i].itemAttr]) { kind = kinds[i]; break; }
+        }
+        if (!kind) return;
         dragged = item;
+        draggedKind = kind;
         item.classList.add('dragging');
         clearError();
         document.getElementById('scheduleEditSaved').classList.add('hidden');
         e.dataTransfer.effectAllowed = 'move';
         // Firefox will not start a drag without data on the transfer.
-        e.dataTransfer.setData('text/plain', item.dataset[config.itemAttr]);
+        e.dataTransfer.setData('text/plain', item.dataset[kind.itemAttr]);
       });
 
       document.addEventListener('dragend', function () {
         if (dragged) dragged.classList.remove('dragging');
         dragged = null;
+        draggedKind = null;
         document.querySelectorAll('td.grid-cell.drop-target').forEach(function (c) {
           c.classList.remove('drop-target');
         });
@@ -163,20 +187,21 @@ function render_schedule_edit_mode(array $config): void {
         cell.classList.remove('drop-target');
 
         var item = dragged;
+        var kind = draggedKind;
         var problem = fits(cell, parseInt(item.dataset.duration || '30', 10));
         if (problem) { showError(problem); return; }
 
         var body = new FormData();
         body.append('csrf', csrf);
-        body.append(config.idField, item.dataset[config.itemAttr]);
-        Object.keys(config.fields).forEach(function (field) {
-          body.append(field, cell.dataset[config.fields[field]] || '');
+        body.append(kind.idField, item.dataset[kind.itemAttr]);
+        Object.keys(kind.fields).forEach(function (field) {
+          body.append(field, cell.dataset[kind.fields[field]] || '');
         });
 
         // Held until the server answers, so a refused move never looks like it
         // worked.
         item.classList.add('saving');
-        fetch(config.endpoint, { method: 'POST', body: body, credentials: 'same-origin' })
+        fetch(kind.endpoint, { method: 'POST', body: body, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .then(function (json) {
             if (json && json.ok) { reloadStayingInEditMode(); }
