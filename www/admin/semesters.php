@@ -33,7 +33,12 @@ header_html('Semesters');
   $locations = SemesterManagement::activeLocations($semesterId);
   // "Access Bronx Charter School — Saturdays · Bronx Community College — Saturdays, Tuesdays"
   $weekdaysByLocation = [];
-  foreach (SemesterManagement::locationWeekdays($semesterId) as $weekdayRow) {
+  $weekdayRows = SemesterManagement::locationWeekdays($semesterId);
+  // Saturday-first, matching the schedule grid's band order.
+  usort($weekdayRows, fn(array $a, array $b): int =>
+      [$a['location_name'], ((int)$a['day_of_week'] - SemesterManagement::DEFAULT_TEACHING_DAY + 7) % 7]
+      <=> [$b['location_name'], ((int)$b['day_of_week'] - SemesterManagement::DEFAULT_TEACHING_DAY + 7) % 7]);
+  foreach ($weekdayRows as $weekdayRow) {
     $weekdaysByLocation[(string)$weekdayRow['location_name']][] =
         ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'][(int)$weekdayRow['day_of_week']];
   }
