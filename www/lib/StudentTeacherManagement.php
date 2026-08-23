@@ -118,6 +118,40 @@ class StudentTeacherManagement {
         return $st->fetchAll();
     }
 
+    /**
+     * The parents' names for a set of students, as
+     * student_user_id => ["Ana Reyes", "Marco Reyes", ...].
+     *
+     * A list of lessons wants the family behind each one, and asking student
+     * by student is a query per row; this asks once for the whole page.
+     * Students with no parent on file are simply absent from the map, and a
+     * parent who has been deleted is left out — this is a display list.
+     *
+     * @param int[] $studentUserIds
+     * @return array<int, string[]>
+     */
+    public static function parentNamesByStudent(array $studentUserIds): array {
+        $ids = array_values(array_unique(array_map('intval', $studentUserIds)));
+        if (!$ids) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $st = self::pdo()->prepare(
+            'SELECT ph.child_user_id, u.first_name, u.last_name
+             FROM parenthood ph
+             JOIN users u ON u.id = ph.parent_user_id
+             WHERE ph.child_user_id IN (' . $placeholders . ')
+               AND u.is_deleted = 0
+             ORDER BY u.first_name, u.last_name'
+        );
+        $st->execute($ids);
+        $byStudent = [];
+        foreach ($st->fetchAll() as $row) {
+            $byStudent[(int)$row['child_user_id']][] = trim($row['first_name'] . ' ' . $row['last_name']);
+        }
+        return $byStudent;
+    }
+
     public static function isParentOf(int $parentUserId, int $studentUserId): bool {
         $st = self::pdo()->prepare('SELECT 1 FROM parenthood WHERE parent_user_id = ? AND child_user_id = ?');
         $st->execute([$parentUserId, $studentUserId]);

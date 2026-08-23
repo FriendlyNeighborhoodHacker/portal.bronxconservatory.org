@@ -146,6 +146,24 @@ final class StudentTeacherManagementTest extends TestCase
             StudentTeacherManagement::parentsOfStudent($child)));
     }
 
+    public function testParentNamesComeBackPerStudentInOneLookup(): void
+    {
+        $withTwo = fx_student('Kid', 'Reyes');
+        fx_parent_of($withTwo, 'Marco', 'Reyes');
+        fx_parent_of($withTwo, 'Ana', 'Reyes');
+        $withOne = fx_student('Nina', 'Alvarez');
+        fx_parent_of($withOne, 'Pat', 'Alvarez');
+        $orphan = fx_student('Solo', 'Adult');
+
+        $names = StudentTeacherManagement::parentNamesByStudent([$withTwo, $withOne, $orphan, $withTwo]);
+
+        $this->assertSame(['Ana Reyes', 'Marco Reyes'], $names[$withTwo]);
+        $this->assertSame(['Pat Alvarez'], $names[$withOne]);
+        // A student with nobody on file is simply absent from the map.
+        $this->assertArrayNotHasKey($orphan, $names);
+        $this->assertSame([], StudentTeacherManagement::parentNamesByStudent([]));
+    }
+
     public function testParentLinkSearchOffersAnyoneExceptWhoIsAlreadyLinked(): void
     {
         $child = fx_student('Devon', 'Devlin');

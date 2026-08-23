@@ -1056,6 +1056,12 @@ body.auth .brand-logo {
   min-width: 120px;
 }
 
+/* The parents' names under a lesson on the teacher's day list: the same voice
+   as the location line above it, on a line of its own. */
+.lesson-row-parents {
+  padding-bottom: 12px;
+}
+
 .lesson-cancelled {
   text-decoration: line-through;
   color: var(--color-text-muted);

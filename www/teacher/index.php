@@ -11,6 +11,7 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/fragments.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
 require_once __DIR__ . '/../lib/LessonDetailUIManager.php';
+require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
 Application::init();
 require_login();
 
@@ -37,6 +38,12 @@ if (!$lessons && $requestedDate === null) {
         $showingNextDay = true;
     }
 }
+
+// The family behind each lesson, looked up once for the whole day: a teacher
+// reading their day wants to know who they will be handing the student back to.
+$parentNames = StudentTeacherManagement::parentNamesByStudent(
+    array_map(fn($l) => (int)$l['student_user_id'], $lessons)
+);
 
 $prevDay = LessonManagement::previousTeachingDateForTeacher((int)$me['id'], $date);
 $nextDay = LessonManagement::nextTeachingDateForTeacher((int)$me['id'], $date);
@@ -101,6 +108,11 @@ header_html($title);
     <div class="small" style="color:var(--color-text-muted);margin-top:2px;">
       <?=h($lesson['location_name'])?>
     </div>
+
+    <?php $lessonParents = $parentNames[(int)$lesson['student_user_id']] ?? []; ?>
+    <?php if ($lessonParents): ?>
+      <div class="lesson-row-parents"><?=h(implode(', ', $lessonParents))?></div>
+    <?php endif; ?>
 
     <div id="attendance-<?=$lessonId?>-solo">
       <?=teacher_attendance_html($lessonId, null, $lesson['attended'])?>
