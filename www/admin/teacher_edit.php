@@ -24,6 +24,28 @@ $semesterId = Application::adminSelectedSemesterId();
 $students = $semesterId !== null
     ? StudentTeacherManagement::studentsForTeacherInSemester($userId, $semesterId)
     : [];
+$semester = $semesterId !== null ? SemesterManagement::find($semesterId) : null;
+
+// The teacher's (location, day) schedule assignments, and the valid
+// combinations they could still be added to: every day an active location
+// meets on, minus the ones already assigned.
+$assignments = $semesterId !== null
+    ? SemesterManagement::locationTeacherDaysForTeacher($semesterId, $userId)
+    : [];
+$assignedKeys = [];
+foreach ($assignments as $assignment) {
+    $assignedKeys[$assignment['location_id'] . ':' . $assignment['day_of_week']] = true;
+}
+$addableDays = [];
+if ($semesterId !== null) {
+    foreach (SemesterManagement::activeLocations($semesterId) as $location) {
+        foreach (SemesterManagement::weekdaysForLocation($semesterId, (int)$location['id']) as $day) {
+            if (!isset($assignedKeys[$location['id'] . ':' . $day])) {
+                $addableDays[] = ['location_id' => (int)$location['id'], 'location_name' => $location['name'], 'day' => $day];
+            }
+        }
+    }
+}
 $returnTo = '/admin/teacher_edit.php?id=' . $userId;
 
 $flash = $_SESSION['people_flash'] ?? null;
@@ -79,6 +101,52 @@ header_html('Edit ' . $name);
     </div>
   <?php endforeach; ?>
 </div>
+
+<?php if ($semester !== null): ?>
+<div class="card">
+  <h3>Schedule Days — <?=h(SemesterManagement::label($semester))?></h3>
+  <p class="small">The days this teacher appears on the Semester Schedule, per location. An
+  assignment can be removed only once nothing is scheduled for them on that day there.</p>
+  <?php if (!$assignments): ?>
+    <p class="small">Not on the schedule this semester.</p>
+  <?php endif; ?>
+  <?php foreach ($assignments as $assignment): ?>
+    <div class="lesson-row">
+      <span><strong><?=h($assignment['location_name'])?></strong>
+        — <?=h(SemesterManagement::dayName((int)$assignment['day_of_week']))?>s</span>
+      <form method="post" action="/admin/teacher_days_eval.php" style="display:inline;"
+        onsubmit="return confirm('Remove this assignment? They will no longer appear on the schedule for <?=h($assignment['location_name'])?> on <?=h(SemesterManagement::dayName((int)$assignment['day_of_week']))?>s.');">
+        <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+        <input type="hidden" name="teacher_user_id" value="<?=$userId?>">
+        <input type="hidden" name="semester_id" value="<?=(int)$semesterId?>">
+        <input type="hidden" name="action" value="remove">
+        <input type="hidden" name="location_id" value="<?=(int)$assignment['location_id']?>">
+        <input type="hidden" name="day_of_week" value="<?=(int)$assignment['day_of_week']?>">
+        <button type="submit" class="button small">Remove</button>
+      </form>
+    </div>
+  <?php endforeach; ?>
+  <?php if ($addableDays): ?>
+    <form method="post" action="/admin/teacher_days_eval.php" class="actions" style="margin-top:10px;">
+      <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+      <input type="hidden" name="teacher_user_id" value="<?=$userId?>">
+      <input type="hidden" name="semester_id" value="<?=(int)$semesterId?>">
+      <input type="hidden" name="action" value="add">
+      <select name="location_day" required>
+        <option value="">Add a day…</option>
+        <?php foreach ($addableDays as $option): ?>
+          <option value="<?=(int)$option['location_id']?>:<?=(int)$option['day']?>">
+            <?=h($option['location_name'])?> — <?=h(SemesterManagement::dayName((int)$option['day']))?>s
+          </option>
+        <?php endforeach; ?>
+      </select>
+      <button type="submit" class="button">Add</button>
+    </form>
+  <?php elseif ($assignments): ?>
+    <p class="small">Assigned every day the semester's locations meet on.</p>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <div class="card">
   <button type="button" class="button danger" data-modal-open="deleteTeacherModal">Delete this teacher</button>

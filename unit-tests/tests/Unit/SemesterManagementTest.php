@@ -334,4 +334,122 @@ final class SemesterManagementTest extends TestCase
         $this->assertTrue($widened[1]['is_extra']);
         $this->assertArrayNotHasKey('is_extra', $widened[0]);
     }
+
+    // ── Editing assignments from the teacher page ──────────────────────────
+
+    public function testAddLocationTeacherDayValidatesAndAdds(): void
+    {
+        [$semesterId, $locationId, $teacherId, $dayOfWeek] = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);
+        $newTeacher = fx_teacher('Nina', 'New');
+
+        // A location that is not active this semester is refused.
+        try {
+            SemesterManagement::addLocationTeacherDay($this->ctx, $semesterId, fx_second_location_id(), $newTeacher, $dayOfWeek);
+            $this->fail('Expected the inactive location to be refused.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('not active', $e->getMessage());
+        }
+
+        // A day the location does not meet on is refused.
+        try {
+            SemesterManagement::addLocationTeacherDay($this->ctx, $semesterId, $locationId, $newTeacher, ($dayOfWeek + 1) % 7);
+            $this->fail('Expected the closed day to be refused.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('not open', $e->getMessage());
+        }
+
+        SemesterManagement::addLocationTeacherDay($this->ctx, $semesterId, $locationId, $newTeacher, $dayOfWeek);
+        $this->assertTrue(SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $newTeacher, $dayOfWeek));
+
+        // Adding it again is refused.
+        $this->expectException(InvalidArgumentException::class);
+        SemesterManagement::addLocationTeacherDay($this->ctx, $semesterId, $locationId, $newTeacher, $dayOfWeek);
+    }
+
+    public function testRemoveLocationTeacherDay(): void
+    {
+        $teacherId = fx_teacher();
+        [$semesterId, $locationId, , $dayOfWeek] = fx_semester_with_dates($this->ctx, $teacherId, '2030-09-07', 3);
+
+        SemesterManagement::removeLocationTeacherDay($this->ctx, $semesterId, $locationId, $teacherId, $dayOfWeek);
+        $this->assertFalse(SemesterManagement::isTeacherAtLocation($semesterId, $locationId, $teacherId, $dayOfWeek));
+
+        // Removing what is not there is refused.
+        $this->expectException(InvalidArgumentException::class);
+        SemesterManagement::removeLocationTeacherDay($this->ctx, $semesterId, $locationId, $teacherId, $dayOfWeek);
+    }
+
+    public function testRemoveRefusedWhileReservationsHoldsOrLessonsRemain(): void
+    {
+        $teacherId = fx_teacher();
+        $setup = fx_semester_with_dates($this->ctx, $teacherId, '2030-09-07', 3);
+        [$semesterId, $locationId, , $dayOfWeek] = $setup;
+
+        // A standing student reservation blocks removal.
+        $reservationId = ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId,
+            'teacher_user_id' => $teacherId,
+            'location_id' => $locationId,
+            'student_user_id' => fx_student(),
+            'day_of_week' => $dayOfWeek,
+            'start_time' => '10:00',
+            'duration_minutes' => 30,
+            'status' => 'confirmed',
+        ]);
+        try {
+            SemesterManagement::removeLocationTeacherDay($this->ctx, $semesterId, $locationId, $teacherId, $dayOfWeek);
+            $this->fail('Expected the reservation to block removal.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('student reservations', $e->getMessage());
+        }
+        ReservationManagement::deleteReservation($this->ctx, $reservationId);
+
+        // A hold block blocks removal.
+        $holdId = HoldBlockManagement::createHoldBlockReservation($this->ctx, [
+            'semester_id' => $semesterId,
+            'teacher_user_id' => $teacherId,
+            'location_id' => $locationId,
+            'day_of_week' => $dayOfWeek,
+            'start_time' => '12:00',
+            'duration_minutes' => 30,
+            'title' => 'Lunch',
+        ]);
+        try {
+            SemesterManagement::removeLocationTeacherDay($this->ctx, $semesterId, $locationId, $teacherId, $dayOfWeek);
+            $this->fail('Expected the hold block to block removal.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('hold blocks', $e->getMessage());
+        }
+        HoldBlockManagement::deleteHoldBlockReservation($this->ctx, $holdId);
+
+        // A one-off lesson on that day at that location blocks removal too.
+        LessonManagement::createAdHocLesson($this->ctx, [
+            'semester_id' => $semesterId,
+            'teacher_user_id' => $teacherId,
+            'student_user_id' => fx_student('Solo', 'Student'),
+            'location_id' => $locationId,
+            'start_datetime' => '2030-09-14 11:00:00',
+            'duration_minutes' => 30,
+        ]);
+        try {
+            SemesterManagement::removeLocationTeacherDay($this->ctx, $semesterId, $locationId, $teacherId, $dayOfWeek);
+            $this->fail('Expected the lesson to block removal.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('lessons on the calendar', $e->getMessage());
+        }
+    }
+
+    public function testLocationTeacherDaysForTeacher(): void
+    {
+        $teacherId = fx_teacher();
+        [$semesterId, $locationId, , $dayOfWeek] = fx_semester_with_dates($this->ctx, $teacherId, '2030-09-07', 3);
+
+        $rows = SemesterManagement::locationTeacherDaysForTeacher($semesterId, $teacherId);
+        $this->assertCount(1, $rows);
+        $this->assertSame($locationId, (int)$rows[0]['location_id']);
+        $this->assertSame($dayOfWeek, (int)$rows[0]['day_of_week']);
+        $this->assertNotSame('', (string)$rows[0]['location_name']);
+
+        $this->assertSame([], SemesterManagement::locationTeacherDaysForTeacher($semesterId, fx_teacher('Otto', 'Other')));
+    }
 }

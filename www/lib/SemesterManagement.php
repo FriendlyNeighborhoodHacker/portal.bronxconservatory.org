@@ -729,6 +729,129 @@ class SemesterManagement {
     }
 
     /**
+     * Add one (location, teacher, day) assignment from the admin UI,
+     * validating what the CSV import validates: the location must be active
+     * for the semester, the day one it meets on, and the assignment not
+     * already present.
+     */
+    public static function addLocationTeacherDay(
+        ?UserContext $ctx, int $semesterId, int $locationId, int $teacherUserId, int $dayOfWeek
+    ): void {
+        self::assertAdmin($ctx);
+        if ($dayOfWeek < 0 || $dayOfWeek > 6) {
+            throw new InvalidArgumentException('Day of week must be 0 (Sunday) through 6 (Saturday).');
+        }
+        $location = null;
+        foreach (self::activeLocations($semesterId) as $candidate) {
+            if ((int)$candidate['id'] === $locationId) {
+                $location = $candidate;
+                break;
+            }
+        }
+        if ($location === null) {
+            throw new InvalidArgumentException('That location is not active this semester.');
+        }
+        if (!in_array($dayOfWeek, self::weekdaysForLocation($semesterId, $locationId), true)) {
+            throw new InvalidArgumentException(
+                $location['name'] . ' is not open on ' . self::dayName($dayOfWeek) . 's this semester.'
+            );
+        }
+        if (self::isTeacherAtLocation($semesterId, $locationId, $teacherUserId, $dayOfWeek)) {
+            throw new InvalidArgumentException(
+                'They are already assigned to ' . $location['name'] . ' on ' . self::dayName($dayOfWeek) . 's.'
+            );
+        }
+        self::addLocationTeacher($ctx, $semesterId, $locationId, $teacherUserId, $dayOfWeek);
+    }
+
+    /**
+     * Remove one (location, teacher, day) assignment. Refused while the
+     * teacher still has anything scheduled there that day — a standing
+     * student reservation, a hold block, or any non-cancelled lesson —
+     * because removing the schedule column would orphan it.
+     */
+    public static function removeLocationTeacherDay(
+        ?UserContext $ctx, int $semesterId, int $locationId, int $teacherUserId, int $dayOfWeek
+    ): void {
+        self::assertAdmin($ctx);
+        if (!self::isTeacherAtLocation($semesterId, $locationId, $teacherUserId, $dayOfWeek)) {
+            throw new InvalidArgumentException('That assignment does not exist.');
+        }
+
+        $st = self::pdo()->prepare(
+            "SELECT COUNT(*) FROM semester_lesson_reservations
+             WHERE semester_id=? AND location_id=? AND teacher_user_id=? AND day_of_week=?
+               AND status <> 'deleted'"
+        );
+        $st->execute([$semesterId, $locationId, $teacherUserId, $dayOfWeek]);
+        if ((int)$st->fetchColumn() > 0) {
+            throw new InvalidArgumentException(
+                'They still have student reservations there on ' . self::dayName($dayOfWeek)
+                . 's. Move or delete those first.'
+            );
+        }
+
+        $st = self::pdo()->prepare(
+            "SELECT COUNT(*) FROM semester_hold_block_reservations
+             WHERE semester_id=? AND location_id=? AND teacher_user_id=? AND day_of_week=?
+               AND status = 'active'"
+        );
+        $st->execute([$semesterId, $locationId, $teacherUserId, $dayOfWeek]);
+        if ((int)$st->fetchColumn() > 0) {
+            throw new InvalidArgumentException(
+                'They still have hold blocks there on ' . self::dayName($dayOfWeek)
+                . 's. Move or delete those first.'
+            );
+        }
+
+        // Any lesson actually on the calendar that day at that location —
+        // including one-offs, which have no reservation, and lessons moved
+        // there for a week by a location override.
+        $st = self::pdo()->prepare(
+            'SELECT COUNT(*) FROM lessons le
+             LEFT JOIN semester_lesson_reservations r ON r.id = le.semester_lesson_reservation_id
+             WHERE COALESCE(r.semester_id, le.semester_id) = ?
+               AND COALESCE(le.location_id_override, r.location_id, le.location_id) = ?
+               AND COALESCE(r.teacher_user_id, le.teacher_user_id) = ?
+               AND DAYOFWEEK(le.start_datetime) - 1 = ?
+               AND le.cancelled_at IS NULL'
+        );
+        $st->execute([$semesterId, $locationId, $teacherUserId, $dayOfWeek]);
+        if ((int)$st->fetchColumn() > 0) {
+            throw new InvalidArgumentException(
+                'They still have lessons on the calendar there on ' . self::dayName($dayOfWeek) . 's.'
+            );
+        }
+
+        self::pdo()->prepare(
+            'DELETE FROM semester_location_teachers
+             WHERE semester_id=? AND location_id=? AND teacher_user_id=? AND day_of_week=?'
+        )->execute([$semesterId, $locationId, $teacherUserId, $dayOfWeek]);
+        self::log($ctx, 'semester.location_teacher_removed', [
+            'semester_id' => $semesterId, 'location_id' => $locationId,
+            'teacher_user_id' => $teacherUserId, 'day_of_week' => $dayOfWeek,
+        ]);
+    }
+
+    /** One teacher's (location, day) assignments, ordered for display. */
+    public static function locationTeacherDaysForTeacher(int $semesterId, int $teacherUserId): array {
+        $st = self::pdo()->prepare(
+            'SELECT slt.location_id, slt.day_of_week, l.name AS location_name
+             FROM semester_location_teachers slt
+             JOIN locations l ON l.id = slt.location_id
+             WHERE slt.semester_id = ? AND slt.teacher_user_id = ?
+             ORDER BY l.name, slt.day_of_week'
+        );
+        $st->execute([$semesterId, $teacherUserId]);
+        return $st->fetchAll();
+    }
+
+    public static function dayName(int $dayOfWeek): string {
+        return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][$dayOfWeek]
+            ?? (string)$dayOfWeek;
+    }
+
+    /**
      * Which days one assignment covers. A named day is taken as given; no day
      * means every weekday the location meets on, falling back to Saturday for
      * a location whose class dates have not been imported yet — the same
