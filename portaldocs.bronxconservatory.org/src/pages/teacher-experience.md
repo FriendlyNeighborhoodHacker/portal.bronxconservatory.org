@@ -13,8 +13,9 @@ view**: the teaching day. The teacher menu is
 ## The day view
 
 One card per lesson, in chronological order, each headed by the student's
-name, then the time and date ("10:00 AM, Sep 5"), then the location. Two
-design decisions shape it:
+name, then the time and date ("10:00 AM, Sep 5"), then the location, then the
+parents' names — who the teacher hands the student back to. Two design
+decisions shape it:
 
 - **Navigation is by teaching day, not by date.** Lessons are sparse — most
   dates have nothing on them — so there is deliberately no date picker. When

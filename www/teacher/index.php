@@ -111,7 +111,9 @@ header_html($title);
 
     <?php $lessonParents = $parentNames[(int)$lesson['student_user_id']] ?? []; ?>
     <?php if ($lessonParents): ?>
-      <div class="lesson-row-parents"><?=h(implode(', ', $lessonParents))?></div>
+      <div class="small" style="color:var(--color-text-muted);margin-top:2px;">
+        <?=h(implode(', ', $lessonParents))?>
+      </div>
     <?php endif; ?>
 
     <div id="attendance-<?=$lessonId?>-solo">
