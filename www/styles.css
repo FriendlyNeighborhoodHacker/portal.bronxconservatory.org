@@ -559,6 +559,22 @@ button.danger,
   color: #fff;
 }
 
+/* Notes buttons: light green, so "where the notes live" reads at a glance
+   on every schedule and lesson card. */
+button.notes,
+.button.notes {
+  background: #d9f2dc;
+  border-color: #a9dcb4;
+  color: #0b5b2a;
+}
+
+button.notes:hover,
+.button.notes:hover {
+  background: #c7ebcd;
+  border-color: #8fd19e;
+  color: #0b5b2a;
+}
+
 button:disabled,
 .button:disabled {
   opacity: 0.55;

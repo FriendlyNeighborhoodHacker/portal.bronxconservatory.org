@@ -4,6 +4,7 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
 require_once __DIR__ . '/../lib/LessonDetailUIManager.php';
 require_once __DIR__ . '/../lib/LessonUIHelper.php';
+require_once __DIR__ . '/../lib/NotesManagement.php';
 Application::init();
 require_login();
 
@@ -17,10 +18,51 @@ if (!in_array('student', $roles, true) && empty($me['is_admin'])) {
 $upcomingLessons = LessonManagement::upcomingLessonsForStudent((int)$me['id'], date('Y-m-d'));
 $announcement = Settings::announcement();
 
+// The last class that has actually happened, today's included — a student
+// checking in after this morning's lesson should see this morning's notes,
+// not last week's. recentLessonsForStudent cuts on the date, so ask up to
+// tomorrow and drop anything still in the future.
+$lastLesson = null;
+foreach (LessonManagement::recentLessonsForStudent((int)$me['id'], date('Y-m-d', strtotime('+1 day')), 3) as $candidate) {
+    if (strtotime($candidate['start_datetime']) <= time()) {
+        $lastLesson = $candidate;
+        break;
+    }
+}
+$lastLessonNotes = $lastLesson ? NotesManagement::lessonNotesForLesson((int)$lastLesson['id']) : [];
+
 header_html('My Schedule');
 ?>
 
 <h2><?=h('Hi, ' . ($me['preferred_name'] ?: $me['first_name'])) ?>!</h2>
+
+<?php if ($lastLesson): ?>
+<div class="card">
+  <h3 style="margin-top:0;">Notes from Your Last Class</h3>
+  <p class="small" style="margin-top:0;">
+    <?=h(date('l F j', strtotime($lastLesson['start_datetime'])))?> ·
+    Teacher: <?=h(trim(($lastLesson['substitute_first_name'] ?? null ?: $lastLesson['teacher_first_name']) . ' '
+      . ($lastLesson['substitute_last_name'] ?? null ?: $lastLesson['teacher_last_name'])))?><?=LessonManagement::isCancelled($lastLesson) ? ' · cancelled' : ''?>
+  </p>
+  <?php if ($lastLessonNotes): ?>
+    <?php foreach ($lastLessonNotes as $note): ?>
+    <div style="padding:10px 12px;margin-bottom:8px;background:var(--color-surface-sunk);border-radius:var(--radius-sm);">
+      <div style="white-space:pre-wrap;"><?=h($note['body'])?></div>
+      <div class="small" style="margin-top:4px;color:var(--color-text-muted);">
+        — <?=h($note['author_first_name'] . ' ' . $note['author_last_name'])?>,
+        <?=h(date('M j, g:i a', strtotime($note['created_at'])))?>
+      </div>
+    </div>
+    <?php endforeach; ?>
+  <?php else: ?>
+    <p class="small">No notes were left for this class yet.</p>
+  <?php endif; ?>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+    <a href="#" data-lesson-detail="<?=(int)$lastLesson['id']?>" class="button notes">Notes &amp; Materials</a>
+    <a href="/student/notes.php" class="button notes">See notes from all classes.</a>
+  </div>
+</div>
+<?php endif; ?>
 
 <?php if ($announcement): ?>
 <div class="card" style="background-color:var(--color-bg-highlight,#f5f5f5);border-left:4px solid var(--color-primary,#0062DC);">
@@ -49,18 +91,15 @@ header_html('My Schedule');
   <?php if ($cancelled): ?>
     <div style="color:var(--color-text-secondary);">This lesson has been cancelled.</div>
   <?php else: ?>
-    <a href="#" data-lesson-detail="<?=(int)$nextLesson['id']?>" class="button">Notes & Materials</a>
+    <a href="#" data-lesson-detail="<?=(int)$nextLesson['id']?>" class="button notes">Notes & Materials</a>
   <?php endif; ?>
 </div>
 
 <?php if (count($upcomingLessons) > 1): ?>
 <div class="card">
   <h3 style="margin-top:0;">Other Upcoming Lessons</h3>
-<div class="card">
-  <h3 style="margin-top:0;">Other Upcoming Lessons</h3>
   <?php echo LessonUIHelper::renderOtherUpcomingLessons(array_slice($upcomingLessons, 1), showStudentName: false, includeWrapper: false); ?>
   <p class="small" style="margin-top:12px;margin-bottom:0;"><a href="/student/calendar.php">View full calendar</a></p>
-</div>
 </div>
 <?php endif; ?>
 <?php else: ?>

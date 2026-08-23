@@ -98,7 +98,7 @@ class LessonUIHelper {
             $html .= '      </div>' . "\n";
             if ($countLabel !== '') {
                 $html .= '      <div style="text-align:right;flex-shrink:0;margin-top:4px;">' . "\n";
-                $html .= '        <a href="#" data-lesson-detail="' . (int)$lesson['id'] . '" class="button" style="white-space:nowrap;">Notes &amp; Materials</a>' . "\n";
+                $html .= '        <a href="#" data-lesson-detail="' . (int)$lesson['id'] . '" class="button notes" style="white-space:nowrap;">Notes &amp; Materials</a>' . "\n";
                 $html .= '        <div class="small" style="margin-top:4px;">' . h($countLabel) . '</div>' . "\n";
                 $html .= '      </div>' . "\n";
             } else {

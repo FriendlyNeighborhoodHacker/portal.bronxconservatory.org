@@ -71,7 +71,7 @@ header_html($child['first_name'] . "'s lessons");
   <?php if ($cancelled): ?>
     <div style="color:var(--color-text-secondary);">This lesson has been cancelled.</div>
   <?php else: ?>
-    <a href="#" data-lesson-detail="<?=(int)$nextLesson['id']?>" class="button">Notes & Materials</a>
+    <a href="#" data-lesson-detail="<?=(int)$nextLesson['id']?>" class="button notes">Notes & Materials</a>
   <?php endif; ?>
 </div>
 

@@ -16,15 +16,21 @@ students, who are simply users with a student profile of their own.
 
 ## The homepage
 
-1. **My Schedule** — upcoming lessons, *including breaks*: alongside real
-   lessons it shows the inactive `semester_location_dates` for the current
-   semester that fall on the same weekday as the student's reservation, so a
-   student sees "Holiday Week — no lesson" instead of a silent gap.
-2. **Recent Lessons** — the last few lessons, which is where their notes and
-   materials live.
+1. **Notes from Your Last Class** — the first thing under the greeting: the
+   full note thread from the student's most recent class (today's included),
+   with light-green **Notes & Materials** and **"See notes from all
+   classes."** buttons. The latter opens a page listing every past class,
+   newest first, each with its complete note thread — notes are the heart of
+   the student experience, so they lead the page.
+2. **Next Lesson / Upcoming Lessons** — when and where, *including breaks*:
+   inactive `semester_location_dates` on the student's weekday surface as
+   "Holiday Week" instead of a silent gap.
 3. **My Materials** — every resource attached to this semester's lessons, in
    chronological order of the lesson it came from — the semester's
    accumulated sheet music, recordings, and links in one place.
+
+Notes-related buttons are light green throughout, so "where the notes live"
+reads at a glance on every card.
 
 Every lesson, past or upcoming, opens its notes and materials in a modal —
 and the student can add a note of their own to the thread, on the same terms
