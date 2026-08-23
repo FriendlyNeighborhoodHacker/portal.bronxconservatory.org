@@ -87,7 +87,7 @@ class LocationTeachersCsvImport {
                     $status = 'error';
                     $messages[] = $location['name'] . ' is not open on ' . self::dayName($dayOfWeek)
                         . 's this semester (' . implode(', ', array_map([self::class, 'dayName'], $openDays))
-                        . ') — check the day, or add it on the semester\'s Locations page.';
+                        . ') — check the day, or import a class-days row for it.';
                 }
             }
 

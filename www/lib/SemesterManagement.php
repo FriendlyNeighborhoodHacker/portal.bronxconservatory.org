@@ -330,6 +330,33 @@ class SemesterManagement {
         ]);
     }
 
+    /**
+     * Upsert one declared weekday — the class-days CSV import's write path.
+     * Existing (location, day) rows get the new hours.
+     */
+    public static function upsertLocationWeekday(
+        ?UserContext $ctx, int $semesterId, int $locationId, int $dayOfWeek, string $startTime, string $endTime
+    ): void {
+        self::assertAdmin($ctx);
+        $start = self::normalizeTimeOfDay($startTime, 'Start time');
+        $end = self::normalizeTimeOfDay($endTime, 'End time');
+        if ($dayOfWeek < 0 || $dayOfWeek > 6) {
+            throw new InvalidArgumentException('Day of week must be 0 (Sunday) through 6 (Saturday).');
+        }
+        if ($end <= $start) {
+            throw new InvalidArgumentException('End time must be after the start time.');
+        }
+        self::pdo()->prepare(
+            'INSERT INTO semester_location_weekdays (semester_id, location_id, day_of_week, start_time, end_time)
+             VALUES (?,?,?,?,?)
+             ON DUPLICATE KEY UPDATE start_time = VALUES(start_time), end_time = VALUES(end_time)'
+        )->execute([$semesterId, $locationId, $dayOfWeek, $start, $end]);
+        self::log($ctx, 'semester.location_weekday_upserted', [
+            'semester_id' => $semesterId, 'location_id' => $locationId, 'day_of_week' => $dayOfWeek,
+            'start_time' => $start, 'end_time' => $end,
+        ]);
+    }
+
     /** The delete-and-insert behind setLocationWeekdays; caller holds the transaction. */
     private static function replaceLocationWeekdays(int $semesterId, int $locationId, array $days): void {
         $pdo = self::pdo();

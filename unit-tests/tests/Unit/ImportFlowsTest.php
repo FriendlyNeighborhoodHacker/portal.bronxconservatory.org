@@ -251,6 +251,50 @@ final class ImportFlowsTest extends TestCase
         $this->assertSame(['2030-09-07', '2030-09-21'], array_column($st->fetchAll(), 'd'));
     }
 
+    public function testLocationWeekdaysImportUpsertsDeclarations(): void
+    {
+        $ctx = $this->ctx;
+        $semesterId = fx_semester($ctx);
+        $locationId = fx_location_id();
+        SemesterManagement::setActiveLocations($ctx, $semesterId, [$locationId]);
+        $locationName = (string)pdo()->query("SELECT name FROM locations WHERE id=$locationId")->fetchColumn();
+
+        $validated = LocationWeekdaysCsvImport::validateRows([
+            ['location_name' => $locationName, 'day' => 'Saturday', 'start_time' => '9:00 am', 'end_time' => '5:00 pm'],
+            ['location_name' => $locationName, 'day' => 'Tuesday', 'start_time' => '3:30 pm', 'end_time' => '8:00 pm'],
+            ['location_name' => $locationName, 'day' => 'Tuesday', 'start_time' => '4:00 pm', 'end_time' => '8:00 pm'], // dup
+            ['location_name' => $locationName, 'day' => 'Someday', 'start_time' => '9:00 am', 'end_time' => '5:00 pm'],
+            ['location_name' => $locationName, 'day' => 'Friday', 'start_time' => '5:00 pm', 'end_time' => '4:00 pm'], // backwards
+            ['location_name' => 'Narnia', 'day' => 'Saturday', 'start_time' => '9:00 am', 'end_time' => '5:00 pm'],
+        ], ['semester_id' => $semesterId]);
+
+        $this->assertSame(
+            ['valid', 'valid', 'error', 'error', 'error', 'error'],
+            array_column($validated, 'status')
+        );
+        $this->assertStringContainsString('Duplicate row', $validated[2]['messages'][0]);
+        $this->assertStringContainsString('Unknown day', $validated[3]['messages'][0]);
+        $this->assertStringContainsString('after the start time', $validated[4]['messages'][0]);
+        $this->assertStringContainsString('No match found', $validated[5]['messages'][0]);
+
+        $summary = LocationWeekdaysCsvImport::commit($ctx, $validated, ['semester_id' => $semesterId]);
+        $this->assertSame(['created' => 2, 'updated' => 0, 'skipped' => 4], $summary);
+        $this->assertSame([2, 6], SemesterManagement::weekdaysForLocation($semesterId, $locationId));
+
+        // Re-import with new Saturday hours: updates in place, never duplicates.
+        $again = LocationWeekdaysCsvImport::validateRows([
+            ['location_name' => $locationName, 'day' => 'Saturday', 'start_time' => '10:00 am', 'end_time' => '4:00 pm'],
+        ], ['semester_id' => $semesterId]);
+        $this->assertSame('Update Saturday hours', $again[0]['changes']);
+        $summary = LocationWeekdaysCsvImport::commit($ctx, $again, ['semester_id' => $semesterId]);
+        $this->assertSame(['created' => 0, 'updated' => 1, 'skipped' => 0], $summary);
+        $rows = SemesterManagement::locationWeekdays($semesterId, $locationId);
+        $this->assertCount(2, $rows);
+        // Ordered by day: Tuesday (2) keeps its hours, Saturday (6) has the new ones.
+        $this->assertSame('15:30:00', $rows[0]['start_time']);
+        $this->assertSame('10:00:00', $rows[1]['start_time']);
+    }
+
     public function testLocationDatesImportEnforcesDeclaredWeekdays(): void
     {
         // The fixture declares Saturday (of 2030-09-07) for its location.

@@ -28,26 +28,28 @@ Reset first with `./reset_db.sh`, then upload in this order:
 
 ## 2. Fall 2026
 
-3. Create the semester (Fall 2026, 2026-09-08 – 2026-12-20), then on the
-   Locations step pick both locations and declare their class days:
-   Access Bronx Charter School — Saturday 9:00 am – 5:00 pm; Bronx Community
-   College — Saturday 9:00 am – 5:00 pm **and** Tuesday 3:30 – 8:00 pm. The
-   class-dates CSV in the next step is validated against these days, and rows
-   with blank times inherit these hours. Then:
-4. **fall_semester/location_dates.csv** — semester wizard step 3. The
+3. Create the semester (Fall 2026, 2026-09-08 – 2026-12-20) and pick both
+   locations, then:
+4. **fall_semester/location_weekdays.csv** — semester wizard step 3 (Import
+   Class Days). One row per weekday each location holds classes on, with that
+   day's standard hours: Access Bronx Charter School — Saturday 9:00 am –
+   5:00 pm; Bronx Community College — Saturday 9:00 am – 5:00 pm **and**
+   Tuesday 3:30 – 8:00 pm. The class-dates CSV in the next step is validated
+   against these days, and rows with blank times inherit these hours.
+5. **fall_semester/location_dates.csv** — semester wizard step 4. The
    conservatory runs two class days a week: Saturdays Sep 5 – Dec 19
    (9:00 am – 5:00 pm at both locations, with Thanksgiving weekend inactive)
    and, at Bronx Community College only, Tuesday evenings Sep 8 – Dec 15
    (3:30 – 8:00 pm). Access Bronx Charter School is Saturday-only. There is no
    inactive Tuesday: Thanksgiving falls on a Thursday, so only the Saturday
    track takes that week off — holidays are per-weekday.
-5. **fall_semester/location_teachers.csv** — semester wizard step 4 (the
+6. **fall_semester/location_teachers.csv** — semester wizard step 5 (the
    schedule grid's columns). One row per teacher-location-**day**: everyone
    works Saturdays, and Andre Baptiste and Grace Lin also work the Tuesday
    evenings at Bronx Community College. The Semester Schedule draws one grid
    per day, so the Tuesday grid shows only those two columns. A blank Day
    would assign the teacher to every day the location holds classes.
-6. **fall_semester/hold_blocks.csv** — Admin > Semesters > Import Hold Blocks.
+7. **fall_semester/hold_blocks.csv** — Admin > Semesters > Import Hold Blocks.
    Gives every teacher a Saturday lunch, 12:00–1:30 pm, so those cells are held
    instead of bookable, and the two Tuesday teachers a 5:30–6:00 pm dinner.
    James Okafor teaches at both locations but gets only one
@@ -59,7 +61,7 @@ Reset first with `./reset_db.sh`, then upload in this order:
    validation step rejects that teacher's lunch and tells you which student,
    time and location is in the way.
 
-7. **fall_semester/semester_location_reservations.csv** — the last wizard step
+8. **fall_semester/semester_location_reservations.csv** — the last wizard step
    (Admin > Semesters > Import Schedule). One row per weekly lesson slot: all
    17 students, one slot each, 12 confirmed and 5 still pending. Confirmed rows
    generate their lessons, but **no charges are posted** — this file is how an
@@ -73,7 +75,7 @@ Reset first with `./reset_db.sh`, then upload in this order:
    siblings and Jordan Charles) at Bronx Community College — each Tuesday track
    numbers its lessons independently of the Saturday track.
 
-8. **fall_semester/ledger_entries.csv** — the final wizard step (Admin >
+9. **fall_semester/ledger_entries.csv** — the final wizard step (Admin >
    Semesters > Import Charges & Payments). Where the money already stood when
    the portal took over: each of the 12 confirmed students carries a $35
    registration fee, a $15 recital fee and $420 of lessons for a 30-minute
@@ -99,11 +101,10 @@ click empty cells to add more.
 
 The same setup steps against the same roster, which is the point — nothing in
 **general/** gets re-uploaded. Create the semester (Spring 2027, 2027-01-25 –
-2027-05-23), pick both locations with their spring days (Access — Saturday
-9:00 am – 5:00 pm; BCC — Saturday 10:00 am – 4:00 pm and Tuesday 3:30 –
-8:00 pm), then upload
-**spring_semester/location_dates.csv**, **location_teachers.csv** and
-**hold_blocks.csv**.
+2027-05-23), pick both locations, then upload
+**spring_semester/location_weekdays.csv** (Access — Saturday 9:00 am –
+5:00 pm; BCC — Saturday 10:00 am – 4:00 pm and Tuesday 3:30 – 8:00 pm),
+**location_dates.csv**, **location_teachers.csv** and **hold_blocks.csv**.
 
 The spring files deliberately differ from fall so the two semesters can't be
 confused for each other, and so semester-scoped data is visibly scoped:

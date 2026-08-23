@@ -46,22 +46,15 @@ final class SampleDataTest extends TestCase
         $bcc = (int)pdo()->query("SELECT id FROM locations WHERE name='Bronx Community College'")->fetchColumn();
 
         $fall = SemesterManagement::createSemester($this->ctx, 'fall', 2026, '2026-09-08', '2026-12-20');
-        SemesterManagement::setActiveLocations($this->ctx, $fall, $locationIds, [
-            $access => [[6, '09:00', '17:00']],
-            $bcc => [[6, '09:00', '17:00'], [2, '15:30', '20:00']],
-        ]);
+        SemesterManagement::setActiveLocations($this->ctx, $fall, $locationIds);
         $this->importSemesterFiles($fall, 'fall_semester');
 
         // The point of the split: spring reuses general/ untouched.
         $spring = SemesterManagement::createSemester($this->ctx, 'spring', 2027, '2027-01-25', '2027-05-23');
-        SemesterManagement::setActiveLocations($this->ctx, $spring, $locationIds, [
-            $access => [[6, '09:00', '17:00']],
-            $bcc => [[6, '10:00', '16:00'], [2, '15:30', '20:00']],
-        ]);
+        SemesterManagement::setActiveLocations($this->ctx, $spring, $locationIds);
         $this->importSemesterFiles($spring, 'spring_semester');
 
-        // The declarations round-trip: 2 fall rows for Access-Saturday and
-        // BCC-Saturday+Tuesday.
+        // The class-days CSV declared Access-Saturday and BCC-Saturday+Tuesday.
         $this->assertSame(
             [[6], [2, 6]],
             [
@@ -176,6 +169,7 @@ final class SampleDataTest extends TestCase
     private function importSemesterFiles(int $semesterId, string $dir): void
     {
         $context = ['semester_id' => $semesterId];
+        $this->import($dir . '/location_weekdays.csv', LocationWeekdaysCsvImport::class, $context);
         $this->import($dir . '/location_dates.csv', LocationDatesCsvImport::class, $context);
         $this->import($dir . '/location_teachers.csv', LocationTeachersCsvImport::class, $context);
         $this->import($dir . '/hold_blocks.csv', HoldBlocksCsvImport::class, $context);

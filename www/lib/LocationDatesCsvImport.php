@@ -74,7 +74,7 @@ class LocationDatesCsvImport {
                 $status = 'error';
                 $messages[] = $location['name'] . ' is not open on ' . self::dayLabel($dayOfWeek)
                     . 's this semester (declared days: ' . implode(', ', array_map([self::class, 'dayLabel'], $declared))
-                    . ') — fix the date, or add the day on the semester\'s Locations page.';
+                    . ') — fix the date, or import a class-days row for it.';
             }
 
             // Blank times inherit the declared hours for that weekday.
@@ -92,7 +92,7 @@ class LocationDatesCsvImport {
             if ($startTime === null || $endTime === null) {
                 $status = 'error';
                 $messages[] = $inherited === null && ($row['start_time'] ?? '') === '' && ($row['end_time'] ?? '') === ''
-                    ? 'Start and end time are required (e.g. "9:00 am") — or declare the day\'s hours on the Locations page and leave them blank.'
+                    ? 'Start and end time are required (e.g. "9:00 am") — or import the day\'s hours in the class-days CSV and leave them blank.'
                     : 'Start and end time are required (e.g. "9:00 am").';
             }
 

@@ -4,6 +4,7 @@
 // Commit. Three flows share the generic step pages in this directory,
 // selected by ?flow=:
 //   teachers           — create/update teachers (TeacherCsvImport)
+//   location_weekdays  — a semester's declared class days per location (LocationWeekdaysCsvImport)
 //   location_dates     — a semester's class dates   (LocationDatesCsvImport)
 //   location_teachers  — a semester's teacher-location pairs (LocationTeachersCsvImport)
 //   hold_blocks        — teachers' standing non-lesson time (HoldBlocksCsvImport)
@@ -17,6 +18,7 @@ require_once __DIR__ . '/../../lib/TeacherCsvImport.php';
 require_once __DIR__ . '/../../lib/PeopleCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationDatesCsvImport.php';
+require_once __DIR__ . '/../../lib/LocationWeekdaysCsvImport.php';
 require_once __DIR__ . '/../../lib/LocationTeachersCsvImport.php';
 require_once __DIR__ . '/../../lib/HoldBlocksCsvImport.php';
 require_once __DIR__ . '/../../lib/SemesterReservationsCsvImport.php';
@@ -42,6 +44,12 @@ function import_flows(): array {
             'class' => 'PeopleCsvImport',
             'needs_semester' => false,
             'default_next' => '/admin/students.php',
+        ],
+        'location_weekdays' => [
+            'title' => 'Import Class Days',
+            'class' => 'LocationWeekdaysCsvImport',
+            'needs_semester' => true,
+            'default_next' => '/admin/semesters.php',
         ],
         'location_dates' => [
             'title' => 'Import Location Dates',
@@ -218,10 +226,29 @@ function import_columns_help_html(array $flow): string {
                 . "Devon,Brown,,2029,\"Violin, Viola\",denise.brown@example.org";
             break;
 
+        case 'location_weekdays':
+            $intro = 'One row per weekday each location holds classes on, with that day\'s '
+                . 'standard hours — e.g. Saturdays 9:00 am – 5:00 pm at both sites and Tuesday '
+                . 'evenings at one. The class-dates import (next step) only accepts dates on '
+                . 'these days, rows there with blank times inherit these hours, and the '
+                . 'Semester Schedule draws one grid per day over them. Re-importing updates '
+                . 'hours in place.';
+            $columns = [
+                ['Location Name', 'required', 'must match an active location for this semester'],
+                ['Day', 'required', 'weekday name, e.g. "Saturday" (or 0=Sunday … 6=Saturday)'],
+                ['Start Time', 'required', '9:00 am, 4:30 PM, or 14:30'],
+                ['End Time', 'required', 'same formats; must be after Start Time'],
+            ];
+            $example = "Location Name,Day,Start Time,End Time\n"
+                . "Access Bronx Charter School,Saturday,9:00 am,5:00 pm\n"
+                . "Bronx Community College,Saturday,9:00 am,5:00 pm\n"
+                . "Bronx Community College,Tuesday,3:30 pm,8:00 pm";
+            break;
+
         case 'location_dates':
             $intro = 'One row per class date per location. The location name must match one of '
                 . 'this semester\'s active locations, and each date must fall on a weekday the '
-                . 'location is declared open (the semester\'s Locations page). Inactive rows are '
+                . 'location is declared open (import class days first). Inactive rows are '
                 . 'breaks/holidays: no lessons are generated for them, and the notes text is '
                 . 'shown to families.';
             $columns = [
