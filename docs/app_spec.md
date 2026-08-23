@@ -402,10 +402,9 @@ site base URL used for links inside emails, and the footer phone number.
 
 ### Create a semester
 
-Seven steps: meta info **and fees** → active locations **with their class days
-and hours** → then five CSV imports
-(class dates, location-teachers, hold blocks, the schedule, opening
-charges/payments). Every import is Upload → Map columns → Validate → Commit,
+Eight steps: meta info **and fees** → active locations → then six CSV imports
+(class days, class dates, location-teachers, hold blocks, the schedule,
+opening charges/payments). Every import is Upload → Map columns → Validate → Commit,
 validates row by row with a plain-English description of what each row will do,
 skips bad rows rather than failing, and can be re-run later from Admin >
 Semesters.

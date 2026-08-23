@@ -52,8 +52,8 @@ both sides.
 ## `semester_location_weekdays`
 
 The **declared class days**: which weekdays each location holds classes on
-for a semester, with that day's standard hours — declared alongside the
-locations on wizard step 2, unique on (`semester_id`, `location_id`,
+for a semester, with that day's standard hours — imported by CSV in the
+wizard (step 3), unique on (`semester_id`, `location_id`,
 `day_of_week`) with `start_time`/`end_time`. This is the explicit,
 higher-level statement the rest of the semester hangs off: the class-dates
 import rejects a date on an undeclared weekday (and blank times inherit the

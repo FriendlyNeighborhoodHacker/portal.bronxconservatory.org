@@ -292,7 +292,7 @@ CREATE TABLE semester_locations (
 ) ENGINE=InnoDB;
 
 -- Which weekdays each location holds classes on for a semester, with its
--- standard hours that day (declared on the semester wizard's Locations step).
+-- standard hours that day (imported by CSV in the semester wizard).
 -- The class-date calendar in semester_location_dates is validated against
 -- these days on import, and the schedule grid draws one table per class day
 -- over these hours.
