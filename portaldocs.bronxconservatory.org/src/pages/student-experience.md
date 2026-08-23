@@ -19,7 +19,8 @@ students, who are simply users with a student profile of their own.
 1. **Notes from Your Last Class** — the first thing under the greeting: the
    full note thread from the student's most recent class (today's included),
    with light-green **Notes & Materials** and **"See notes from all
-   classes."** buttons. The latter opens a page listing every past class,
+   classes."** buttons. A **"See all notes"** button also sits at the top
+   right of the page, next to the greeting. The latter opens a page listing every past class,
    newest first, each with its complete note thread — notes are the heart of
    the student experience, so they lead the page.
 2. **Next Lesson / Upcoming Lessons** — when and where, *including breaks*:

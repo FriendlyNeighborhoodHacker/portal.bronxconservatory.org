@@ -33,7 +33,12 @@ foreach (LessonManagement::recentLessonsForStudent((int)$me['id'], date('Y-m-d',
 header_html('My Schedule');
 ?>
 
-<h2><?=h('Hi, ' . ($me['preferred_name'] ?: $me['first_name'])) ?>!</h2>
+<div class="page-head">
+  <h2><?=h('Hi, ' . ($me['preferred_name'] ?: $me['first_name'])) ?>!</h2>
+  <span class="actions">
+    <a class="button notes" href="/student/notes.php">See all notes</a>
+  </span>
+</div>
 
 <?php if ($lastLesson): ?>
 <div class="card">
