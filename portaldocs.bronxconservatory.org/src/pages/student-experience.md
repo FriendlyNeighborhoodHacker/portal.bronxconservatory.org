@@ -19,10 +19,10 @@ students, who are simply users with a student profile of their own.
 1. **Notes from Your Last Class** — the first thing under the greeting: the
    full note thread from the student's most recent class (today's included),
    with light-green **Notes & Materials** and **"See notes from all
-   classes."** buttons. A **"See all notes"** button also sits at the top
-   right of the page, next to the greeting. The latter opens a page listing every past class,
-   newest first, each with its complete note thread — notes are the heart of
-   the student experience, so they lead the page.
+   classes."** buttons. A white **"See all notes"** button also sits at the
+   top right of the page. Both open a page listing every class — upcoming
+   lessons included, latest first — each with its complete note thread;
+   notes are the heart of the student experience, so they lead the page.
 2. **Next Lesson / Upcoming Lessons** — when and where, *including breaks*:
    inactive `semester_location_dates` on the student's weekday surface as
    "Holiday Week" instead of a silent gap. The Next Lesson card carries its

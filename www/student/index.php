@@ -36,7 +36,7 @@ header_html('My Schedule');
 <div class="page-head">
   <h2><?=h('Hi, ' . ($me['preferred_name'] ?: $me['first_name'])) ?>!</h2>
   <span class="actions">
-    <a class="button notes" href="/student/notes.php">See all notes</a>
+    <a class="button" href="/student/notes.php">See all notes</a>
   </span>
 </div>
 
