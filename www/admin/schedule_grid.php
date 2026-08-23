@@ -218,7 +218,7 @@ function reservation_cell_presentation(array $reservation, ?array $balance): arr
         return ['class' => 'res-balance-full', 'label' => 'Balance Due'];
     }
     if ($semesterDebit > 0 && abs($total - intdiv($semesterDebit, 2)) <= 50) {
-        return ['class' => 'res-balance-half', 'label' => 'Balance Due'];
+        return ['class' => 'res-balance-half', 'label' => 'Half balance Due'];
     }
     return ['class' => 'res-balance-custom', 'label' => 'Balance Due'];
 }

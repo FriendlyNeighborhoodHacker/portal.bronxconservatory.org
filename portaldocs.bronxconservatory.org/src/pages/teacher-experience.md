@@ -12,8 +12,10 @@ view**: the teaching day. The teacher menu is
 
 ## The day view
 
-One card per lesson, in chronological order: time, student name, class name,
-room/location (online lessons get an icon). Two design decisions shape it:
+One card per lesson, in chronological order, each headed by the student
+("Student Lucia Ramos"), then the time and location ("10:00 AM at Bronx
+Community College"), then the date ("Aug 29"). Two design decisions shape
+it:
 
 - **Navigation is by teaching day, not by date.** Lessons are sparse — most
   dates have nothing on them — so there is deliberately no date picker. When

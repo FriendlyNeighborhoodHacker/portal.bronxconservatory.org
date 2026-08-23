@@ -88,19 +88,19 @@ header_html($title);
     $struck = $cancelled || $missed;
   ?>
   <div class="card" style="margin-bottom:12px;">
-    <div class="lesson-row" style="border-bottom:0;">
-      <span class="lesson-row-time<?=$struck ? ' lesson-cancelled' : ''?>">
-        <?=h(date('g:i A', strtotime($lesson['start_datetime'])))?>
-      </span>
-      <span class="<?=$struck ? 'lesson-cancelled' : ''?>">
-        <strong><a href="/teacher/lesson.php?id=<?=$lessonId?>"><?=h(trim(($lesson['student_preferred_name'] ?: $lesson['student_first_name']) . ' ' . $lesson['student_last_name']))?></a></strong>
-        <span class="small">Lesson #<?=(int)$lesson['lesson_number']?></span>
-      </span>
-      <span><?=h($lesson['location_name'])?></span>
+    <div class="<?=$struck ? 'lesson-cancelled' : ''?>" style="font-size:16px;">
+      Student <strong><a href="/teacher/lesson.php?id=<?=$lessonId?>"><?=h(trim(($lesson['student_preferred_name'] ?: $lesson['student_first_name']) . ' ' . $lesson['student_last_name']))?></a></strong>
+      <span class="small">Lesson #<?=(int)$lesson['lesson_number']?></span>
       <?php if ($cancelled): ?><span class="badge">Cancelled</span><?php endif; ?>
       <?php if (!empty($lesson['substitute_teacher_user_id'])): ?>
         <span class="small">covered by <?=h(trim(($lesson['substitute_first_name'] ?? '') . ' ' . ($lesson['substitute_last_name'] ?? '')))?></span>
       <?php endif; ?>
+    </div>
+    <div class="<?=$struck ? 'lesson-cancelled' : ''?>" style="margin-top:2px;">
+      <?=h(date('g:i A', strtotime($lesson['start_datetime'])))?> at <?=h($lesson['location_name'])?>
+    </div>
+    <div class="small" style="color:var(--color-text-muted);margin-top:2px;">
+      <?=h(date('M j', strtotime($lesson['start_datetime'])))?>
     </div>
 
     <div id="attendance-<?=$lessonId?>-solo">
