@@ -182,8 +182,7 @@ header_html('Billing');
   <?php if (!$entries): ?>
     <p class="small">No charges or payments yet.</p>
   <?php else: ?>
-    <details>
-      <summary>Every charge and payment</summary>
+    <h4 style="margin-bottom:4px;">Every charge and payment</h4>
       <table class="list">
         <thead><tr><th>Date</th><th>Description</th>
           <th style="text-align:right;">Charge</th><th style="text-align:right;">Payment / Credit</th></tr></thead>
@@ -202,7 +201,6 @@ header_html('Billing');
           <?php endforeach; ?>
         </tbody>
       </table>
-    </details>
   <?php endif; ?>
 </div>
 
