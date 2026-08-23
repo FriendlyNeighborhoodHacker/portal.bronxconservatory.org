@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocsLayout.astro
 title: Create a Semester
-description: The setup wizard, the five CSV imports, and pre-populating from a previous semester.
+description: The setup wizard, the six CSV imports, and pre-populating from a previous semester.
 ---
 
 # Create a Semester
@@ -47,30 +47,33 @@ warning that changing the date range does **not** add or remove lessons
 (lessons come from the imported class dates), and a count of class dates
 that would fall outside the new range.
 
-## Step 2 — active locations and their class days
+## Step 2 — active locations
 
 Checkbox list of which locations are in use this semester (a new semester
-pre-checks everything), and — per location — **which days of the week it
-holds classes, with that day's standard hours** (e.g. Bronx Community College:
-Saturday 9:00 am–5:00 pm and Tuesday 3:30–8:00 pm). Every selected location
-needs at least one day. The class-dates import (step 3) rejects dates that
-fall on undeclared days, and rows with blank times inherit these hours.
-Re-opening this page prefills what is already declared (or, for a location
-predating declarations, the days its imported dates imply), so re-saving
-never silently drops a day. Saving builds the import chain and sends the
-admin into it. Removing a location later does not clean up its dates, teacher
+pre-checks everything). Saving builds the import chain and sends the admin
+into it. Removing a location later does not clean up its dates, teacher
 assignments, or reservations — prune those yourself.
 
-## Steps 3–7 — the CSV imports
+## Steps 3–8 — the CSV imports
 
-All five use the same four-stage pipeline: **Upload** (file or pasted text,
+All six use the same four-stage pipeline: **Upload** (file or pasted text,
 comma or tab) → **Mapping** (each CSV column mapped to a field; close names
 are auto-matched, so different headers are fine) → **Validation** (every row
 shown as Valid or Error with a message; error rows are simply skipped) →
 **Commit** ("3 created, 1 updated, 2 skipped"). Re-importing is safe by
 design: rows that already exist are updated or skipped, never duplicated.
 
-### Step 3 — Class dates (`location_dates`)
+### Step 3 — Class days (`location_weekdays`)
+
+`Location Name`, `Day`, `Start Time`, `End Time` — one row per weekday each
+location holds classes on, with that day's standard hours (e.g. Bronx
+Community College: Saturday 9:00 am–5:00 pm and Tuesday 3:30–8:00 pm). This
+is the explicit declaration the rest of the semester hangs off: the
+class-dates import rejects dates on undeclared days, rows there with blank
+times inherit these hours, and the Semester Schedule draws one grid per
+declared day over them. Re-importing updates hours in place.
+
+### Step 4 — Class dates (`location_dates`)
 
 One row per class date per location: `Location Name`, `Date`, `Start Time`,
 `End Time`, `Status` (active/inactive, blank = active), `Notes` ("Day 1",
@@ -85,7 +88,7 @@ Committing also **re-syncs existing lessons and hold blocks** at each
 touched location — confirmed reservations drop future lessons on
 dates that are no longer active and generate any newly active ones.
 
-### Step 4 — Location teachers (`location_teachers`)
+### Step 5 — Location teachers (`location_teachers`)
 
 `Teacher Name`, `Location Name`, `Day` (optional) — which teachers teach
 where, and on which day of the week. These become the **columns of the
@@ -95,7 +98,7 @@ scheduled for a teacher at a location on a day without one. A blank `Day`
 assigns the teacher to every weekday the location holds classes on. The
 import is purely additive (existing assignments are skipped, never removed).
 
-### Step 5 — Hold blocks (`hold_blocks`)
+### Step 6 — Hold blocks (`hold_blocks`)
 
 `Teacher Name`, `Location Name`, `Day`, `Start Time`, `End Time`, `Title`
 ("Lunch") — a teacher's standing non-lesson time. Each row holds that slot
@@ -104,7 +107,7 @@ the teacher must already have a column at that location; and every row is
 conflict-checked three ways — against earlier rows in the same file, against
 existing weekly bookings, and against every future materialized date.
 
-### Step 6 — The schedule itself (`reservations`)
+### Step 7 — The schedule itself (`reservations`)
 
 One row per weekly lesson slot — how an existing schedule moves into the
 portal: `Student Name` (or email), `Teacher Name`, `Location Name`, `Day`,
@@ -121,7 +124,7 @@ pending confirmation / confirmed).
 - A row whose slot is already reserved *for the same student* is "Already
   reserved (no change)".
 
-### Step 7 — Opening charges and payments (`ledger_entries`)
+### Step 8 — Opening charges and payments (`ledger_entries`)
 
 One row per charge families already ran up and per payment they already
 made, on the dates they happened: `Student Name`, `Entry Type`
