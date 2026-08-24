@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="240" height="2400" viewBox="0 0 240 2400">
-  <!-- Right-margin strip of pastel instrument line art for the family-facing
+  <!-- Right-margin strip of faint grey instrument line art for the family-facing
        pages: the same band as instruments-left.svg in a different order and
        different colors, so the two page edges don't mirror each other. The
        last ~230px stay empty for the same wrap-around reason. -->
@@ -61,19 +61,19 @@
   </defs>
 
   <g stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <g stroke="#c5d7f2" stroke-width="2.1" transform="translate(120,170) rotate(-8) scale(1.15)">
+    <g stroke="#e2e5eb" stroke-width="2.1" transform="translate(120,170) rotate(-8) scale(1.15)">
       <use href="#fiddle"/>
       <path d="M 0,134 L 0,156"/>
     </g>
-    <g fill="#f0dfae" stroke="#f0dfae" transform="translate(170,420) rotate(12) scale(0.9)"><use href="#note1"/></g>
-    <use href="#guitar" stroke="#f0cede" transform="translate(125,560) rotate(16) scale(1.05)"/>
-    <g stroke="#dde1e8" fill="#dde1e8" stroke-width="2.3" transform="translate(60,745) rotate(5)"><use href="#keys"/></g>
-    <g fill="#c5d7f2" stroke="#c5d7f2" transform="translate(60,880) rotate(-10)"><use href="#notes2"/></g>
-    <use href="#fiddle" stroke="#c8e3d2" transform="translate(130,1030) rotate(15) scale(0.9)"/>
-    <use href="#mic" stroke="#d8cdf0" stroke-width="2.2" transform="translate(70,1250) rotate(-24) scale(1.1)"/>
-    <g stroke="#f2cfbd" fill="#f2cfbd" transform="translate(120,1420) rotate(-9) scale(1.05)"><use href="#grand"/></g>
-    <g fill="#f0cede" stroke="#f0cede" transform="translate(180,1580) rotate(10) scale(0.9)"><use href="#note1"/></g>
-    <use href="#bass" stroke="#c5d7f2" stroke-width="2" transform="translate(115,1760) rotate(7) scale(1.3)"/>
-    <use href="#mic" stroke="#c8e3d2" stroke-width="2.4" transform="translate(175,2090) rotate(28) scale(0.9)"/>
+    <g fill="#e2e5eb" stroke="#e2e5eb" transform="translate(170,420) rotate(12) scale(0.9)"><use href="#note1"/></g>
+    <use href="#guitar" stroke="#e2e5eb" transform="translate(125,560) rotate(16) scale(1.05)"/>
+    <g stroke="#e2e5eb" fill="#e2e5eb" stroke-width="2.3" transform="translate(60,745) rotate(5)"><use href="#keys"/></g>
+    <g fill="#e2e5eb" stroke="#e2e5eb" transform="translate(60,880) rotate(-10)"><use href="#notes2"/></g>
+    <use href="#fiddle" stroke="#e2e5eb" transform="translate(130,1030) rotate(15) scale(0.9)"/>
+    <use href="#mic" stroke="#e2e5eb" stroke-width="2.2" transform="translate(70,1250) rotate(-24) scale(1.1)"/>
+    <g stroke="#e2e5eb" fill="#e2e5eb" transform="translate(120,1420) rotate(-9) scale(1.05)"><use href="#grand"/></g>
+    <g fill="#e2e5eb" stroke="#e2e5eb" transform="translate(180,1580) rotate(10) scale(0.9)"><use href="#note1"/></g>
+    <use href="#bass" stroke="#e2e5eb" stroke-width="2" transform="translate(115,1760) rotate(7) scale(1.3)"/>
+    <use href="#mic" stroke="#e2e5eb" stroke-width="2.4" transform="translate(175,2090) rotate(28) scale(0.9)"/>
   </g>
 </svg>
