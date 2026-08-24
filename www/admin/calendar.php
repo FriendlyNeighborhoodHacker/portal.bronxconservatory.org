@@ -1,8 +1,8 @@
 <?php
-// Admin Calendar — semester-wide view: every class date in the semester as
-// one chronological list. A month grid wastes most of its space on a
-// semester that only meets one day a week, so this lists the dates
-// themselves: active days in green, breaks and holidays in purple.
+// Admin Calendar — semester-wide view, two renderings of the same dates:
+// month grids (default) showing every month of the semester at once, and a
+// chronological list (?view=list). Either way: active days in green, breaks
+// and holidays in purple, each date linking to that week's lessons.
 // Locations sharing a date, status and title are listed together.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/SemesterManagement.php';
@@ -20,7 +20,7 @@ $entries = SemesterManagement::locationDatesGroupedForSemester($semesterId);
 $activeCount = count(array_filter($entries, fn(array $e) => $e['status'] === 'active'));
 $inactiveCount = count($entries) - $activeCount;
 
-$view = ($_GET['view'] ?? 'list') === 'month' ? 'month' : 'list';
+$view = ($_GET['view'] ?? 'month') === 'list' ? 'list' : 'month';
 
 /** "9:00 am–5:00 pm" */
 $timeRange = function (string $start, string $end): string {
@@ -33,8 +33,8 @@ header_html('Calendar');
 <div class="page-head">
   <h2>Calendar — <?=h(SemesterManagement::label($semester))?></h2>
   <span class="actions view-toggle">
-    <a class="button<?=$view === 'list' ? ' active' : ''?>" href="/admin/calendar.php">List</a>
-    <a class="button<?=$view === 'month' ? ' active' : ''?>" href="/admin/calendar.php?view=month">Month</a>
+    <a class="button<?=$view === 'month' ? ' active' : ''?>" href="/admin/calendar.php">Month</a>
+    <a class="button<?=$view === 'list' ? ' active' : ''?>" href="/admin/calendar.php?view=list">List</a>
   </span>
 </div>
 
