@@ -117,7 +117,11 @@ if ($action === 'send_reset') {
 $first_name = trim($_POST['first_name'] ?? '');
 $last_name = trim($_POST['last_name'] ?? '');
 $email = trim($_POST['email'] ?? '');
-$canGrantAdmin = $canEditAdmin && $hasLogin; // no-login users cannot be admins
+// Admin (and developer) can be granted to anyone who can sign in — now, or
+// once they activate the account their email invitation leads to. Judged on
+// the posted email so clearing the email in the same save doesn't leave an
+// admin nobody can sign in as.
+$canGrantAdmin = $canEditAdmin && ($hasLogin || $email !== '');
 $is_admin = $canGrantAdmin && !empty($_POST['is_admin']) ? 1 : ($canGrantAdmin ? 0 : (int)$user['is_admin']);
 // Only developers may grant or revoke the developer flag on others, and
 // nobody may drop their own (that would lock them out of Maintenance).

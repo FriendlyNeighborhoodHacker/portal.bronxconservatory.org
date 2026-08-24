@@ -138,13 +138,13 @@ if (isset($_GET['deleted'])) { $msg = 'Photo removed.'; }
           <small class="small">Optional for people without a login. Add an email to enable account activation.</small>
         <?php endif; ?>
       </label>
-      <?php if ($canEditAdmin && $hasLogin): ?>
+      <?php if ($canEditAdmin && ($hasLogin || $hasEmail)): ?>
         <div class="stack">
           <label class="inline">
             <input type="checkbox" name="is_admin" value="1" <?= !empty($form['is_admin']) ? 'checked' : '' ?>>
             Admin user
           </label>
-          <span class="small">Access to the admin side of the portal.</span>
+          <span class="small">Access to the admin side of the portal.<?= $hasLogin ? '' : ' Takes effect once they activate their account.' ?></span>
           <?php if (is_developer()): ?>
             <label class="inline">
               <input type="checkbox" name="is_developer" value="1" <?= !empty($form['is_developer']) ? 'checked' : '' ?>>
@@ -155,9 +155,9 @@ if (isset($_GET['deleted'])) { $msg = 'Photo removed.'; }
             <span class="small">Developer: <?= !empty($user['is_developer']) ? 'Yes' : 'No' ?> (only developers can change this)</span>
           <?php endif; ?>
         </div>
-      <?php elseif (!$hasLogin): ?>
+      <?php elseif (!$hasLogin && !$hasEmail): ?>
         <div class="small" style="color:var(--color-text-muted);">
-          Admin status: No (people without a login cannot be admins)
+          Admin status: No (add an email first — people who cannot sign in cannot be admins)
         </div>
       <?php else: ?>
         <div class="small" style="color:var(--color-text-muted);">
