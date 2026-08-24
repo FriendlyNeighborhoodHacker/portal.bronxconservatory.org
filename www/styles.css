@@ -1059,14 +1059,12 @@ body.auth .brand-logo {
 }
 
 /* A parent's phone and email on the admin student page: the reason the page
-   is opened, so they read at a glance and tap to call or write. */
+   is opened, so they read at a glance and copy cleanly (plain text, not
+   tel:/mailto: links). */
 .contact-big {
   font-size: 1.2rem;
   font-weight: 600;
   margin-top: 2px;
-}
-.contact-big a {
-  text-decoration: none;
 }
 .contact-big .contact-sep {
   color: var(--color-text-muted);

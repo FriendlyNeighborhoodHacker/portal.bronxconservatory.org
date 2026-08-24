@@ -81,13 +81,9 @@ header_html($name);
         <?php if ($parent['role']): ?><span class="small">(<?=h($parent['role'])?>)</span><?php endif; ?>
         <div class="contact-big">
           <?php $phone = trim((string)($parent['cell_phone'] ?? '')); $email = trim((string)($parent['email'] ?? '')); ?>
-          <?php if ($phone !== ''): ?>
-            <a href="tel:<?=h(preg_replace('/[^0-9+]/', '', $phone))?>"><?=h($phone)?></a>
-          <?php endif; ?>
+          <?php if ($phone !== ''): ?><span><?=h($phone)?></span><?php endif; ?>
           <?php if ($phone !== '' && $email !== ''): ?><span class="contact-sep">·</span><?php endif; ?>
-          <?php if ($email !== ''): ?>
-            <a href="mailto:<?=h($email)?>"><?=h($email)?></a>
-          <?php endif; ?>
+          <?php if ($email !== ''): ?><span><?=h($email)?></span><?php endif; ?>
           <?php if ($phone === '' && $email === ''): ?><span class="small">No contact info recorded.</span><?php endif; ?>
         </div>
       </span>
