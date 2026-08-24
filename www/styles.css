@@ -75,23 +75,27 @@ body {
   flex-direction: column;
 }
 
-/* Family-facing pages (parent & student): pastel instrument line art in the
-   page margins. The image is a narrow vertical strip anchored to each edge
-   of the viewport — beside the content column, not behind it — with the
-   right copy offset so the two sides don't mirror each other. Cards and
-   modals are solid surfaces, so whatever the column does cover stays
-   texture, never content. */
+/* Family-facing pages (parent & student): pastel instrument line art around
+   the content — a strip down each margin plus a band across the top, so the
+   drawings frame the page instead of hiding behind the centered cards. The
+   side strips repeat down the page; each ends in deliberate empty space, and
+   the 200px offset wraps that emptiness to the very top so the corners stay
+   clear of the band. Cards and modals are solid surfaces, so anything the
+   column does cover stays texture, never content. */
 body.instrument-bg {
-  background-image: url('/images/instruments-bg.svg'), url('/images/instruments-bg.svg');
-  background-repeat: repeat-y, repeat-y;
-  background-position: left top, right -840px;
-  background-size: 240px 2500px, 240px 2500px;
+  background-image:
+    url('/images/instruments-left.svg'),
+    url('/images/instruments-right.svg'),
+    url('/images/instruments-top.svg');
+  background-repeat: repeat-y, repeat-y, no-repeat;
+  background-position: left 200px, right 200px, center 66px;
+  background-size: 240px 2400px, 240px 2400px, 1400px 190px;
 }
 
 @media (max-width: 700px) {
   body.instrument-bg {
-    background-size: 130px 1354px, 130px 1354px;
-    background-position: left top, right -460px;
+    background-size: 130px 1300px, 130px 1300px, 760px 103px;
+    background-position: left 130px, right 130px, center 62px;
   }
 }
 

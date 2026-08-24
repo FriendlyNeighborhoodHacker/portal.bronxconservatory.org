@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="2400" viewBox="0 0 240 2400">
+  <!-- Right-margin strip of pastel instrument line art for the family-facing
+       pages: the same band as instruments-left.svg in a different order and
+       different colors, so the two page edges don't mirror each other. The
+       last ~230px stay empty for the same wrap-around reason. -->
+  <defs>
+    <g id="fiddle" fill="none">
+      <path d="M 0,2 C 20,0 34,10 33,24 C 32,38 20,44 19,57 C 18,70 30,76 36,88 C 42,100 44,124 0,134 C -44,124 -42,100 -36,88 C -30,76 -18,70 -19,57 C -20,44 -32,38 -33,24 C -34,10 -20,0 0,2 Z"/>
+      <path d="M -4,2 L -4,-38 M 4,2 L 4,-38"/>
+      <path d="M -4,-38 C -7,-48 -4,-54 0,-56 C 6,-59 10,-53 6,-49 C 3,-46 0,-49 2,-52"/>
+      <path d="M 11,62 C 15,70 7,80 11,90 M -11,62 C -15,70 -7,80 -11,90"/>
+    </g>
+    <g id="guitar" fill="none">
+      <path d="M 0,0 C 18,0 28,10 28,24 C 28,36 21,40 21,48 C 21,58 34,64 34,80 C 34,98 18,106 0,106 C -18,106 -34,98 -34,80 C -34,64 -21,58 -21,48 C -21,40 -28,36 -28,24 C -28,10 -18,0 0,0 Z"/>
+      <circle cx="0" cy="52" r="11"/>
+      <path d="M -11,84 L 11,84"/>
+      <path d="M -3.5,0 L -3.5,-48 M 3.5,0 L 3.5,-48"/>
+      <path d="M -3.5,-48 L -6,-50 L -6,-68 L 6,-68 L 6,-50 L 3.5,-48"/>
+    </g>
+    <g id="mic" fill="none">
+      <circle cx="0" cy="0" r="16"/>
+      <path d="M -15.2,-5 L 15.2,-5 M -15.2,5 L 15.2,5"/>
+      <path d="M -11.6,11 L 11.6,11"/>
+      <path d="M -10.5,12 L -6,54 C -6,60 6,60 6,54 L 10.5,12"/>
+    </g>
+    <g id="notes2">
+      <ellipse cx="0" cy="34" rx="7" ry="5.5" transform="rotate(-18 0 34)"/>
+      <ellipse cx="34" cy="28" rx="7" ry="5.5" transform="rotate(-18 34 28)"/>
+      <path fill="none" d="M 6.5,32 L 6.5,-4 M 40.5,26 L 40.5,-10"/>
+      <path fill="none" d="M 6.5,-4 L 40.5,-10 M 6.5,4 L 40.5,-2"/>
+    </g>
+    <g id="note1">
+      <ellipse cx="0" cy="30" rx="7" ry="5.5" transform="rotate(-18 0 30)"/>
+      <path fill="none" d="M 6.5,28 L 6.5,-10 C 16,-6 18,4 13,12"/>
+    </g>
+    <g id="keys">
+      <rect fill="none" x="0" y="0" width="120" height="36" rx="3"/>
+      <path fill="none" d="M 12,0 L 12,36 M 24,0 L 24,36 M 36,0 L 36,36 M 48,0 L 48,36 M 60,0 L 60,36 M 72,0 L 72,36 M 84,0 L 84,36 M 96,0 L 96,36 M 108,0 L 108,36"/>
+      <g stroke="none">
+        <rect x="8.5" y="0" width="7" height="21"/>
+        <rect x="20.5" y="0" width="7" height="21"/>
+        <rect x="44.5" y="0" width="7" height="21"/>
+        <rect x="56.5" y="0" width="7" height="21"/>
+        <rect x="68.5" y="0" width="7" height="21"/>
+        <rect x="92.5" y="0" width="7" height="21"/>
+        <rect x="104.5" y="0" width="7" height="21"/>
+      </g>
+    </g>
+    <g id="grand">
+      <path fill="none" d="M -48,55 L 48,55 L 48,30 C 48,12 40,2 28,-4 C 40,-14 44,-32 34,-46 C 24,-60 0,-64 -16,-56 C -36,-46 -48,-28 -48,-8 Z"/>
+      <path fill="none" d="M -48,44 L 48,44"/>
+      <path fill="none" d="M -40,44 L -40,55 M -32,44 L -32,55 M -24,44 L -24,55 M -16,44 L -16,55 M -8,44 L -8,55 M 0,44 L 0,55 M 8,44 L 8,55 M 16,44 L 16,55 M 24,44 L 24,55 M 32,44 L 32,55 M 40,44 L 40,55"/>
+    </g>
+    <g id="bass" fill="none">
+      <path d="M 0,4 C 14,2 24,12 25,28 C 26,44 20,50 19,62 C 18,76 32,82 38,96 C 46,112 44,138 0,148 C -44,138 -46,112 -38,96 C -32,82 -18,76 -19,62 C -20,50 -26,44 -25,28 C -24,12 -14,2 0,4 Z"/>
+      <path d="M -4,4 L -4,-52 M 4,4 L 4,-52"/>
+      <path d="M -4,-52 C -7,-62 -3,-68 1,-70 C 7,-72 10,-66 6,-62 C 3,-59 0,-62 2,-65"/>
+      <path d="M 11,70 C 15,78 7,88 11,98 M -11,70 C -15,78 -7,88 -11,98"/>
+      <path d="M 0,148 L 0,164"/>
+    </g>
+  </defs>
+
+  <g stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <g stroke="#c5d7f2" stroke-width="2.1" transform="translate(120,170) rotate(-8) scale(1.15)">
+      <use href="#fiddle"/>
+      <path d="M 0,134 L 0,156"/>
+    </g>
+    <g fill="#f0dfae" stroke="#f0dfae" transform="translate(170,420) rotate(12) scale(0.9)"><use href="#note1"/></g>
+    <use href="#guitar" stroke="#f0cede" transform="translate(125,560) rotate(16) scale(1.05)"/>
+    <g stroke="#dde1e8" fill="#dde1e8" stroke-width="2.3" transform="translate(60,745) rotate(5)"><use href="#keys"/></g>
+    <g fill="#c5d7f2" stroke="#c5d7f2" transform="translate(60,880) rotate(-10)"><use href="#notes2"/></g>
+    <use href="#fiddle" stroke="#c8e3d2" transform="translate(130,1030) rotate(15) scale(0.9)"/>
+    <use href="#mic" stroke="#d8cdf0" stroke-width="2.2" transform="translate(70,1250) rotate(-24) scale(1.1)"/>
+    <g stroke="#f2cfbd" fill="#f2cfbd" transform="translate(120,1420) rotate(-9) scale(1.05)"><use href="#grand"/></g>
+    <g fill="#f0cede" stroke="#f0cede" transform="translate(180,1580) rotate(10) scale(0.9)"><use href="#note1"/></g>
+    <use href="#bass" stroke="#c5d7f2" stroke-width="2" transform="translate(115,1760) rotate(7) scale(1.3)"/>
+    <use href="#mic" stroke="#c8e3d2" stroke-width="2.4" transform="translate(175,2090) rotate(28) scale(0.9)"/>
+  </g>
+</svg>
