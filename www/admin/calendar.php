@@ -63,6 +63,17 @@ $byDate = [];
 foreach ($entries as $entry) {
     $byDate[$entry['date']][] = $entry;
 }
+
+/** "Bronx Community College" -> "BCC" */
+$abbrev = function (string $name): string {
+    $letters = '';
+    foreach (preg_split('/\s+/', trim($name)) ?: [] as $word) {
+        if ($word !== '') {
+            $letters .= mb_strtoupper(mb_substr($word, 0, 1));
+        }
+    }
+    return $letters;
+};
 $dates = array_keys($byDate);
 $cursor = strtotime(date('Y-m-01', strtotime(min($dates))));
 $lastMonth = strtotime(date('Y-m-01', strtotime(max($dates))));
@@ -84,6 +95,8 @@ $lastMonth = strtotime(date('Y-m-01', strtotime(max($dates))));
         if ($dayEntries):
             $anyActive = (bool)array_filter($dayEntries, fn(array $e) => $e['status'] === 'active');
             $tipParts = [];
+            $titles = [];
+            $locationInitials = [];
             foreach ($dayEntries as $e) {
                 $tip = $e['title'] !== '' ? $e['title'] : ($e['status'] === 'active' ? 'Class day' : 'Break');
                 $locations = implode(', ', array_column($e['locations'], 'name'));
@@ -91,11 +104,30 @@ $lastMonth = strtotime(date('Y-m-01', strtotime(max($dates))));
                     $tip .= ' — ' . $locations;
                 }
                 $tipParts[] = $tip;
+                if ($e['title'] !== '' && !in_array($e['title'], $titles, true)) {
+                    $titles[] = $e['title'];
+                }
+                if ($e['status'] === 'active') {
+                    foreach ($e['locations'] as $location) {
+                        $initials = $abbrev($location['name']);
+                        if ($initials !== '' && !in_array($initials, $locationInitials, true)) {
+                            $locationInitials[] = $initials;
+                        }
+                    }
+                }
             }
       ?>
         <a class="cal-day <?=$anyActive ? 'cal-day-active' : 'cal-day-inactive'?>"
            href="/admin/calendar_week.php?date=<?=h($date)?>"
-           title="<?=h(implode('; ', $tipParts))?>"><?=$day?></a>
+           title="<?=h(implode('; ', $tipParts))?>">
+          <span class="cal-day-num"><?=$day?></span>
+          <?php if ($titles): ?>
+            <span class="cal-day-title"><?=h(implode(' / ', $titles))?></span>
+          <?php endif; ?>
+          <?php if ($locationInitials): ?>
+            <span class="cal-day-locs"><?=h(implode(', ', $locationInitials))?></span>
+          <?php endif; ?>
+        </a>
       <?php else: ?>
         <span class="cal-day"><?=$day?></span>
       <?php endif; endfor; ?>
