@@ -106,6 +106,30 @@ a:hover {
   border-radius: 4px;
 }
 
+/* ===== Impersonation bar (dev-only "login as") ===== */
+
+.impersonation-bar {
+  background: #C2410C;
+  color: #fff;
+  text-align: center;
+  font-size: 13px;
+  padding: 4px 12px;
+}
+
+.impersonation-bar form {
+  display: inline;
+}
+
+.impersonation-return {
+  background: none;
+  border: none;
+  color: #fff;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
 /* ===== Top bar ===== */
 
 .topbar {

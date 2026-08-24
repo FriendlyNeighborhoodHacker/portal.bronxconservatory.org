@@ -277,6 +277,18 @@ class ApplicationUI {
         echo self::cssLink('/styles.css');
         echo '</head><body' . ($bodyClasses ? ' class="' . h(implode(' ', $bodyClasses)) . '"' : '') . '>';
 
+        // Dev-only "login as" bar. Rendered before the topbar in both the
+        // logged-in and logged-out shells so the escape hatch is always visible.
+        if (impersonator_id()) {
+            $effectiveName = $u ? trim($u['first_name'] . ' ' . $u['last_name']) : 'unknown user';
+            echo '<div class="impersonation-bar">'
+               . '<form method="post" action="/impersonate_return_eval.php">'
+               . '<input type="hidden" name="csrf" value="' . h(csrf_token()) . '">'
+               . 'Viewing as ' . h($effectiveName) . ' — '
+               . '<button type="submit" class="impersonation-return">Return to ' . h(impersonator_name()) . '</button>'
+               . '</form></div>';
+        }
+
         if ($u) {
             $navItems = self::topNavItems($u);
             $subnavGroups = self::subnavGroups($u);

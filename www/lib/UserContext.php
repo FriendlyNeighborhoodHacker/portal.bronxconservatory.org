@@ -5,13 +5,15 @@ class UserContext {
   public int $id;
   public bool $admin;
   public bool $super; // logged in via the super password (testing backdoor)
+  public ?int $impersonatorId; // real user id when a developer is using "login as"
 
   private static ?UserContext $ctx = null;
 
-  public function __construct(int $id, bool $admin, bool $super = false) {
+  public function __construct(int $id, bool $admin, bool $super = false, ?int $impersonatorId = null) {
     $this->id = $id;
     $this->admin = $admin;
     $this->super = $super;
+    $this->impersonatorId = $impersonatorId;
   }
 
   // Store the context for this request
@@ -36,7 +38,8 @@ class UserContext {
       $uid = (int)$_SESSION['uid'];
       $isAdmin = !empty($_SESSION['is_admin']);
       $isSuper = !empty($_SESSION['is_super']);
-      self::$ctx = new UserContext($uid, $isAdmin, $isSuper);
+      $impersonatorId = !empty($_SESSION['impersonator_uid']) ? (int)$_SESSION['impersonator_uid'] : null;
+      self::$ctx = new UserContext($uid, $isAdmin, $isSuper, $impersonatorId);
     }
   }
 }

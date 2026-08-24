@@ -26,6 +26,12 @@ final class ActivityLog {
 
     $userId = $ctx ? (int)$ctx->id : null;
 
+    // When the actor is a developer using "login as", attribute the action to
+    // the impersonated user but record who was really behind the keyboard.
+    if ($ctx && $ctx->impersonatorId !== null && !isset($metadata['impersonator_user_id'])) {
+      $metadata['impersonator_user_id'] = (int)$ctx->impersonatorId;
+    }
+
     // Store in DB
     try {
       $st = self::pdo()->prepare(

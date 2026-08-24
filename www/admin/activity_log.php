@@ -165,6 +165,11 @@ header_html('Activity Log');
                 } else {
                   echo 'System';
                 }
+                $impId = (int)($r['metadata']['impersonator_user_id'] ?? 0);
+                if ($impId > 0 && $impId !== $uid) {
+                  $impLabel = $userMap[$impId] ?? ('User #'.$impId);
+                  echo ' <span class="muted small">(via login-as by ' . h($impLabel) . ')</span>';
+                }
               ?>
             </td>
             <td class="small"><?= h($r['action_type'] ?? '') ?></td>

@@ -198,3 +198,49 @@ function require_developer(): void {
         die('Developer access required');
     }
 }
+
+// Dev-only impersonation ("login as user"). When impersonator_uid is present in
+// the session, the normal login keys (uid, is_admin) describe the impersonated
+// user and impersonator_uid holds the real developer's id.
+function impersonator_id(): ?int {
+    return !empty($_SESSION['impersonator_uid']) ? (int)$_SESSION['impersonator_uid'] : null;
+}
+
+function impersonator_name(): string {
+    return (string)($_SESSION['impersonator_name'] ?? '');
+}
+
+// End impersonation and restore the stored impersonator's login. Returns true
+// on success; on failure (impersonator deleted or no longer an admin developer)
+// the session is destroyed — never restore privileges from stale session data.
+function end_impersonation_and_restore(): bool {
+    require_once __DIR__ . '/lib/UserManagement.php';
+    require_once __DIR__ . '/lib/ActivityLog.php';
+
+    $impId = impersonator_id();
+    if (!$impId) {
+        return false;
+    }
+
+    $imp = UserManagement::findById($impId);
+    $impIsDeveloper = $imp
+        && (!array_key_exists('is_developer', $imp) || !empty($imp['is_developer']));
+    if (!$imp || !empty($imp['is_deleted']) || empty($imp['is_admin']) || !$impIsDeveloper) {
+        $_SESSION = [];
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_destroy();
+        }
+        return false;
+    }
+
+    ActivityLog::log(new UserContext((int)$imp['id'], true), 'user.impersonate_end', [
+        'impersonator_user_id' => (int)$imp['id'],
+        'target_user_id' => (int)($_SESSION['uid'] ?? 0),
+    ]);
+
+    unset($_SESSION['impersonator_uid'], $_SESSION['impersonator_name']);
+    $_SESSION['uid'] = (int)$imp['id'];
+    $_SESSION['is_admin'] = 1;
+    $_SESSION['is_super'] = 0;
+    return true;
+}

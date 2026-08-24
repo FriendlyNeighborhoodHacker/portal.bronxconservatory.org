@@ -7,6 +7,14 @@ require_once __DIR__ . '/lib/UserContext.php';
 // Initialize application
 Application::init();
 
+// Logging out while impersonating means "return to the real user" — a plain
+// session_destroy would drop the impersonation but the developer's
+// remember_token cookie would silently log them back in anyway.
+if (impersonator_id()) {
+    header('Location: ' . (end_impersonation_and_restore() ? '/admin/' : '/login.php'));
+    exit;
+}
+
 // Log logout before clearing session
 $currentUser = current_user();
 if ($currentUser) {

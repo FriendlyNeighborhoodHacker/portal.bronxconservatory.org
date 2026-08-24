@@ -64,6 +64,9 @@ if (isset($_GET['deleted'])) { $msg = 'Photo removed.'; }
       <div class="nav-admin-wrap">
         <button type="button" id="adminActionsToggle" class="button nav-admin-link" aria-expanded="false">Admin Actions</button>
         <div id="adminActionsMenu" class="admin-menu hidden" role="menu" aria-hidden="true">
+          <?php if (is_developer() && empty($user['is_deleted'])): ?>
+            <a href="#" role="menuitem" onclick="document.getElementById('loginAsForm').submit(); return false;">Login as User</a>
+          <?php endif; ?>
           <a href="#" role="menuitem" onclick="if(confirm('Delete this user? This cannot be undone.')) { document.getElementById('deleteForm').submit(); } return false;">Delete User</a>
           <?php if ($hasEmail): ?>
             <?php
@@ -193,6 +196,13 @@ if (isset($_GET['deleted'])) { $msg = 'Photo removed.'; }
   </form>
   
   <?php if ($canEditAdmin): ?>
+    <?php if (is_developer() && empty($user['is_deleted'])): ?>
+      <form id="loginAsForm" method="post" action="/admin/login_as_eval.php" style="display: none;">
+        <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+        <input type="hidden" name="user_id" value="<?= (int)$userId ?>">
+        <input type="hidden" name="return_to" value="<?= h('/admin/user_edit.php?id=' . (int)$userId) ?>">
+      </form>
+    <?php endif; ?>
     <form id="deleteForm" method="post" action="/admin/user_edit_eval.php" style="display: none;">
       <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
       <input type="hidden" name="id" value="<?= (int)$userId ?>">

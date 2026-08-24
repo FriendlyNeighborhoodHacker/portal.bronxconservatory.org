@@ -57,6 +57,14 @@ header_html($name);
     <?=h($name)?><?=$user['is_deleted'] ? ' <span class="badge">Deleted</span>' : ''?>
   </h2>
   <span class="actions">
+    <?php if (is_developer() && empty($user['is_deleted']) && (int)$user['id'] !== (int)current_user()['id']): ?>
+      <form method="post" action="/admin/login_as_eval.php" style="display:inline;">
+        <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+        <input type="hidden" name="user_id" value="<?=$userId?>">
+        <input type="hidden" name="return_to" value="<?=h($returnTo)?>">
+        <button class="button">Login as this user</button>
+      </form>
+    <?php endif; ?>
     <button type="button" class="button" data-modal-open="photoModal">
       <?=$photoUrl !== '' ? 'Edit Profile Photo' : 'Add Photo'?>
     </button>
