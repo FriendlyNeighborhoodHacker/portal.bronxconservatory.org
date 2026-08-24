@@ -1548,6 +1548,70 @@ body.auth .brand-logo {
   background: var(--sem-date-inactive-line);
 }
 
+/* List / Month view toggle on the admin calendar. */
+.view-toggle .button.active {
+  background: var(--color-primary);
+  color: #fff;
+  pointer-events: none;
+}
+
+/* Month view: every month of the semester at once, one mini-grid each. */
+.cal-months {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.cal-month h3 {
+  margin: 0 0 8px;
+  text-align: center;
+  font-size: 15px;
+}
+
+.cal-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal-dow {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.cal-day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+a.cal-day {
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+a.cal-day:hover,
+a.cal-day:focus {
+  filter: brightness(1.15);
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.cal-day-active {
+  background: var(--sem-date-active-line);
+}
+
+.cal-day-inactive {
+  background: var(--sem-date-inactive-line);
+}
+
 /* ===== BCM: semester schedule grid ===== */
 
 /* One stacked section per class day (Saturdays, then Tuesdays). */
