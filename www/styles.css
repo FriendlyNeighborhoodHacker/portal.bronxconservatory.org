@@ -1555,10 +1555,10 @@ body.auth .brand-logo {
   pointer-events: none;
 }
 
-/* Month view: every month of the semester at once, one mini-grid each. */
+/* Month view: every month of the semester at once, one per row. */
 .cal-months {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: 1fr;
   gap: 16px;
   align-items: start;
 }
@@ -1586,7 +1586,8 @@ body.auth .brand-logo {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
+  min-height: 64px;
+  padding: 4px 3px;
   border-radius: 8px;
   font-size: 13px;
   color: var(--color-text-muted);
@@ -1598,13 +1599,10 @@ a.cal-day {
   text-decoration: none;
 }
 
-/* Title ("Week 1") and abbreviated locations inside a day cell — only shown
-   on desktop, where the month grids are large enough to fit them. */
+/* Title ("Week 1") and abbreviated locations inside a day cell. */
 .cal-day-title,
 .cal-day-locs {
-  display: none;
   font-size: 10px;
-  font-weight: 400;
   line-height: 1.25;
   text-align: center;
   max-width: 100%;
@@ -1613,24 +1611,8 @@ a.cal-day {
   white-space: nowrap;
 }
 
-@media (min-width: 900px) {
-  .cal-months {
-    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-  }
-
-  .cal-day {
-    min-height: 64px;
-    padding: 4px 3px;
-  }
-
-  .cal-day-title,
-  .cal-day-locs {
-    display: block;
-  }
-
-  .cal-day-locs {
-    font-weight: 600;
-  }
+.cal-day-title {
+  font-weight: 400;
 }
 
 a.cal-day:hover,
