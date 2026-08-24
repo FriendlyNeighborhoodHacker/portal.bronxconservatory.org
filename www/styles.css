@@ -75,6 +75,20 @@ body {
   flex-direction: column;
 }
 
+/* Family-facing pages (parent & student): faint grey instrument line art
+   behind the page. Cards and modals are solid surfaces on top, so the
+   drawings show only in the margins and gaps — texture, never content. */
+body.instrument-bg {
+  background-image: url('/images/instruments-bg.svg');
+  background-size: 1200px 900px;
+}
+
+@media (max-width: 700px) {
+  body.instrument-bg {
+    background-size: 840px 630px;
+  }
+}
+
 /* Titles and anything asking the user to do something use the display font */
 h1, h2, h3, .page-title {
   font-family: var(--font-display);

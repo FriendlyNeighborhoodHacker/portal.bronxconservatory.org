@@ -271,6 +271,11 @@ class ApplicationUI {
         if (!empty($options['wide'])) {
             $bodyClasses[] = 'page-wide';
         }
+        // Family-facing pages carry the faint instrument line art behind
+        // their cards (body.instrument-bg in styles.css).
+        if (preg_match('#^/(parent|student)/#', (string)($_SERVER['SCRIPT_NAME'] ?? ''))) {
+            $bodyClasses[] = 'instrument-bg';
+        }
 
         echo '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
         echo '<title>' . h($title) . ' - ' . h($siteTitle) . '</title>';
