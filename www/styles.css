@@ -80,12 +80,12 @@ body {
    drawings show only in the margins and gaps — texture, never content. */
 body.instrument-bg {
   background-image: url('/images/instruments-bg.svg');
-  background-size: 1200px 900px;
+  background-size: 1600px 1200px;
 }
 
 @media (max-width: 700px) {
   body.instrument-bg {
-    background-size: 840px 630px;
+    background-size: 1000px 750px;
   }
 }
 
