@@ -75,17 +75,23 @@ body {
   flex-direction: column;
 }
 
-/* Family-facing pages (parent & student): faint grey instrument line art
-   behind the page. Cards and modals are solid surfaces on top, so the
-   drawings show only in the margins and gaps — texture, never content. */
+/* Family-facing pages (parent & student): pastel instrument line art in the
+   page margins. The image is a narrow vertical strip anchored to each edge
+   of the viewport — beside the content column, not behind it — with the
+   right copy offset so the two sides don't mirror each other. Cards and
+   modals are solid surfaces, so whatever the column does cover stays
+   texture, never content. */
 body.instrument-bg {
-  background-image: url('/images/instruments-bg.svg');
-  background-size: 1600px 1200px;
+  background-image: url('/images/instruments-bg.svg'), url('/images/instruments-bg.svg');
+  background-repeat: repeat-y, repeat-y;
+  background-position: left top, right -840px;
+  background-size: 240px 2500px, 240px 2500px;
 }
 
 @media (max-width: 700px) {
   body.instrument-bg {
-    background-size: 1000px 750px;
+    background-size: 130px 1354px, 130px 1354px;
+    background-position: left top, right -460px;
   }
 }
 
