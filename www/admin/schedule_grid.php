@@ -33,14 +33,17 @@ function schedule_row_slots(array $days, array $bounds): array {
 }
 
 /**
- * Render one grid per class day, stacked: Saturdays first, then Tuesday
- * below it. Each day gets its own table because each day has its own
- * columns — a teacher who works Saturdays only has no Tuesday column — and
- * the location header colspans and main.js's column pager both assume a
- * single column spine per table.
+ * Render one grid per class day AND location, stacked: every Saturday
+ * location first, then Tuesday's below. Each day has its own columns — a
+ * teacher who works Saturdays only has no Tuesday column — and splitting
+ * further by location keeps a site with many teachers from widening every
+ * other site's table. Each (day, location) gets its own table because the
+ * location header colspans and main.js's column pager both assume a single
+ * column spine per table; edit-mode drags still cross tables freely (the
+ * handlers are document-delegated).
  *
  * $bands from ScheduleGridData's 'bands'. $keyPrefix namespaces each grid's
- * remembered pager page, so the two tables do not fight over one anchor.
+ * remembered pager page, so the tables do not fight over one anchor.
  */
 function schedule_day_grids_html(array $bands, callable $cellFn, string $keyPrefix, ?callable $labelFn = null): string {
     if (!$bands) {
@@ -51,10 +54,26 @@ function schedule_day_grids_html(array $bands, callable $cellFn, string $keyPref
         $day = (int)$band['day'];
         $rows = schedule_row_slots([$day], [$day => $band['bounds']]);
         $label = $labelFn ? $labelFn($band) : (string)$band['label'];
-        $html .= '<section class="schedule-day">'
-            . '<h3 class="schedule-day-head">' . h($label) . '</h3>'
-            . schedule_grid_html($band['columns'], $rows, $cellFn, $keyPrefix . ':' . $day)
-            . '</section>';
+
+        if (!$band['columns']) {
+            $html .= '<section class="schedule-day">'
+                . '<h3 class="schedule-day-head">' . h($label) . '</h3>'
+                . schedule_grid_html([], $rows, $cellFn, $keyPrefix . ':' . $day)
+                . '</section>';
+            continue;
+        }
+
+        $columnsByLocation = [];
+        foreach ($band['columns'] as $column) {
+            $columnsByLocation[(string)$column['location_id']][] = $column;
+        }
+        foreach ($columnsByLocation as $locationId => $columns) {
+            $html .= '<section class="schedule-day">'
+                . '<h3 class="schedule-day-head">'
+                . h($label . ' — ' . (string)$columns[0]['location_name']) . '</h3>'
+                . schedule_grid_html($columns, $rows, $cellFn, $keyPrefix . ':' . $day . ':' . $locationId)
+                . '</section>';
+        }
     }
     return $html;
 }
