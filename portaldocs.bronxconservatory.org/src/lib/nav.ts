@@ -49,6 +49,7 @@ export const navItems: NavItem[] = [
       { title: 'Create a Semester', slug: 'admin-experience/create-a-semester' },
       { title: 'View the Semester Schedule', slug: 'admin-experience/view-semester-schedule' },
       { title: 'View the Calendar & a Week', slug: 'admin-experience/view-week-schedule' },
+      { title: 'View a Student', slug: 'admin-experience/view-a-student' },
       { title: 'Process Leads & Uncompleted Forms', slug: 'admin-experience/process-leads' },
       { title: 'Convert a Lead to a Family', slug: 'admin-experience/convert-a-lead' },
       { title: 'Accept a Check & Ledger Entries', slug: 'admin-experience/accept-a-check' },

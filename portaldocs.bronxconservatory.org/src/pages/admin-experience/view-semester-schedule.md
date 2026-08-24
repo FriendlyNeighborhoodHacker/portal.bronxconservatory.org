@@ -44,7 +44,14 @@ The colors carry meaning and are locked by the design spec:
 | Confirmed — full semester's charges outstanding | Pastel yellow |
 | Confirmed — about half outstanding (±50¢) | Pastel purple |
 | Confirmed — any other outstanding balance | Dark blue, white text |
-| Hold block | Grey with diagonal hatch |
+| Hold block (unpaid — lunch, errand) | Grey with diagonal hatch |
+| Guitar Ensemble hold block | Pastel green, no hatch |
+| Musicianship Skills hold block | Pastel rose, no hatch |
+
+The two **class** kinds of hold block drop the hatching on purpose — that's
+teaching time, not the teacher's own. Behaviorally all three kinds follow
+the same conflict rules today; the kind drives the color (and is the hook
+for future class attendance and billing).
 
 The balance behind the color is the student's **all-time** balance — a
 family that still owes from last semester shows a balance color here even if
@@ -57,10 +64,12 @@ radar.
   prefilled from the cell; two tabs:
   - **Student Lesson** — pick the student (typeahead), length (30/60/90/120),
     and starting status.
-  - **Hold Block** — a title ("What is this time for?") and a length; the
-    slot is then held on every class date this semester.
+  - **Hold Block** — a title ("What is this time for?"), a **Kind** (Hold —
+    unpaid; Guitar Ensemble — paid class; Musicianship Skills — paid class),
+    and a length; the slot is then held on every class date this semester.
 - **Reservation → the edit modal.** Shows the student's outstanding balance,
-  a link to their record, and two controls — **Length** (see
+  an "Open &lt;student&gt;" link to [their page](/admin-experience/view-a-student),
+  and two controls — **Length** (see
   [Change a Lesson's Duration](/admin-experience/change-lesson-duration))
   and **Status** — plus **Delete reservation** ("Future lessons will be
   removed; past lessons are kept").
@@ -102,8 +111,18 @@ The status change is where the schedule meets the money
 ## Edit mode: drag a weekly slot
 
 Dragging is off by default so reading the schedule can't move someone's
-lesson by a trackpad brush. Press **Edit**, drag a reservation to any empty
-slot — another time, teacher, or location — and press **Done**. The mechanics
-and conflict rules are covered in
+lesson by a trackpad brush. Press **Edit**, drag a reservation **or a hold
+block** to any empty slot — another time, teacher, or location — and press
+**Done**. When a cell holds exactly one booking, the whole cell is the drag
+handle (grabbing the whitespace beside the name works); a double-booked cell
+keeps per-item dragging so you choose which one moves.
+
+**⌘Z (Ctrl+Z) undoes a move** — up to 20 per editing session, surviving the
+reload after each move. An undo is itself a server-validated move back to
+where the item came from, so if the old slot has since been taken the undo
+is refused with the reason. The undo history starts fresh each time you
+press Edit.
+
+The mechanics and conflict rules are covered in
 [Move a Lesson's Time](/admin-experience/move-a-lesson); a refused move
 shows the server's reason and changes nothing.

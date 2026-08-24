@@ -17,9 +17,16 @@ There are two different moves, done on two different screens:
 
 On `/admin/schedule.php`, press **Edit** and drag the reservation's cell onto
 an empty slot — a different time, a different teacher's column, even a
-different location's column. The drop can't land on an occupied cell, and a
+different location's column. When the cell holds a single booking, anywhere
+on the cell starts the drag. The drop can't land on an occupied cell, and a
 client-side check refuses drops that would run past the end of the day or
-into the next booking.
+into the next booking. **Standing hold blocks drag the same way** (they post
+to their own endpoint but follow the same conflict rules); one-off hold
+blocks on the weekly calendar do not.
+
+**⌘Z (Ctrl+Z)** undoes the last move — up to 20 per editing session. The
+undo re-posts the item to where it came from and is validated like any
+other move, so a since-occupied origin refuses the undo with the reason.
 
 The server (`ReservationManagement::updateReservation`) then:
 

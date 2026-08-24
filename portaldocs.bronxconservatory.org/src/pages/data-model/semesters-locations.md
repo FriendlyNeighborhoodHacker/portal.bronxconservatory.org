@@ -40,10 +40,11 @@ so each term can have its own prices):
 | `lesson_fee_60_minutes_nonresident` | Non-residents / online students: 60-minute lessons |
 | `guitar_ensemble_fee_nonresident` | Non-residents / online students: Guitar Ensemble |
 | `recital_fee` | Charged per lesson block |
-| `installment_plan_fee` | One-time fee for paying tuition in two installments |
+| `installment_plan_fee` | One-time fee for paying tuition in two installments — opted into at confirmation, or applied by the daily sweep when a balance goes unpaid |
+| `second_installment_due_date` | Installment plan: when the remaining balance is due (defaults to the term's midpoint on create; `NULL` = legacy half-way-lesson rule) |
 | `lessons_per_semester` | Default 15; used for per-lesson price display on the registration form |
 
-These fee columns are `DECIMAL(8,2)` dollars; they are converted to integer
+The fee columns are `DECIMAL(8,2)` dollars; they are converted to integer
 cents when charges are posted to the ledger.
 
 ## `semester_locations`
@@ -90,3 +91,7 @@ and `sort_order` fixes the column order within a location. A reservation can
 only be placed in a column that exists here, which is why carrying a schedule
 forward to a new semester skips reservations whose teacher no longer teaches
 at that location on that day.
+
+Rows come from the wizard's CSV import (additive), and can also be added or
+removed one at a time from the teacher's edit page (its **Schedule Days**
+card) — removal is refused while anything is still scheduled in that column.

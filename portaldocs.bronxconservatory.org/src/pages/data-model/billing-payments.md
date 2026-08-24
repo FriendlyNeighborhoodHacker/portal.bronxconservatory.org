@@ -23,15 +23,18 @@ Key columns:
   A parent's balance is the sum over their children.
 - **`accounting_type`** ENUM(`debit`,`credit`) — charges are debits; payments,
   scholarships, and downward adjustments are credits.
-- **`entry_type`** ENUM(`registration`, `lessons`, `recital_fee`, `payment`,
-  `scholarship_application`, `other`) — what kind of line this is.
+- **`entry_type`** ENUM(`registration`, `lessons`, `recital_fee`,
+  `installment_plan_fee`, `payment`, `scholarship_application`, `other`) —
+  what kind of line this is.
 - **`amount_cents`** `INT UNSIGNED` — integer cents: exact math, and the same
   unit Stripe uses.
 - **`semester_id`** — ties money to a term. It is what the parent portal
   groups a family's balance by, and what "are they on schedule?" is judged
-  against (half the term's charges before it starts, the rest by its half-way
-  lesson). Only entries that genuinely belong to no term — an old book fee,
-  say — leave it `NULL`. `ON DELETE SET NULL`.
+  against: half the term's charges two weeks before it starts, the rest
+  before the first lesson — or, on the installment plan, by the semester's
+  **second installment due date** (semesters without one fall back to the
+  old half-way-lesson rule). Only entries that genuinely belong to no term —
+  an old book fee, say — leave it `NULL`. `ON DELETE SET NULL`.
 - **`stripe_checkout_session_id`** / **`stripe_payment_intent_id`** — set on
   entries recorded from Stripe.
 - **`created_by_user_id`** — `NULL` for webhook-recorded Stripe payments.
@@ -47,15 +50,33 @@ keys guarantee only one wins:
 - (`stripe_payment_intent_id`, `for_student_user_id`) — for embedded card-form
   payments, where there is a PaymentIntent but no Checkout Session
 
-Charge posting is idempotent too: confirming a reservation posts the
-registration / lessons / recital-fee debits at most once per student +
-semester + entry type (`Billing::postSemesterConfirmationCharges`), and
-un-confirming reverses them (`reverseSemesterConfirmationCharges`).
+Charge posting is idempotent too: confirming a reservation posts its debits
+at most once per student + semester + entry type
+(`Billing::postSemesterConfirmationCharges`), un-confirming reverses them
+(`reverseSemesterConfirmationCharges`), and the daily installment-fee sweep
+never charges a fee that is already live on the term.
+
+### The policy: line-item confirmation first
+
+No admin action charges a family silently. Confirming, un-confirming, or
+deleting a confirmed reservation shows a **charge-review dialog** itemizing
+the debits (or reversal credits) first, and the endpoints refuse the change
+without its acknowledgement; duration changes go through their own
+[review page](/admin-experience/change-lesson-duration).
 
 ### How entries are created
 
-- **Confirming a reservation** posts the semester's registration, lessons, and
-  recital-fee debits, priced from the `semesters` row.
+- **Confirming a reservation** posts the semester's registration, lessons,
+  and recital-fee debits, priced from the `semesters` row. The **installment
+  plan fee** posts only when the admin ticks "include installment fee" in
+  the confirmation dialog.
+- **The daily installment-fee sweep**
+  (`www/bin/apply_installment_fees.php`, run nightly by cron — see
+  `docs/cron.md`): from the second day of a semester on, confirmed students
+  who still owe part of that term's balance and don't already carry the fee
+  are charged it automatically. Idempotent; entries carry a `NULL`
+  `created_by_user_id` like webhook writes. Admins can preview (dry-run) and
+  trigger it from Admin › Maintenance › Installment Fee Sweep.
 - **Online payment** — Stripe (Checkout for registration; Elements on the
   parent Balance & Payments page). Recorded by `Billing::recordStripePayment`
   or `recordStripeIntentPayment`.
@@ -65,8 +86,12 @@ un-confirming reverses them (`reverseSemesterConfirmationCharges`).
   (`Billing::applyScholarship`).
 - **Custom entry** — an admin-specified debit or credit for anything else
   (`Billing::addCustomEntry`).
+- **Duration change** — the refund credit and new charge posted from the
+  [accounting review page](/admin-experience/change-lesson-duration).
 - **CSV import** — opening balances when migrating an existing roster into the
-  portal (semester wizard step 7); re-uploading the same file is a no-op.
+  portal (semester wizard step 8); re-uploading the same file is a no-op
+  (rows already on the ledger are skipped), though identical rows *within*
+  one file are deliberately all imported.
 
 ## `stripe_webhook_events`
 

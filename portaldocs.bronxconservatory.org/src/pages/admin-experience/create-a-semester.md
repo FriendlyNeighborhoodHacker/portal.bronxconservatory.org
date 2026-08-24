@@ -38,12 +38,21 @@ through the prerequisites:
 start and end dates, and **all the pricing** — the registration fee (one per
 family), tuition in two schedules (**Bronx residents** and **non-residents /
 online students**: 30- and 60-minute lesson fees and the guitar ensemble fee
-for each), the recital & logistics fee, installment plan fee, and
-lessons-per-semester (default 15, used for per-lesson price display and
-duration-change math). Automatic charge-posting currently uses the resident
-rates; the non-resident schedule is stored for quoting and reference. Duplicate season+year is rejected
-("Fall 2026 already exists"). On success the new semester immediately
-becomes the admin's selected semester.
+for each), the recital & logistics fee, installment plan fee, the **second
+installment due date**, and lessons-per-semester (default 15, used for
+per-lesson price display and duration-change math). Automatic charge-posting
+currently uses the resident rates; the non-resident schedule is stored for
+quoting and reference.
+
+The **second installment due date** is when the remaining balance is due for
+families on the installment plan. Left blank, it defaults to the midpoint of
+the semester's dates; it appears in the fee notices on the registration form
+and billing pages, and drives the "behind on payments" rule for
+installment-plan families (semesters without one fall back to the old
+half-way-lesson rule).
+
+Duplicate season+year is rejected ("Fall 2026 already exists"). On success
+the new semester immediately becomes the admin's selected semester.
 
 Dates and pricing can be edited later (`/admin/semester/edit.php`) — with a
 warning that changing the date range does **not** add or remove lessons
@@ -101,6 +110,13 @@ scheduled for a teacher at a location on a day without one. A blank `Day`
 assigns the teacher to every weekday the location holds classes on. The
 import is purely additive (existing assignments are skipped, never removed).
 
+Assignments can also be edited one at a time from the teacher's edit page:
+the **Schedule Days** card lists the teacher's (location, day) pairs for the
+selected semester, with an "Add a day…" select offering every remaining
+valid pair and a Remove button per row. Removing is refused while the
+teacher still has reservations, hold blocks, or calendar lessons there that
+day — the column can't be pulled out from under a schedule.
+
 ### Step 6 — Hold blocks (`hold_blocks`)
 
 `Teacher Name`, `Location Name`, `Day`, `Start Time`, `End Time`, `Title`
@@ -109,6 +125,11 @@ on every class date this semester. End must be after start, at most 4 hours;
 the teacher must already have a column at that location; and every row is
 conflict-checked three ways — against earlier rows in the same file, against
 existing weekly bookings, and against every future materialized date.
+
+The CSV has no kind column, so each block's **kind** is inferred from its
+title: "ensemble" → Guitar Ensemble, "musicianship" → Musicianship Skills,
+anything else → a plain hold. The kind drives the block's color on the
+schedule grid and can be changed later in the block's edit modal.
 
 ### Step 7 — The schedule itself (`reservations`)
 
@@ -135,8 +156,11 @@ made, on the dates they happened: `Student Name`, `Entry Type`
 `Amount` (always positive), `Date` (blank = semester start), `Debit or
 Credit` (defaults by type; required for "other"), `Description`. This is
 what makes the schedule grid color-code who owes what from day one.
-**Re-uploading the same file is a no-op** — rows already on the ledger are
-skipped exactly.
+**Re-uploading the same file is a no-op** — rows matching an entry already
+on the ledger show "Already recorded (no change)" and are skipped. But
+**identical rows within one file are all kept**: a student with two
+same-priced lesson blocks legitimately owes the charge twice, so the second
+row imports too, flagged "(same as row N — both kept)" in the preview.
 
 The chain ends on the Semester Schedule.
 

@@ -17,7 +17,11 @@ is no role column; roles are derived from related rows (see the
 
 - **admin** — the `is_admin` flag
 - **developer** — the `is_developer` flag; combined with `is_admin` it unlocks
-  the Admin &gt; Maintenance section (migrations, activity log, email log)
+  the Admin &gt; Maintenance section (migrations, activity log, email log).
+  Only a developer can grant or revoke it on others (a non-developer admin
+  sees the flag read-only), nobody can change their own, and both flags can
+  be set on a person who has an email but hasn't activated their account yet
+  — the access simply takes effect once they do
 - **teacher** — existence of a `teacher_profiles` row
 - **parent** — existence of a `parenthood` row as `parent_user_id`
 - **student** — existence of a `student_profiles` row

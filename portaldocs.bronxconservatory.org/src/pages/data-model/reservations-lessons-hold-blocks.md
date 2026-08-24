@@ -69,8 +69,19 @@ and its status ENUM is just `active`/`deleted` — **no confirmation and no
 billing**. Its blocks materialize as soon as it is created. Deleting removes
 future blocks and keeps past ones as a record of the teacher's day.
 
+Each block also has a **`block_type`** ENUM(`hold`, `guitar_ensemble`,
+`musicianship`), default `hold` — the "Kind" select in the hold-block
+modals. The two class kinds color the schedule grid (green / rose pastels)
+and are the hook for future class attendance and billing; today all three
+kinds behave identically for scheduling. `semester_hold_blocks` carries a
+nullable `block_type` for one-off blocks (`COALESCE`d like the other
+identifying columns). The CSV import infers the kind from the title
+("ensemble" / "musicianship"), which is also how existing blocks were
+backfilled.
+
 Hold blocks matter to scheduling: they occupy grid cells, so a reservation (or
-a carried-forward schedule) cannot claim a slot a hold block covers.
+a carried-forward schedule) cannot claim a slot a hold block covers. In the
+schedule's Edit mode they drag to a new slot just like reservations do.
 
 ## `semester_hold_blocks`
 

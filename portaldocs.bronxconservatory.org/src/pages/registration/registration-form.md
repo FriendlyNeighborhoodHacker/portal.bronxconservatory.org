@@ -26,7 +26,11 @@ told registration is closed.
 3. **Policies** (`policies.php`) — the conservatory's policies, agreed to with
    a timestamp (`policies_agreed_at`).
 4. **Payment plan** (`payment_plan.php`) — pay in full, or in two installments
-   for a one-time `installment_plan_fee` (priced on the semester).
+   for a one-time `installment_plan_fee` (priced on the semester), with the
+   remaining tuition due by the semester's **second installment due date**.
+   The page also carries the standing disclosure that appears wherever fees
+   are shown: the installment fee is charged automatically if the full
+   balance isn't paid by the end of the semester's first day.
 5. **Review** (`review.php`) — the itemized quote, computed from the
    semester's fee columns (registration fee, lesson fees by length, guitar
    ensemble fee, recital fee, installment fee). The quote lines are stored on

@@ -27,6 +27,7 @@ Each operational flow has its own detailed page:
 | [Create a Semester](/admin-experience/create-a-semester) | The wizard, the six CSV imports, pre-populating from a previous semester |
 | [View the Semester Schedule](/admin-experience/view-semester-schedule) | The weekly grid, cell colors, confirming reservations (lessons + charges), drag-to-move |
 | [View the Calendar & a Week](/admin-experience/view-week-schedule) | The semester date list and the weekly grid of real lessons |
+| [View a Student](/admin-experience/view-a-student) | The student page — parents, reservations, charges, notes, and Edit Profile |
 | [Process Leads & Uncompleted Forms](/admin-experience/process-leads) | The queues, statuses, append-only notes, account invites |
 | [Convert a Lead to a Family](/admin-experience/convert-a-lead) | Creating people, placing reservations, moving held payments |
 | [Accept a Check & Other Ledger Entries](/admin-experience/accept-a-check) | Manual payments, scholarships, custom adjustments |
@@ -52,24 +53,29 @@ Parent(s) (name on one line, phone + email on the next, per parent) /
 Actions; the teachers list shows Name / Contact / Actions. Add buttons sit
 top-right.
 
-**Edit Student** — photo, basic info, parents (with Add Parent),
-**Demographics**, instruments, and **Charges and Payments**: the current
-balance, a line-item breakdown of this semester's charges and payments, and
-— if those don't reconcile to the balance — the earlier entries that explain
-it. From here an admin records [payments and
-adjustments](/admin-experience/accept-a-check). Deleting flags `is_deleted`
-after a confirmation; nothing is actually removed.
+**The Student page** — where every student link lands
+([View a Student](/admin-experience/view-a-student)): parents with big
+copy-friendly contact info, this semester's lesson reservations (instrument
+in parentheses) with a lesson-notes summary, **Charges and Payments** (the
+balance, the line-item breakdown, and — if those don't reconcile — the
+earlier entries that explain it; from here an admin records
+[payments and adjustments](/admin-experience/accept-a-check)), and read-only
+student details. **Edit Profile** (top right) opens the form for the basic
+fields and the demographic; deleting flags `is_deleted` after a
+confirmation; nothing is actually removed.
 
 Demographics is a single code — `B`, `L`, `W`, `AAPI`, or `O`, plus "Not
-recorded" — kept for the conservatory's own reporting. It appears on this
-screen and nowhere else: the accessors behind it require an admin, and the
+recorded" — kept for the conservatory's own reporting. It is edited as a
+field on the Edit Profile form, shown as one line on the student page, and
+appears nowhere else: the accessors behind it require an admin, and the
 column is absent from every query a parent, student, or teacher page runs. The
 Students & Parents CSV import has a matching optional `Demographic` column,
 so a roster can be loaded with the codes already in it; a blank cell leaves
 whatever is on file alone.
 
-**Edit Teacher** — photo, basic info, this semester's students (linked),
-soft delete.
+**Edit Teacher** — photo, basic info, this semester's students (linked), a
+**Schedule Days** card for adding or removing the teacher's (location, day)
+columns on the semester schedule, and soft delete.
 
 **Edit Parent** — photo, basic info, children with an **Add Child** dialog
 offering two paths: *Add New Child* (name, suffix, preferred name, class of)
@@ -89,5 +95,8 @@ Templates, and Settings.
 
 Visible only to users with **both** `is_admin` and `is_developer`: the email
 log, the activity log, server logs (paths configured via `ADMIN_LOG_FILES`),
-and database migrations (Admin › Migrations, enabled where `MIGRATIONS_DIR`
-is configured).
+database migrations (Admin › Migrations, enabled where `MIGRATIONS_DIR`
+is configured), and the **Installment Fee Sweep** — a dry-run preview of the
+daily job that charges the installment plan fee to unpaid accounts, with a
+run-now button (see
+[Accept a Check](/admin-experience/accept-a-check)).

@@ -7,8 +7,9 @@ description: Recording manual payments, scholarships, and custom adjustments aga
 # Accept a Check & Other Ledger Entries
 
 Money taken outside the portal — a check, cash, Zelle — is recorded from the
-**Charges and Payments** section of the student's edit page
-(`/admin/student_edit.php?id=N`).
+**Charges and Payments** section of the
+[student's page](/admin-experience/view-a-student)
+(`/admin/student.php?id=N`).
 
 ## What the section shows
 
@@ -43,9 +44,27 @@ balance)**, an amount, and a required description; it lands as entry type
 
 > One custom entry to know about: **the Guitar Ensemble fee is never posted
 > automatically.** Confirming a reservation charges registration, lessons,
-> recital, and installment fees — the ensemble fee exists on the semester (and
-> in the registration quote) but has no automatic posting, so it must be
-> entered by hand as a custom charge.
+> and recital fees (plus the installment fee when opted in) — the ensemble
+> fee exists on the semester (and in the registration quote) but has no
+> automatic posting, so it must be entered by hand as a custom charge.
+
+## The installment fee
+
+The installment plan fee is the one charge that can post without an admin in
+the loop — by design, and disclosed everywhere fees are shown ("An
+installment fee of $X will be charged if the full balance isn't paid by the
+end of the first day of the semester…"). It reaches a ledger three ways:
+
+- the family **chose the installment plan during registration** (it's in
+  their quote);
+- the admin **ticked "include installment fee"** in the reservation
+  confirmation dialog;
+- the **daily sweep** — from the second day of the semester, any confirmed
+  student who still owes part of that term and doesn't already carry the fee
+  is charged it. Never twice per term. Admins can preview today's sweep (a
+  dry run listing exactly who would be charged) and run it by hand at
+  **Admin › Maintenance › Installment Fee Sweep**
+  (`/admin/installment_fees.php`).
 
 ## What happens on save
 
