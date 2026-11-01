@@ -14,13 +14,10 @@ final class SampleDataLoaderTest extends TestCase
         test_reset_all();
     }
 
-    public function testOnlyDevHostsQualify(): void
+    public function testFindsTheRepositorySampleData(): void
     {
-        $this->assertTrue(SampleDataLoader::isDevHost('dev-bronxconservatory.lillyrosenthal.org'));
-        $this->assertTrue(SampleDataLoader::isDevHost('DEV.example.org:8080'));
-        $this->assertFalse(SampleDataLoader::isDevHost('portal.bronxconservatory.org'));
-        $this->assertFalse(SampleDataLoader::isDevHost('localhost:8080'));
-        $this->assertFalse(SampleDataLoader::isDevHost(''));
+        // Test config defines no SAMPLE_DATA_DIR, so the checkout layout applies.
+        $this->assertSame(realpath(__DIR__ . '/../../../sample_data'), realpath(SampleDataLoader::sampleDataDir()));
     }
 
     public function testRefusesNonAdmins(): void

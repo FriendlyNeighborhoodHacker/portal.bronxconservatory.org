@@ -12,8 +12,8 @@ adding a second semester on top of the same roster.
   deliberately no schedule file here: spring's schedule comes from
   pre-populating off fall.
 
-**On a dev instance** (host name containing "dev", with `SAMPLE_DATA_DIR` set
-in config.local.php where the checkout is not beside the web root), Admin >
+**On a dev instance** (`DEV_SITE` true in config.local.php, plus
+`SAMPLE_DATA_DIR` where the checkout is not beside the web root), Admin >
 Get Started offers **Load All Sample Data**, which runs every step below
 through the same importers in one click. The manual order follows.
 

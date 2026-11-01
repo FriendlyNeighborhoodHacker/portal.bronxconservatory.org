@@ -18,8 +18,8 @@ $flash = $_SESSION['import_flash'] ?? null;
 $flashError = $_SESSION['import_flash_error'] ?? null;
 unset($_SESSION['import_flash'], $_SESSION['import_flash_error']);
 
-// Dev instances only: one click loads the whole sample_data/ set.
-$sampleDataAvailable = SampleDataLoader::isAvailable((string)($_SERVER['HTTP_HOST'] ?? ''));
+// Dev instances only (DEV_SITE in config.local.php): one click loads the whole sample_data/ set.
+$sampleDataAvailable = SampleDataLoader::isAvailable();
 
 header_html('Get Started');
 ?>
@@ -34,7 +34,7 @@ this page disappears once a semester exists.</p>
 
 <?php if ($sampleDataAvailable): ?>
 <div class="card">
-  <h3>Dev · Load Sample Data <span class="badge">dev only</span></h3>
+  <h3>Dev · Load Sample Data <span class="badge">dev site only</span></h3>
   <p class="small">Loads everything in <code>sample_data/</code> in the order its README
   prescribes: locations, teachers, students and parents, then Fall 2026 (class days,
   dates, teachers, hold blocks, the schedule and the opening ledger) and Spring 2027

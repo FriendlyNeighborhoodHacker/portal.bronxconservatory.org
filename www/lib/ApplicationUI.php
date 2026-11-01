@@ -282,6 +282,8 @@ class ApplicationUI {
         echo self::cssLink('/styles.css');
         echo '</head><body' . ($bodyClasses ? ' class="' . h(implode(' ', $bodyClasses)) . '"' : '') . '>';
 
+        echo self::testSiteBarHtml();
+
         // Dev-only "login as" bar. Rendered before the topbar in both the
         // logged-in and logged-out shells so the escape hatch is always visible.
         if (impersonator_id()) {
@@ -410,8 +412,24 @@ class ApplicationUI {
         echo '<title>' . h($title) . ' - ' . h($siteTitle) . '</title>';
         echo self::cssLink('/styles.css');
         echo '</head><body class="minimal">';
+        echo self::testSiteBarHtml();
         echo '<div class="minimal-header">' . self::brandWordmarkHtml() . '</div>';
         echo '<div class="minimal-content"><main>';
+    }
+
+    /**
+     * The thin strip a dev instance (DEV_SITE in config.local.php) shows at
+     * the very top of every page — signed-in shell, minimal shell and the
+     * auth pages alike — so nobody mistakes the sample roster for real
+     * families. Empty everywhere else.
+     */
+    public static function testSiteBarHtml(): string {
+        if (!Application::isDevSite()) {
+            return '';
+        }
+        return '<div class="test-site-bar" role="note">'
+             . '<strong>Dev site</strong> &mdash; note this is test data'
+             . '</div>';
     }
 
     public static function minimalFooterHtml(): void {

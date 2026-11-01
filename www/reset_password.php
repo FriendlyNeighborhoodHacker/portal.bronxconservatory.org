@@ -39,6 +39,7 @@ if ($token) {
 <title>Reset Password - <?=h(Settings::siteTitle())?></title>
 <?=ApplicationUI::cssLink('/styles.css')?></head>
 <body class="auth">
+<?=ApplicationUI::testSiteBarHtml()?>
   <div class="card">
     <?php
       $loginImageUrl = Settings::loginImageUrl();

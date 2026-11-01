@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/UserContext.php';
 require_once __DIR__ . '/ActivityLog.php';
+require_once __DIR__ . '/Application.php';
 require_once __DIR__ . '/CsvImport.php';
 require_once __DIR__ . '/LocationManagement.php';
 require_once __DIR__ . '/LocationCsvImport.php';
@@ -55,17 +56,6 @@ class SampleDataLoader {
         'lessons_per_semester' => 15,
     ];
 
-    /**
-     * The sample-data feature only shows itself on a dev instance: a host
-     * name with "dev" in it (dev-bronxconservatory.lillyrosenthal.org). The
-     * port, if any, is ignored.
-     */
-    public static function isDevHost(string $host): bool {
-        $host = strtolower(trim($host));
-        $host = preg_replace('/:\d+$/', '', $host) ?? $host;
-        return $host !== '' && str_contains($host, 'dev');
-    }
-
     /** Absolute path to the sample_data directory, or '' when none is found. */
     public static function sampleDataDir(): string {
         $dir = defined('SAMPLE_DATA_DIR') && SAMPLE_DATA_DIR !== ''
@@ -74,9 +64,9 @@ class SampleDataLoader {
         return is_dir($dir) ? $dir : '';
     }
 
-    /** Both conditions for offering the loader: a dev host and a directory to load from. */
-    public static function isAvailable(string $host): bool {
-        return self::isDevHost($host) && self::sampleDataDir() !== '';
+    /** Both conditions for offering the loader: DEV_SITE is on and there is a directory to load from. */
+    public static function isAvailable(): bool {
+        return Application::isDevSite() && self::sampleDataDir() !== '';
     }
 
     /**

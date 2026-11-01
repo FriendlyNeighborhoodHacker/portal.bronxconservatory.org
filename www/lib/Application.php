@@ -3,6 +3,16 @@ declare(strict_types=1);
 
 class Application {
     private static bool $initialized = false;
+
+    /**
+     * Whether this installation is a dev instance: DEV_SITE = true in
+     * config.local.php. Dev-only affordances — the test-data banner on every
+     * page, the one-click sample-data loader — key off this, so production
+     * (where the constant is absent or false) can never show them.
+     */
+    public static function isDevSite(): bool {
+        return defined('DEV_SITE') && (bool)DEV_SITE;
+    }
     
     public static function init(): void {
         if (self::$initialized) {

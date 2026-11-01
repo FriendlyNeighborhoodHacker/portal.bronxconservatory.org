@@ -155,6 +155,25 @@ a:hover {
   padding: 0;
 }
 
+/* Dev instances only (DEV_SITE): a thin "this is test data" strip at the very top. */
+.test-site-bar {
+  background: var(--color-cta);
+  color: var(--color-cta-text);
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 2px 12px;
+}
+
+/* The auth pages centre their card in a grid, so the strip pins to the top edge. */
+body.auth .test-site-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+}
+
 /* ===== Top bar ===== */
 
 .topbar {

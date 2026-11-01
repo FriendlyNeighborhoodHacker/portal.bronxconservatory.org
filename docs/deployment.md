@@ -149,6 +149,11 @@ define('DB_USER', 'bcmportaldev');
 define('DB_PASS', '<strong password>');
 define('APP_NAME', 'BCM Portal (DEV)');
 
+// Marks this install as a dev instance: every page shows a thin "Dev site —
+// note this is test data" strip, and Get Started offers "Load All Sample
+// Data". Never set on production.
+define('DEV_SITE', true);
+
 // Leave SUPER_PASSWORD empty on dev.
 
 // SMTP: same settings as production are fine, because of the redirect below.
@@ -183,8 +188,8 @@ define('DEPLOY_LOG',    '/home/bronxconservatory/deploy/logs/dev-bronxconservato
 
 // Absolute paths into the checkout (see "Server layout" above).
 define('MIGRATIONS_DIR', '/home/bronxconservatory/deploy/dev-bronxconservatory.lillyrosenthal.org/db_migrations');
-// Dev only: enables Get Started > "Load All Sample Data" (the button also
-// requires "dev" in the host name, so production never shows it).
+// Where the sample-data loader reads from (the checkout, not the web root).
+// Only used when DEV_SITE is true.
 define('SAMPLE_DATA_DIR', '/home/bronxconservatory/deploy/dev-bronxconservatory.lillyrosenthal.org/sample_data');
 
 define('ADMIN_LOG_FILES', [
@@ -314,9 +319,10 @@ sudo certbot --apache -d dev-bronxconservatory.lillyrosenthal.org --redirect
 visit Admin > Maintenance. Migrations should list every file as applied; a
 test email should arrive with the "[Redirected ...]" subject tag. A database
 connection error almost always means the allowable-hosts setting in step 2.
-Then Admin > Get Started (`/admin/setup/index.php`) > **Load All Sample
-Data** fills the database with the `sample_data/` roster, both semesters and
-the fall schedule in one click (dev instances only).
+Every page should show the thin yellow "Dev site — note this is test data"
+strip at the top (`DEV_SITE`). Then Admin > Get Started
+(`/admin/setup/index.php`) > **Load All Sample Data** fills the database with
+the `sample_data/` roster, both semesters and the fall schedule in one click.
 
 **15. GitHub webhook (github.com).** Repo Settings > Webhooks > Add webhook:
 payload URL `https://dev-bronxconservatory.lillyrosenthal.org/gitwebhook.php`,

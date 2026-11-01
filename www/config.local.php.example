@@ -11,6 +11,12 @@ define('DB_PASS', '');
 // Application branding (used as a fallback; UI will prefer Settings::get('site_title', APP_NAME))
 define('APP_NAME', 'BCM Family Portal');
 
+// ===== Dev instance =====
+// true on a dev/staging copy: every page shows a thin "Dev site — note this
+// is test data" strip at the top, and Get Started offers "Load All Sample
+// Data" (see SAMPLE_DATA_DIR below). Leave undefined or false in production.
+// define('DEV_SITE', true);
+
 // SMTP configuration (e.g., Gmail with App Password)
 define('SMTP_HOST', 'smtp.gmail.com'); // smtp.gmail.com
 define('SMTP_PORT', 587);              // 587 for STARTTLS, 465 for SSL
@@ -84,10 +90,10 @@ define('MIGRATIONS_DIR', dirname(__DIR__) . '/db_migrations');
 
 // ===== Sample data (dev instances: Get Started > Load All Sample Data) =====
 // Absolute path to the repository's sample_data directory. The one-click
-// loader on the setup page appears only when the host name contains "dev"
-// AND this directory exists. Like db_migrations, it lives in the checkout
-// rather than the web root, so on a deployed server the path is per-machine.
-// Leave undefined for a local checkout (sample_data/ beside www/ is found
+// loader on the setup page appears only when DEV_SITE is true AND this
+// directory exists. Like db_migrations, it lives in the checkout rather than
+// the web root, so on a deployed server the path is per-machine. Leave
+// undefined for a local checkout (sample_data/ beside www/ is found
 // automatically).
 // define('SAMPLE_DATA_DIR', '/home/bronxconservatory/deploy/dev-bronxconservatory.lillyrosenthal.org/sample_data');
 
