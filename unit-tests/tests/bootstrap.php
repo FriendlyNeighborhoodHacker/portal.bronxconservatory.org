@@ -31,6 +31,7 @@ require_once __DIR__ . '/../../www/lib/LocationTeachersCsvImport.php';
 require_once __DIR__ . '/../../www/lib/HoldBlocksCsvImport.php';
 require_once __DIR__ . '/../../www/lib/SemesterReservationsCsvImport.php';
 require_once __DIR__ . '/../../www/lib/LedgerEntriesCsvImport.php';
+require_once __DIR__ . '/../../www/lib/SampleDataLoader.php';
 require_once __DIR__ . '/../../www/lib/StripeCheckout.php';
 require_once __DIR__ . '/../../www/lib/LeadManagement.php';
 require_once __DIR__ . '/../../www/lib/InquiryManagement.php';

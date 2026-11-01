@@ -12,6 +12,11 @@ adding a second semester on top of the same roster.
   deliberately no schedule file here: spring's schedule comes from
   pre-populating off fall.
 
+**On a dev instance** (host name containing "dev", with `SAMPLE_DATA_DIR` set
+in config.local.php where the checkout is not beside the web root), Admin >
+Get Started offers **Load All Sample Data**, which runs every step below
+through the same importers in one click. The manual order follows.
+
 ## 1. General setup
 
 Reset first with `./reset_db.sh`, then upload in this order:

@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../partials.php';
 require_once __DIR__ . '/../../lib/LocationManagement.php';
 require_once __DIR__ . '/../../lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../../lib/SemesterManagement.php';
+require_once __DIR__ . '/../../lib/SampleDataLoader.php';
 Application::init();
 require_admin();
 
@@ -14,7 +15,11 @@ $teachers = StudentTeacherManagement::listTeachers();
 $hasSemester = SemesterManagement::hasAnySemester();
 
 $flash = $_SESSION['import_flash'] ?? null;
-unset($_SESSION['import_flash']);
+$flashError = $_SESSION['import_flash_error'] ?? null;
+unset($_SESSION['import_flash'], $_SESSION['import_flash_error']);
+
+// Dev instances only: one click loads the whole sample_data/ set.
+$sampleDataAvailable = SampleDataLoader::isAvailable((string)($_SERVER['HTTP_HOST'] ?? ''));
 
 header_html('Get Started');
 ?>
@@ -25,6 +30,23 @@ teachers, then create your first semester. You can come back here any time —
 this page disappears once a semester exists.</p>
 
 <?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
+<?php if ($flashError): ?><p class="error"><?=h($flashError)?></p><?php endif; ?>
+
+<?php if ($sampleDataAvailable): ?>
+<div class="card">
+  <h3>Dev · Load Sample Data <span class="badge">dev only</span></h3>
+  <p class="small">Loads everything in <code>sample_data/</code> in the order its README
+  prescribes: locations, teachers, students and parents, then Fall 2026 (class days,
+  dates, teachers, hold blocks, the schedule and the opening ledger) and Spring 2027
+  pre-populated from fall. The same importers the wizard uses, so every row is
+  validated. Safe to run again: rows already loaded are skipped.</p>
+  <form method="post" action="/admin/setup/load_sample_data_eval.php" class="actions" style="margin-top:10px;"
+        onsubmit="return confirm('Load all sample data into this database?');">
+    <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+    <button type="submit" class="button primary">Load All Sample Data</button>
+  </form>
+</div>
+<?php endif; ?>
 
 <div class="card">
   <h3>Step 1 · Locations

@@ -82,6 +82,15 @@ define('GIT_WEBHOOK_SECRET', '');
 // Local checkout (config.local.php lives in www/, so the repo root is one up):
 define('MIGRATIONS_DIR', dirname(__DIR__) . '/db_migrations');
 
+// ===== Sample data (dev instances: Get Started > Load All Sample Data) =====
+// Absolute path to the repository's sample_data directory. The one-click
+// loader on the setup page appears only when the host name contains "dev"
+// AND this directory exists. Like db_migrations, it lives in the checkout
+// rather than the web root, so on a deployed server the path is per-machine.
+// Leave undefined for a local checkout (sample_data/ beside www/ is found
+// automatically).
+// define('SAMPLE_DATA_DIR', '/home/bronxconservatory/deploy/dev-bronxconservatory.lillyrosenthal.org/sample_data');
+
 // ===== Server logs (Admin > Maintenance > Server Logs) =====
 // Per-machine overrides for the server log files developers can tail in the
 // browser (slug => absolute path). Only listed slugs are overridden; the rest
