@@ -66,7 +66,10 @@ final class SampleDataLoaderTest extends TestCase
         $this->assertSame(42, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
         $this->assertCount(8, HoldBlockManagement::holdBlockReservationsForSemester($fall));
         $this->assertCount(9, HoldBlockManagement::holdBlockReservationsForSemester($spring));
-        $this->assertStringStartsWith('Sample data loaded. general/locations.csv: 2 created', SampleDataLoader::summarize($result));
+        $summary = SampleDataLoader::summarize($result);
+        $this->assertStringStartsWith('Sample data loaded. general/locations.csv: 2 ', $summary); // seeded by schema.sql, so updated not created
+        $this->assertStringContainsString('general/teachers.csv: 6 created', $summary);
+        $this->assertStringContainsString('Pre-populate Spring 2027 from Fall 2026: 17 created', $summary);
 
         // A second click changes nothing: semesters reused, every row skipped.
         $again = SampleDataLoader::load($ctx);
