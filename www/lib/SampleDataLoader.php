@@ -18,16 +18,23 @@ require_once __DIR__ . '/SemesterReservationsCsvImport.php';
 require_once __DIR__ . '/LedgerEntriesCsvImport.php';
 require_once __DIR__ . '/SemesterManagement.php';
 require_once __DIR__ . '/ReservationManagement.php';
+require_once __DIR__ . '/LeadManagement.php';
+require_once __DIR__ . '/InquiryManagement.php';
+require_once __DIR__ . '/../settings.php';
 
 /**
- * One-click load of sample_data/ on a dev instance: walks every CSV through
- * the real importers in the order sample_data/README.md prescribes (general/
- * once, then Fall 2026's files, then Spring 2027's files and the
- * pre-populate from fall). This is exactly what an admin would do by hand
- * through the setup wizard; nothing here bypasses validation.
+ * One-click load of sample_data/ on a dev instance: clears everything a
+ * previous load (or a demo) put in the database, then walks every file
+ * through the real importers in the order sample_data/README.md prescribes
+ * (general/ once, then Fall 2026's files and its leads, then Spring 2027's
+ * files and the pre-populate from fall). This is exactly what an admin would
+ * do by hand through the setup wizard; nothing here bypasses validation.
  *
- * Re-running is safe: semesters that already exist are reused and every
- * importer skips rows it has already applied.
+ * Re-running is safe because it starts with the reset: the result is the
+ * same fresh demo every time. The reset mirrors reset_db.sh — semesters and
+ * everything hanging off them, the ledger, leads and uncompleted forms, and
+ * every person except developer accounts and the admin running the load.
+ * Settings, announcements, email templates and the logs are kept.
  *
  * The directory is found through SAMPLE_DATA_DIR in config.local.php, falling
  * back to the repository layout (sample_data/ beside www/). On a deployed
@@ -88,6 +95,7 @@ class SampleDataLoader {
         }
 
         $steps = [];
+        $steps[] = self::reset($ctx);
         $steps[] = self::importFile($ctx, $root, 'general/locations.csv', LocationCsvImport::class);
         $steps[] = self::importFile($ctx, $root, 'general/teachers.csv', TeacherCsvImport::class);
         $steps[] = self::importFile($ctx, $root, 'general/people.csv', PeopleCsvImport::class);
@@ -99,6 +107,10 @@ class SampleDataLoader {
         foreach (self::importSemesterFiles($ctx, $root, $fallId, self::FALL['dir']) as $step) {
             $steps[] = $step;
         }
+        // Registration is open for fall, so the leads' quotes and the public
+        // /register/ flow both price against it.
+        Settings::set('registration_semester_id', (string)$fallId);
+        $steps[] = self::importLeads($ctx, $root, $fallId, self::FALL['dir'] . '/leads.json');
 
         [$springId, $springStep] = self::ensureSemester($ctx, self::SPRING, $locationIds);
         $steps[] = $springStep;
@@ -131,6 +143,7 @@ class SampleDataLoader {
         $parts = [];
         foreach ($result['steps'] as $step) {
             $bits = [];
+            if (!empty($step['deleted'])) $bits[] = $step['deleted'] . ' deleted';
             if ($step['created']) $bits[] = $step['created'] . ' created';
             if ($step['updated']) $bits[] = $step['updated'] . ' updated';
             if ($step['skipped']) $bits[] = $step['skipped'] . ' skipped';
@@ -140,6 +153,118 @@ class SampleDataLoader {
     }
 
     // ── Steps ─────────────────────────────────────────────────────────────
+
+    /**
+     * Wipe what a load creates so the next load starts clean: the same
+     * tables as reset_db.sh, plus leads and uncompleted forms. Kept: settings,
+     * announcements, email templates, instruments, locations (the locations
+     * import updates them in place), both logs, and the people who must
+     * survive — developer accounts and the admin doing the reset. Returns a
+     * step summary whose 'deleted' is the number of user rows removed.
+     */
+    public static function reset(?UserContext $ctx): array {
+        if (!$ctx || !$ctx->admin) {
+            throw new RuntimeException('Admins only');
+        }
+        $pdo = pdo();
+        $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
+        try {
+            foreach ([
+                // Semester machinery (children first; cascades do not fire with FK checks off).
+                'lesson_resources', 'lesson_notes', 'lessons',
+                'semester_lesson_reservations', 'semester_hold_blocks', 'semester_hold_block_reservations',
+                'semester_location_teachers', 'semester_location_dates', 'semester_location_weekdays',
+                'semester_locations', 'semesters',
+                // Leads and uncompleted forms.
+                'lead_notes', 'lead_students', 'leads', 'incomplete_inquiry_notes', 'incomplete_inquiries',
+                // Money.
+                'ledger_entries', 'stripe_webhook_events',
+                // People: roles and relationships (the users rows themselves go below).
+                'teacher_instruments', 'student_instruments', 'teacher_profiles', 'student_profiles',
+                'parenthood', 'private_files',
+            ] as $table) {
+                $pdo->exec('DELETE FROM ' . $table);
+            }
+            $st = $pdo->prepare('DELETE FROM users WHERE is_developer = 0 AND id <> ?');
+            $st->execute([$ctx->id]);
+            $deletedUsers = $st->rowCount();
+            // Whoever is left is a clean admin with Maintenance access.
+            $pdo->prepare('UPDATE users SET is_admin = 1, is_deleted = 0 WHERE is_developer = 1 OR id = ?')
+                ->execute([$ctx->id]);
+        } finally {
+            $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+        }
+        Application::clearRolesCacheForTesting();
+        ActivityLog::log($ctx, 'sample_data.reset', ['users_deleted' => $deletedUsers]);
+        return ['label' => 'Reset sample tables', 'deleted' => $deletedUsers, 'created' => 0, 'updated' => 0, 'skipped' => 0];
+    }
+
+    /**
+     * Leads come from a JSON file rather than a CSV because a lead is a
+     * parent, their students, scheduling answers and a note history — three
+     * shapes (registration, information request, uncompleted form) that do
+     * not flatten into one row. Each goes through the same LeadManagement /
+     * InquiryManagement calls the public forms and the Leads admin make.
+     */
+    private static function importLeads(UserContext $ctx, string $root, int $semesterId, string $relPath): array {
+        $path = $root . '/' . $relPath;
+        if (!is_file($path)) {
+            throw new RuntimeException('Sample file missing: ' . $relPath);
+        }
+        $data = json_decode((string)file_get_contents($path), true);
+        if (!is_array($data)) {
+            throw new InvalidArgumentException($relPath . ' is not valid JSON: ' . json_last_error_msg());
+        }
+        $created = 0;
+
+        foreach ((array)($data['registration'] ?? []) as $i => $lead) {
+            $leadId = LeadManagement::createLead(
+                $ctx, $semesterId, (array)$lead['parent'], (array)$lead['students'],
+                (array)($lead['scheduling'] ?? []), !empty($lead['installment_plan'])
+            );
+            if (!empty($lead['paid'])) {
+                // A card payment through the embedded form: the PaymentIntent
+                // is attached first, then the webhook records against it.
+                $reference = 'pi_sample_' . $leadId;
+                LeadManagement::attachPaymentIntent($ctx, $leadId, $reference);
+                $row = LeadManagement::findLead($leadId);
+                LeadManagement::recordLeadPayment($leadId, (int)$row['amount_due_now_cents'], $reference);
+            }
+            self::addLeadNotes($ctx, $leadId, (array)($lead['notes'] ?? []));
+            $created++;
+        }
+
+        foreach ((array)($data['inquiries'] ?? []) as $lead) {
+            $leadId = LeadManagement::createInquiryLead($ctx, (array)$lead['parent'], (array)$lead['student']);
+            if (!empty($lead['details'])) {
+                LeadManagement::updateInquiryDetails($ctx, $leadId, (array)$lead['details']);
+            }
+            self::addLeadNotes($ctx, $leadId, (array)($lead['notes'] ?? []));
+            $created++;
+        }
+
+        foreach ((array)($data['incomplete'] ?? []) as $form) {
+            if (($form['source'] ?? 'inquiry') === 'registration') {
+                $draftId = InquiryManagement::recordRegistrationDraft($ctx, null, $form, 2);
+                InquiryManagement::recordRegistrationStep($draftId, (int)($form['step'] ?? 2));
+            } else {
+                $contact = $form + ['confirm_email' => (string)($form['email'] ?? '')];
+                $draftId = InquiryManagement::startInquiry($ctx, $contact);
+                if (!empty($form['address'])) {
+                    InquiryManagement::saveAddress($ctx, $draftId, (array)$form['address']);
+                }
+            }
+            $created++;
+        }
+
+        return ['label' => $relPath, 'created' => $created, 'updated' => 0, 'skipped' => 0];
+    }
+
+    private static function addLeadNotes(UserContext $ctx, int $leadId, array $notes): void {
+        foreach ($notes as $note) {
+            LeadManagement::addLeadNote($ctx, $leadId, (string)($note['body'] ?? ''), $note['status'] ?? null);
+        }
+    }
 
     /** The semester-scoped files, in wizard order. The two schedule files only exist for fall. */
     private static function importSemesterFiles(UserContext $ctx, string $root, int $semesterId, string $dir): array {

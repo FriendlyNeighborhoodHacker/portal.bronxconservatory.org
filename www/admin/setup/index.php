@@ -35,15 +35,17 @@ this page disappears once a semester exists.</p>
 <?php if ($sampleDataAvailable): ?>
 <div class="card">
   <h3>Dev · Load Sample Data <span class="badge">dev site only</span></h3>
-  <p class="small">Loads everything in <code>sample_data/</code> in the order its README
-  prescribes: locations, teachers, students and parents, then Fall 2026 (class days,
-  dates, teachers, hold blocks, the schedule and the opening ledger) and Spring 2027
-  pre-populated from fall. The same importers the wizard uses, so every row is
-  validated. Safe to run again: rows already loaded are skipped.</p>
+  <p class="small">Resets the database to a fresh demo, then loads everything in
+  <code>sample_data/</code> in the order its README prescribes: locations, teachers,
+  students and parents, then Fall 2026 (class days, dates, teachers, hold blocks, the
+  schedule, the opening ledger and a set of leads) and Spring 2027 pre-populated from
+  fall. The same importers the wizard uses, so every row is validated. Run it as often
+  as you like: everything from the previous load is cleared first. Developer accounts,
+  settings and announcements are kept.</p>
   <form method="post" action="/admin/setup/load_sample_data_eval.php" class="actions" style="margin-top:10px;"
-        onsubmit="return confirm('Load all sample data into this database?');">
+        onsubmit="return confirm('Reset this database and load all sample data? Every semester, family, lead and ledger entry currently here will be deleted first.');">
     <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
-    <button type="submit" class="button primary">Load All Sample Data</button>
+    <button type="submit" class="button primary">Reset &amp; Load All Sample Data</button>
   </form>
 </div>
 <?php endif; ?>

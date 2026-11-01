@@ -26,13 +26,20 @@ final class SampleDataLoaderTest extends TestCase
         SampleDataLoader::load(new UserContext(fx_user('Plain', 'Parent'), false));
     }
 
-    public function testLoadsEverythingInOrderAndIsIdempotent(): void
+    public function testLoadsEverythingInOrderAndResetsOnRerun(): void
     {
         $ctx = fx_admin_ctx();
+        // Leftovers from a demo: a stray family and a developer account. The
+        // load clears the former and keeps the latter (and the admin running it).
+        $stray = fx_student('Stray', 'Student');
+        $developer = fx_user('Dev', 'Eloper', ['is_admin' => true]);
+        pdo()->exec("UPDATE users SET is_developer = 1 WHERE id = $developer");
+
         $result = SampleDataLoader::load($ctx);
 
         $labels = array_column($result['steps'], 'label');
         $this->assertSame([
+            'Reset sample tables',
             'general/locations.csv',
             'general/teachers.csv',
             'general/people.csv',
@@ -43,6 +50,7 @@ final class SampleDataLoaderTest extends TestCase
             'fall_semester/hold_blocks.csv',
             'fall_semester/semester_location_reservations.csv',
             'fall_semester/ledger_entries.csv',
+            'fall_semester/leads.json',
             'Spring 2027 semester',
             'spring_semester/location_weekdays.csv',
             'spring_semester/location_dates.csv',
@@ -63,19 +71,53 @@ final class SampleDataLoaderTest extends TestCase
         $this->assertSame(42, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
         $this->assertCount(8, HoldBlockManagement::holdBlockReservationsForSemester($fall));
         $this->assertCount(9, HoldBlockManagement::holdBlockReservationsForSemester($spring));
+
+        // The stray family is gone; the developer and the acting admin survive.
+        $this->assertNull(UserManagement::findById($stray));
+        $this->assertNotNull(UserManagement::findById($developer));
+        $this->assertNotNull(UserManagement::findById($ctx->id));
+
+        // Leads: five registrations quoted against fall, three info requests,
+        // three uncompleted forms — every status short of converted.
+        $this->assertSame(8, LeadManagement::countLeads([]));
+        $this->assertSame(
+            ['contacted' => 2, 'declined' => 1, 'new' => 3, 'scheduled' => 2],
+            array_filter($this->countValues(LeadManagement::statusCounts([])))
+        );
+        $this->assertSame(5, LeadManagement::countLeads(['source' => 'registration']));
+        $this->assertSame(3, LeadManagement::countLeads(['source' => 'inquiry']));
+        $this->assertSame(2, (int)pdo()->query('SELECT COUNT(*) FROM leads WHERE amount_paid_cents > 0 AND paid_at IS NOT NULL')->fetchColumn());
+        $this->assertSame(5, (int)pdo()->query('SELECT COUNT(*) FROM lead_notes')->fetchColumn());
+        $this->assertSame(3, (int)pdo()->query('SELECT COUNT(*) FROM incomplete_inquiries')->fetchColumn());
+        $this->assertSame(1, (int)pdo()->query("SELECT COUNT(*) FROM incomplete_inquiries WHERE source = 'registration' AND last_step_completed = 4")->fetchColumn());
+        $this->assertSame((string)$fall, Settings::get('registration_semester_id', ''));
         $summary = SampleDataLoader::summarize($result);
         $this->assertStringStartsWith('Sample data loaded. general/locations.csv: 2 ', $summary); // seeded by schema.sql, so updated not created
         $this->assertStringContainsString('general/teachers.csv: 6 created', $summary);
         $this->assertStringContainsString('Pre-populate Spring 2027 from Fall 2026: 17 created', $summary);
 
-        // A second click changes nothing: semesters reused, every row skipped.
+        // A second click starts over: the first load's rows are cleared, so
+        // the end state is the same fresh demo, not a doubled one.
         $again = SampleDataLoader::load($ctx);
-        $this->assertSame(['fall_semester_id' => $fall, 'spring_semester_id' => $spring], $again['semesters']);
-        $this->assertSame(0, array_sum(array_column($again['steps'], 'created')));
+        $fall2 = (int)$again['semesters']['fall_semester_id'];
+        $spring2 = (int)$again['semesters']['spring_semester_id'];
+        $this->assertNotSame($fall, $fall2);
         $this->assertCount(2, SemesterManagement::listSemesters());
-        $this->assertCount(17, ReservationManagement::reservationsForSemester($fall));
-        $this->assertCount(17, ReservationManagement::reservationsForSemester($spring));
+        $this->assertNull(SemesterManagement::find($fall));
+        $this->assertCount(17, ReservationManagement::reservationsForSemester($fall2));
+        $this->assertCount(17, ReservationManagement::reservationsForSemester($spring2));
         $this->assertSame(42, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
-        $this->assertCount(8, HoldBlockManagement::holdBlockReservationsForSemester($fall));
+        $this->assertCount(8, HoldBlockManagement::holdBlockReservationsForSemester($fall2));
+        $this->assertSame(8, LeadManagement::countLeads([]));
+        $this->assertSame(3, (int)pdo()->query('SELECT COUNT(*) FROM incomplete_inquiries')->fetchColumn());
+        $this->assertSame(33, (int)pdo()->query('SELECT COUNT(*) FROM users WHERE is_developer = 0 AND id <> ' . $ctx->id)->fetchColumn());
+        $this->assertNotNull(UserManagement::findById($developer));
+    }
+
+    /** @return array<string,int> value => count, in value order */
+    private function countValues(array $values): array
+    {
+        ksort($values);
+        return $values;
     }
 }

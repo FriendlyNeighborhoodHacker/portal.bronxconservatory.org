@@ -6,7 +6,7 @@ adding a second semester on top of the same roster.
 - **general/** — data that outlives any one semester: locations, teachers,
   students and parents. Upload once.
 - **fall_semester/** — the semester-scoped files for Fall 2026, including the
-  schedule itself.
+  schedule itself and `leads.json`, the Leads page demo data.
 - **spring_semester/** — the same setup files for Spring 2027, so you can
   create a second semester against the same people and locations. There is
   deliberately no schedule file here: spring's schedule comes from
@@ -14,8 +14,10 @@ adding a second semester on top of the same roster.
 
 **On a dev instance** (`DEV_SITE` true in config.local.php, plus
 `SAMPLE_DATA_DIR` where the checkout is not beside the web root), Admin >
-Get Started offers **Load All Sample Data**, which runs every step below
-through the same importers in one click. The manual order follows.
+Get Started offers **Reset & Load All Sample Data**, which clears the previous
+load (the same tables as `reset_db.sh`, plus leads) and runs every step below
+through the same importers in one click, including the leads. The manual
+order follows.
 
 ## 1. General setup
 
@@ -101,6 +103,18 @@ Reset first with `./reset_db.sh`, then upload in this order:
 
 Then open the Semester Schedule — the grid is full and colour-coded — and
 click empty cells to add more.
+
+10. **fall_semester/leads.json** — loaded only by the one-click loader (there
+    is no upload form; leads arrive through the public forms). Five
+    registration leads quoted against Fall 2026's pricing — two paid, one on
+    the installment plan, with notes walking them through new → contacted →
+    scheduled, and one declined — three information requests with the full
+    questionnaire answered, and three uncompleted forms (two information
+    requests that stopped at the contact or address page, one registration
+    that got as far as the policies step). Together they light up every
+    column of Admin > Leads and the Uncompleted Forms tab. The loader also
+    points `registration_semester_id` at fall so the public /register/ form
+    is open against the same pricing.
 
 ## 3. Spring 2027 (the second semester)
 
