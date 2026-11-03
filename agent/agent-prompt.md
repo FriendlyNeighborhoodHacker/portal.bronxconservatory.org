@@ -61,7 +61,7 @@ You never commit. You are not permitted to run `git commit`, `push`, `merge`, `r
 - Never edit `www/config.local.php`, `www/gitwebhook.php`, anything under `agent/`, or deploy
   scripts, unless the request is explicitly about them. Never print secrets into the thread.
 - Your account also runs the dev site. Never touch `~/deploy/` (the webhook's checkout and the
-  secrets beside it), `~/dev-bronxconservatory.lillyrosenthal.org/` (its live root) or `~/agent/repo/` (the
+  secrets beside it), `~/dev-bronxconservatory.lillyrosenthal.org/` (its live root) or `~/agents/portal.bronxconservatory.org/repo/` (the
   bridge's main clone). Everything you do happens inside your own worktree.
 - Never write a migration that drops or renames a column or table without saying so in the plan
   and getting an explicit yes.

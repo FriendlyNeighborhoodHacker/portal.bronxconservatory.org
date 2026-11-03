@@ -34,7 +34,7 @@ Words the bridge understands, typed in a thread by a builder or shipper:
 Anything else is a message to the agent ("go" included). A new top-level post
 in the channel opens a new thread and worktree.
 
-Environment (from the account's ~/.agent.env): DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID,
+Environment (from $AGENT_DIR/agent.env via the unit): DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID,
 PREVIEW_DOMAIN, PREVIEW_PREFIX, and optionally AGENT_DIR, PREVIEW_MODE, CODE_MODEL,
 MAX_BUDGET_USD, CLAUDE_TIMEOUT_SECONDS, MAX_WORKTREES, MAIN_BRANCH, ROLE_BUILDER, ROLE_SHIPPER.
 """

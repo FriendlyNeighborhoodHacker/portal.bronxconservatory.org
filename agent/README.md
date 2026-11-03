@@ -15,9 +15,9 @@ directory holds the pieces that document installs:
 | `agent-prompt.md` | read from the main clone on every run (`--append-system-prompt-file`) | This agent's role, workflow (plan, go, build, report, approve) and rules |
 | `settings.json` | read from the main clone on every run (`--settings`) | Claude Code permission allow/deny lists; with `--permission-mode dontAsk` anything not allowed is refused |
 | `preview-setup.sh` | run from the main clone inside each worktree | Makes a worktree servable: copies the preview config in, creates `www/logs` and `www/cache` |
-| `agent.env.example` | `~bronxconservatory/.agent.env` | Secrets and knobs: API key, Discord token, model, preview prefix, limits |
-| `config.local.preview.php.example` | `~bronxconservatory/agent/config.local.php` | The portal config the hook copies into every worktree (preview DB, dev strip, email redirect) |
-| `swe-bronxconservatory.service` | `/etc/systemd/system/` | Runs the machine-wide bridge as `bronxconservatory` with this agent's environment |
+| `agent.env.example` | `~bronxconservatory/agents/portal.bronxconservatory.org/agent.env` | Secrets and knobs: API key, Discord token, model, preview prefix, limits |
+| `config.local.preview.php.example` | `~bronxconservatory/agents/portal.bronxconservatory.org/config.local.php` | The portal config the hook copies into every worktree (preview DB, dev strip, email redirect) |
+| `swe-portal.bronxconservatory.org.service` | `/etc/systemd/system/` | Runs the machine-wide bridge as `bronxconservatory` with this agent's environment |
 | `server/preview-account-add` | `/usr/local/sbin/` | Machine-wide helper: gives any Linux account its own preview prefix (pool + vhost), once per account; see docs/preview-hosts.md |
 | `server/preview-zz-fallback.conf` | `/etc/apache2/sites-available/` | http→https redirect and the "no such preview" fallback for `*.preview1.rosenthaltechnologies.com` |
 | `sudoers.d/bronxconservatory` | `/etc/sudoers.d/` | Optional: full passwordless sudo for the account (which is also the dev site's); the model's sudo is limited by `settings.json` |

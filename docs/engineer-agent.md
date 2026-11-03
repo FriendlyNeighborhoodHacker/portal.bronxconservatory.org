@@ -51,20 +51,20 @@ edits there and the prompt says so; the agent works only in `~/previews/`.
 
 | Path (account `bronxconservatory`) | Purpose |
 |---|---|
-| `~/.agent.env` | secrets and knobs (template: `agent/agent.env.example`) |
+| `~/agents/portal.bronxconservatory.org/agent.env` | secrets and knobs (template: `agent/agent.env.example`) |
 | `~/.my.cnf` | preview DB credentials for the `mysql`/`mariadb` CLI |
-| `~/agent/repo/` | **main clone**, always on `main`, never served, never edited; the bridge syncs it, creates worktrees from it, merges and pushes from it, and reads the prompt, permissions and hook from its `agent/` |
-| `~/agent/worktrees/<slug>/` | one worktree per in-flight Discord thread, branch `feature/<slug>` |
+| `~/agents/portal.bronxconservatory.org/repo/` | **main clone**, always on `main`, never served, never edited; the bridge syncs it, creates worktrees from it, merges and pushes from it, and reads the prompt, permissions and hook from its `agent/` |
+| `~/agents/portal.bronxconservatory.org/worktrees/<slug>/` | one worktree per in-flight Discord thread, branch `feature/<slug>` |
 | `~/previews/bronxconservatory-<slug>` | symlink to that worktree (`PREVIEW_MODE=tree`); served as `https://bronxconservatory-<slug>.preview1.rosenthaltechnologies.com` |
-| `~/agent/config.local.php` | preview portal config; `agent/preview-setup.sh` copies it into each worktree's `www/` |
-| `~/agent/threads.json`, `diffs/` | bridge state and attached diffs |
+| `~/agents/portal.bronxconservatory.org/config.local.php` | preview portal config; `agent/preview-setup.sh` copies it into each worktree's `www/` |
+| `~/agents/portal.bronxconservatory.org/threads.json`, `diffs/` | bridge state and attached diffs |
 
 | Host / service | |
 |---|---|
 | Previews | `bronxconservatory-*.preview1.rosenthaltechnologies.com`, vhost `preview-bronxconservatory.conf` created by `preview-account-add` |
 | PHP | php-fpm 8.4 pool `bronxconservatory` (socket `/run/php/php8.4-fpm-bronxconservatory.sock`), runs as `bronxconservatory` |
 | Database | local MariaDB on the VPS: `bcmportalpreview` (previews) and `bronx_music_conservatory_test` (PHPUnit), user `bronxconservatory` |
-| Bridge | systemd `swe-bronxconservatory.service`, runs the machine-wide `/usr/local/lib/swe-bridge/bridge.py` as `bronxconservatory` |
+| Bridge | systemd `swe-portal.bronxconservatory.org.service`, runs the machine-wide `/usr/local/lib/swe-bridge/bridge.py` as `bronxconservatory` |
 | Discord | bot **SWE - bronxconservatory**, channel `#bronxconservatory-features`, roles `builder` / `shipper` |
 
 Why a local MariaDB rather than the DreamHost MySQL the dev site uses: the
@@ -169,19 +169,19 @@ site's webhook keeps working (it only fetches). Then:
 
 ```
 ssh -T git@github.com                      # "Hi FriendlyNeighborhoodHacker/portal.bronxconservatory.org! ..."
-mkdir -p ~/agent/worktrees ~/agent/diffs ~/previews ~/var/sessions
+mkdir -p ~/agents/portal.bronxconservatory.org/worktrees ~/agents/portal.bronxconservatory.org/diffs ~/previews ~/var/sessions
 chmod 700 ~/var/sessions
-git clone git@github.com:FriendlyNeighborhoodHacker/portal.bronxconservatory.org ~/agent/repo
-git -C ~/agent/repo config user.name "BCM Engineer Agent"
-git -C ~/agent/repo config user.email "bronxconservatory@dev-bronxconservatory.lillyrosenthal.org"
+git clone git@github.com:FriendlyNeighborhoodHacker/portal.bronxconservatory.org ~/agents/portal.bronxconservatory.org/repo
+git -C ~/agents/portal.bronxconservatory.org/repo config user.name "BCM Engineer Agent"
+git -C ~/agents/portal.bronxconservatory.org/repo config user.email "bronxconservatory@dev-bronxconservatory.lillyrosenthal.org"
 ```
 
 **7. Preview config, DB credentials, schema.**
 
 ```
-cp ~/agent/repo/agent/config.local.preview.php.example ~/agent/config.local.php
-chmod 600 ~/agent/config.local.php
-vim ~/agent/config.local.php        # DB_PASS, REMEMBER_TOKEN_KEY, SMTP_* (copy from the dev site's secrets)
+cp ~/agents/portal.bronxconservatory.org/repo/agent/config.local.preview.php.example ~/agents/portal.bronxconservatory.org/config.local.php
+chmod 600 ~/agents/portal.bronxconservatory.org/config.local.php
+vim ~/agents/portal.bronxconservatory.org/config.local.php        # DB_PASS, REMEMBER_TOKEN_KEY, SMTP_* (copy from the dev site's secrets)
 
 cat > ~/.my.cnf <<'EOT'
 [client]
@@ -196,7 +196,7 @@ chmod 600 ~/.my.cnf
 mariadb -e 'SELECT 1'
 # ~/.my.cnf only affects the command-line client. The dev site's PHP ignores it,
 # and deployment.md's commands pass -h/-u/-p explicitly, so they still reach DreamHost.
-mariadb < ~/agent/repo/schema.sql
+mariadb < ~/agents/portal.bronxconservatory.org/repo/schema.sql
 ```
 
 `schema.sql` seeds the developer accounts (`brian.rosenthal@gmail.com` /
@@ -205,11 +205,11 @@ mariadb < ~/agent/repo/schema.sql
 **8. Smoke-test a preview by hand**, exactly the way the bridge makes one:
 
 ```
-git -C ~/agent/repo worktree add -b feature/smoke ~/agent/worktrees/smoke main
-ln -s ~/agent/worktrees/smoke ~/previews/bronxconservatory-smoke
-(cd ~/agent/worktrees/smoke && PREVIEW_ROOT=$PWD/www bash agent/preview-setup.sh)
+git -C ~/agents/portal.bronxconservatory.org/repo worktree add -b feature/smoke ~/agents/portal.bronxconservatory.org/worktrees/smoke main
+ln -s ~/agents/portal.bronxconservatory.org/worktrees/smoke ~/previews/bronxconservatory-smoke
+(cd ~/agents/portal.bronxconservatory.org/worktrees/smoke && PREVIEW_ROOT=$PWD/www bash agent/preview-setup.sh)
 curl -sI https://bronxconservatory-smoke.preview1.rosenthaltechnologies.com/login.php | head -1    # HTTP/1.1 200
-php ~/agent/worktrees/smoke/www/bin/migrate.php                                                    # all applied; "Up to date."
+php ~/agents/portal.bronxconservatory.org/worktrees/smoke/www/bin/migrate.php                                                    # all applied; "Up to date."
 ```
 
 Browser check at `https://bronxconservatory-smoke.preview1.rosenthaltechnologies.com/`:
@@ -222,17 +222,17 @@ in the wrong pool (preview-hosts.md pitfalls). Then clean up:
 
 ```
 rm ~/previews/bronxconservatory-smoke
-git -C ~/agent/repo worktree remove --force ~/agent/worktrees/smoke
-git -C ~/agent/repo branch -D feature/smoke
+git -C ~/agents/portal.bronxconservatory.org/repo worktree remove --force ~/agents/portal.bronxconservatory.org/worktrees/smoke
+git -C ~/agents/portal.bronxconservatory.org/repo branch -D feature/smoke
 ```
 
 **9. Secrets.** Fill in what you have now; the Discord token and channel ID
 come in step 11.
 
 ```
-cp ~/agent/repo/agent/agent.env.example ~/.agent.env
-chmod 600 ~/.agent.env
-vim ~/.agent.env
+cp ~/agents/portal.bronxconservatory.org/repo/agent/agent.env.example ~/agents/portal.bronxconservatory.org/agent.env
+chmod 600 ~/agents/portal.bronxconservatory.org/agent.env
+vim ~/agents/portal.bronxconservatory.org/agent.env
 ```
 
 **BRIAN:** `ANTHROPIC_API_KEY` is a key from the Console org with the credits,
@@ -241,8 +241,8 @@ and that the permission file is honoured (the second command must report that
 the commit was refused):
 
 ```
-set -a; source ~/.agent.env; set +a
-cd ~/agent/repo
+set -a; source ~/agents/portal.bronxconservatory.org/agent.env; set +a
+cd ~/agents/portal.bronxconservatory.org/repo
 claude -p "Reply with the single word ok." --model "$CODE_MODEL" --output-format text
 claude -p "Run exactly: git commit --allow-empty -m test. Report whether it ran." --model "$CODE_MODEL" \
   --permission-mode dontAsk --settings agent/settings.json --append-system-prompt-file agent/agent-prompt.md
@@ -252,7 +252,7 @@ claude -p "Run exactly: git commit --allow-empty -m test. Report whether it ran.
 is asked to rely on it:
 
 ```
-cd ~/agent/repo && php unit-tests/tools/phpunit.phar -c unit-tests/phpunit.xml
+cd ~/agents/portal.bronxconservatory.org/repo && php unit-tests/tools/phpunit.phar -c unit-tests/phpunit.xml
 ```
 
 ### 3. Discord and the service
@@ -272,7 +272,7 @@ on (Server Members, Message Content) → **OAuth2 → URL Generator**: scope
 Create Public Threads, Read Message History, Attach Files, Add Reactions →
 open the URL and authorize it into `Rosenthal Ops`. Give the bot's role access
 to `#bronxconservatory-features`. Right-click the channel → Copy Channel ID
-(`DISCORD_CHANNEL_ID`). Put both values in `~bronxconservatory/.agent.env`.
+(`DISCORD_CHANNEL_ID`). Put both values in `~bronxconservatory/agents/portal.bronxconservatory.org/agent.env`.
 
 You keep `builder` + `shipper`. A client contact gets
 `client-bronxconservatory` + `builder`: they can request, discuss, say **go**,
@@ -283,20 +283,20 @@ is a production deploy. Give someone `shipper` to change that.
 account's environment.
 
 ```
-sudo cp /home/bronxconservatory/agent/repo/agent/swe-bronxconservatory.service /etc/systemd/system/
+sudo cp /home/bronxconservatory/agents/portal.bronxconservatory.org/repo/agent/swe-portal.bronxconservatory.org.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now swe-bronxconservatory
-journalctl -fu swe-bronxconservatory          # "bridge ready as SWE - bronxconservatory#…; channel …; previews bronxconservatory-*.…"
+sudo systemctl enable --now swe-portal.bronxconservatory.org
+journalctl -fu swe-portal.bronxconservatory.org          # "bridge ready as SWE - bronxconservatory#…; channel …; previews bronxconservatory-*.…"
 ```
 
 Optional insurance, as `bronxconservatory` (`crontab -e`): a nightly dump of the
 preview database.
 
 ```
-30 2 * * * mariadb-dump bcmportalpreview | gzip > /home/bronxconservatory/agent/backups/preview-$(date +\%F).sql.gz
+30 2 * * * mariadb-dump bcmportalpreview | gzip > /home/bronxconservatory/agents/portal.bronxconservatory.org/backups/preview-$(date +\%F).sql.gz
 ```
 
-(`mkdir ~/agent/backups` first; prune by hand now and then.)
+(`mkdir ~/agents/portal.bronxconservatory.org/backups` first; prune by hand now and then.)
 
 ### 4. First run: a trivial, safe change
 
@@ -305,7 +305,7 @@ Do the whole loop once with something harmless, from your own account.
 - [ ] Post in `#bronxconservatory-features`: *Add an HTML comment `<!-- agent test -->` at the top of the login page.* The bot opens a thread, posts the branch and a `bronxconservatory-<slug>` preview link that already loads, and replies with a plan or a question. **No diff is attached** (it has not edited).
 - [ ] Reply **go**. The reply has bullets, a `Preview:` link that shows the comment in the page source, a `Commit message:` line, and `changes.diff` attached.
 - [ ] Reply **status**: one request in flight, with its link.
-- [ ] Reply **discard**: the preview link now returns 404; `git -C ~bronxconservatory/agent/repo worktree list` shows only the main clone.
+- [ ] Reply **discard**: the preview link now returns 404; `git -C ~bronxconservatory/agents/portal.bronxconservatory.org/repo worktree list` shows only the main clone.
 - [ ] Repeat the request, **go**, then **approve**. The bridge posts the sha; the commit appears on GitHub `main`; the dev site and production show the comment (view source on the login page). Then request its removal the same way.
 - [ ] From a `builder`-only account: **approve** is refused with the "only a shipper" message.
 - [ ] Ask the agent in-thread to *commit this for me*: it declines and explains that approve does it.
@@ -320,21 +320,21 @@ Do the whole loop once with something harmless, from your own account.
   approve). Changes to `agent/` can go through the agent's own approve flow;
   the prompt tells it not to touch that directory unless asked. The bridge
   itself is shared: see swe-bridge.md to update it.
-- **Logs.** `journalctl -fu swe-bronxconservatory` for the bridge; Admin > Maintenance >
+- **Logs.** `journalctl -fu swe-portal.bronxconservatory.org` for the bridge; Admin > Maintenance >
   Server Logs on any preview for Apache (one log pair for all of the
   account's previews, hostname first on each line); `www/logs/` in the
   worktree for the app. Claude Code transcripts are under
   `~bronxconservatory/.claude/projects/`.
 - **Reset the preview database.** As `bronxconservatory`:
   `mariadb -e 'DROP DATABASE bcmportalpreview; CREATE DATABASE bcmportalpreview CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'`
-  then `mariadb < ~/agent/repo/schema.sql`, then reload sample data from
+  then `mariadb < ~/agents/portal.bronxconservatory.org/repo/schema.sql`, then reload sample data from
   Get Started. Do it when a discarded migration left the schema ahead of `main`.
-- **Spending.** `MAX_BUDGET_USD` in `.agent.env` caps one agent turn; a turn
+- **Spending.** `MAX_BUDGET_USD` in `agent.env` caps one agent turn; a turn
   that hits it stops and reports, and the next message resumes the session.
 - **Stale state** after a manual git operation in the clone or a deleted
-  worktree: `git -C ~bronxconservatory/agent/repo worktree prune`, remove that
-  thread's entry from `~bronxconservatory/agent/threads.json`, and
-  `sudo systemctl restart swe-bronxconservatory`.
+  worktree: `git -C ~bronxconservatory/agents/portal.bronxconservatory.org/repo worktree prune`, remove that
+  thread's entry from `~bronxconservatory/agents/portal.bronxconservatory.org/threads.json`, and
+  `sudo systemctl restart swe-portal.bronxconservatory.org`.
 - **Another agent for another application** (`lillyrosenthal.org`,
   `brianrosenthal.org`): repeat this document with its own account, prefix,
   database, Discord bot and channel, and a copy of `agent/` in that
@@ -347,9 +347,9 @@ Do the whole loop once with something harmless, from your own account.
 |---|---|---|
 | Bridge exits with `PrivilegedIntentsRequired` | Server Members or Message Content intent off | Developer Portal → Bot → enable both; restart |
 | `API Error: 400 ... does not support this model` | Claude Code older than 2.1.251 | as `bronxconservatory`: `claude update`, then restart the bridge |
-| The agent edits before **go**, or ignores the report format | prompt file not found (the clone's `agent/agent-prompt.md` missing or the clone behind) | `git -C ~bronxconservatory/agent/repo log -1 -- agent/`; the bridge posts the `claude` command's stderr in the thread as `(agent error)` |
-| Every tool call refused | `agent/settings.json` missing or invalid JSON | `python3 -m json.tool ~bronxconservatory/agent/repo/agent/settings.json` |
-| New preview link is 404 "No such preview" | `preview-account-add bronxconservatory` not run, or `PREVIEW_PREFIX` in `.agent.env` differs from the provisioned prefix | step 2; `grep PREVIEW_PREFIX ~bronxconservatory/.agent.env` |
+| The agent edits before **go**, or ignores the report format | prompt file not found (the clone's `agent/agent-prompt.md` missing or the clone behind) | `git -C ~bronxconservatory/agents/portal.bronxconservatory.org/repo log -1 -- agent/`; the bridge posts the `claude` command's stderr in the thread as `(agent error)` |
+| Every tool call refused | `agent/settings.json` missing or invalid JSON | `python3 -m json.tool ~bronxconservatory/agents/portal.bronxconservatory.org/repo/agent/settings.json` |
+| New preview link is 404 "No such preview" | `preview-account-add bronxconservatory` not run, or `PREVIEW_PREFIX` in `agent.env` differs from the provisioned prefix | step 2; `grep PREVIEW_PREFIX ~bronxconservatory/agents/portal.bronxconservatory.org/agent.env` |
 | Preview 403 / 500 | see preview-hosts.md pitfalls | |
 | Tests fail with `Access denied ... CREATE DATABASE` | the grant on `bronx_music_conservatory_test` is missing | step 4 |
 | **approve** says main changed and left conflict markers | someone else pushed to `main` touching the same files | tell the agent to resolve the markers, then **approve** again |

@@ -13,20 +13,16 @@
       "Bash(sudo -n apache2ctl configtest)", "Bash(sudo -n tail *)", "Bash(sudo -n journalctl *)"
     ],
     "deny": [
-      "Bash(git commit*)", "Bash(git push*)", "Bash(git merge*)", "Bash(git rebase*)",
-      "Bash(git checkout*)", "Bash(git switch*)", "Bash(git reset*)", "Bash(git stash*)",
-      "Bash(git clean*)", "Bash(git branch*)", "Bash(git worktree*)", "Bash(git remote*)",
-      "Bash(git config*)",
-      "Bash(rm -r*)", "Bash(rm -f*)", "Bash(ssh *)", "Bash(scp *)", "Bash(wget *)",
-      "Bash(sudo -i*)", "Bash(sudo -s*)", "Bash(sudo su*)", "Bash(sudo bash*)", "Bash(sudo sh*)",
-      "Bash(sudo rm*)", "Bash(sudo useradd*)", "Bash(sudo usermod*)", "Bash(sudo visudo*)",
-      "Read(**/config.local.php)", "Edit(**/config.local.php)", "Write(**/config.local.php)",
-      "Read(/home/bronxconservatory/deploy/**)", "Edit(/home/bronxconservatory/deploy/**)", "Write(/home/bronxconservatory/deploy/**)",
-      "Edit(/home/bronxconservatory/dev-bronxconservatory.lillyrosenthal.org/**)", "Write(/home/bronxconservatory/dev-bronxconservatory.lillyrosenthal.org/**)",
-      "Edit(/home/bronxconservatory/agent/repo/**)", "Write(/home/bronxconservatory/agent/repo/**)",
-      "Read(/home/bronxconservatory/agent/threads.json)", "Edit(/home/bronxconservatory/agent/threads.json)",
-      "Read(**/.agent.env)", "Read(**/.my.cnf)", "Read(**/.ssh/**)",
-      "Edit(**/.claude/**)", "Write(**/.claude/**)"
+      "Bash(git commit*)", "Bash(git push*)", "Bash(git merge*)", "Bash(git rebase*)", "Bash(git checkout*)",
+      "Bash(git switch*)", "Bash(git reset*)", "Bash(git stash*)", "Bash(git clean*)", "Bash(git branch*)",
+      "Bash(git worktree*)", "Bash(git remote*)", "Bash(git config*)", "Bash(rm -r*)", "Bash(rm -f*)",
+      "Bash(ssh *)", "Bash(scp *)", "Bash(wget *)", "Bash(sudo -i*)", "Bash(sudo -s*)", "Bash(sudo su*)",
+      "Bash(sudo bash*)", "Bash(sudo sh*)", "Bash(sudo rm*)", "Bash(sudo useradd*)", "Bash(sudo usermod*)",
+      "Bash(sudo visudo*)", "Read(**/config.local.php)", "Edit(**/config.local.php)", "Read(/home/bronxconservatory/deploy/**)",
+      "Edit(/home/bronxconservatory/deploy/**)", "Edit(/home/bronxconservatory/dev-bronxconservatory.lillyrosenthal.org/**)",
+      "Edit(/home/bronxconservatory/agents/portal.bronxconservatory.org/repo/**)", "Read(/home/bronxconservatory/agents/portal.bronxconservatory.org/threads.json)",
+      "Edit(/home/bronxconservatory/agents/portal.bronxconservatory.org/threads.json)", "Read(**/agent.env)",
+      "Read(**/.my.cnf)", "Read(**/.ssh/**)", "Edit(**/.claude/**)"
     ]
   }
 }

@@ -1,6 +1,6 @@
 <?php
 // Preview config for the engineer agent. Install as
-// ~bronxconservatory/agent/config.local.php (chmod 600); agent/preview-setup.sh copies it into
+// ~bronxconservatory/agents/portal.bronxconservatory.org/config.local.php (chmod 600); agent/preview-setup.sh copies it into
 // every worktree as www/config.local.php. See www/config.local.php.example for
 // commentary on each setting and docs/engineer-agent.md for the setup.
 

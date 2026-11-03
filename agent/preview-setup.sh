@@ -7,7 +7,7 @@
 #
 # By hand:  PREVIEW_ROOT=$PWD/www bash agent/preview-setup.sh   (from a worktree)
 set -euo pipefail
-CONFIG="${AGENT_DIR:-$HOME/agent}/config.local.php"
+CONFIG="${AGENT_DIR:-$HOME/agents/portal.bronxconservatory.org}/config.local.php"
 [ -f "$CONFIG" ] || { echo "missing $CONFIG (docs/engineer-agent.md step 7)" >&2; exit 1; }
 install -m 600 "$CONFIG" www/config.local.php
 mkdir -p www/logs www/cache

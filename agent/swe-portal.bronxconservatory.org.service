@@ -1,8 +1,8 @@
-# /etc/systemd/system/swe-bronxconservatory.service
+# /etc/systemd/system/swe-portal.bronxconservatory.org.service
 # Runs the machine-wide swe-bridge (docs/swe-bridge.md) for this repository's
 # agent, as the bronxconservatory account.
-#   sudo systemctl daemon-reload && sudo systemctl enable --now swe-bronxconservatory
-#   journalctl -fu swe-bronxconservatory
+#   sudo systemctl daemon-reload && sudo systemctl enable --now swe-portal.bronxconservatory.org
+#   journalctl -fu swe-portal.bronxconservatory.org
 [Unit]
 Description=swe-bridge for the Bronx Conservatory engineer agent (SWE - bronxconservatory)
 After=network-online.target mariadb.service
@@ -10,8 +10,8 @@ Wants=network-online.target
 
 [Service]
 User=bronxconservatory
-WorkingDirectory=/home/bronxconservatory/agent
-EnvironmentFile=/home/bronxconservatory/.agent.env
+WorkingDirectory=/home/bronxconservatory/agents/portal.bronxconservatory.org
+EnvironmentFile=/home/bronxconservatory/agents/portal.bronxconservatory.org/agent.env
 Environment=PATH=/home/bronxconservatory/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/local/lib/swe-bridge/venv/bin/python /usr/local/lib/swe-bridge/bridge.py
