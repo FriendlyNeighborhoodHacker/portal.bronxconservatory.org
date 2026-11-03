@@ -54,7 +54,9 @@ FALLBACK_MODEL, MAX_BUDGET_USD, CLAUDE_TIMEOUT_SECONDS, MAX_WORKTREES, MAIN_BRAN
 """
 import asyncio
 import json
+import sys
 import time
+import traceback
 import os
 import random
 import re
@@ -134,7 +136,7 @@ def preview_url(slug: str) -> str:
 def new_slug() -> str:
     while True:
         s = f"{random.choice(WORDS)}-{random.choice(WORDS)}"
-        if not tree(s).exists() and not preview_dir(s).exists() and s not in {r["slug"] for r in state.values()}:
+        if not tree(s).exists() and not preview_dir(s).exists() and s not in {r.get("slug") for r in state.values()}:
             return s
 
 
@@ -431,6 +433,20 @@ async def on_ready():
 
 @client.event
 async def on_message(m: discord.Message):
+    try:
+        await handle_message(m)
+    except Exception:
+        log(f"ERROR handling a message from {m.author}:\n{traceback.format_exc()}")
+        try:
+            where = m.channel if isinstance(m.channel, discord.Thread) else m
+            await where.send(f"Something went wrong on my side ({type(sys.exc_info()[1]).__name__}: "
+                             f"{sys.exc_info()[1]}). The details are in the bridge log; say that again "
+                             f"once it is fixed.")
+        except Exception:
+            pass
+
+
+async def handle_message(m: discord.Message):
     if m.author.bot:
         return
     in_thread = isinstance(m.channel, discord.Thread)
@@ -577,4 +593,31 @@ async def on_message(m: discord.Message):
         log(f"[thread {tid}] replied" + (f"; commit message {rec['commit']!r}" if rec.get("commit") else ""))
 
 
-client.run(os.environ["DISCORD_BOT_TOKEN"])
+def selftest() -> None:
+    """Exercise the logic that does not need Discord or git, against mixed thread records."""
+    global state
+    state = {
+        "1": {"phase": "plan", "title": "What is 2+2?", "last": 1},
+        "2": {"phase": "build", "slug": "amber-pine", "title": "reorder lessons", "last": 2},
+        "3": {"phase": "build", "slug": "tide-quartz", "title": "old one", "last": 0, "parked": True},
+    }
+    assert new_slug() not in ("amber-pine", "tide-quartz")          # must tolerate records without a slug
+    assert building() == 1, building()
+    st = status_text()
+    assert "talking" in st and "building" in st and "parked" in st, st
+    assert build_marker("BUILD\nplan line") == "plan line"
+    assert build_marker("**BUILD**\n\nplan") == "plan"
+    assert build_marker("I would BUILD this") is None
+    assert build_marker("4") is None
+    assert extract_line("x\n`Commit message: Reorder lessons`\n", "Commit message:") == "Reorder lessons"
+    assert extract_block("a\n**Post-deploy:**\n- step `x.sql`\n", "Post-deploy:").endswith("`x.sql`")
+    live = [r for r in state.values() if r.get("phase") == "build" and not r.get("parked")]
+    assert min(live, key=lambda r: r.get("last", 0))["slug"] == "amber-pine"
+    print("selftest ok")
+
+
+if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        selftest()
+    else:
+        client.run(os.environ["DISCORD_BOT_TOKEN"])
