@@ -1,0 +1,60 @@
+<?php
+// Preview config for the engineer agent. Install as
+// ~bcmagent/agents/bcm/config.local.php (chmod 600); the bridge copies it into
+// every worktree as www/config.local.php. See www/config.local.php.example for
+// commentary on each setting and docs/engineer-agent.md for the setup.
+
+// Local MariaDB on the VPS, never DreamHost's shared MySQL and never production.
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'bcmportalpreview');
+define('DB_USER', 'bcmagent');
+define('DB_PASS', '<preview db password>');
+define('APP_NAME', 'BCM Portal (PREVIEW)');
+
+// Dev strip on every page + Get Started > Reset & Load All Sample Data.
+define('DEV_SITE', true);
+
+// Same SMTP settings as the dev site; safe because of the redirect below.
+define('SMTP_HOST', 'smtp.gmail.com');
+define('SMTP_PORT', 587);
+define('SMTP_USER', '');
+define('SMTP_PASS', '');
+define('SMTP_SECURE', 'tls');
+define('SMTP_FROM_EMAIL', '');
+define('SMTP_FROM_NAME', 'Bronx Conservatory of Music');
+
+// Every email the preview sends lands here, never with a family.
+define('EMAIL_REDIRECT_TO', 'brian.rosenthal@gmail.com');
+define('EMAIL_REDIRECT_ALLOWLIST', []);
+
+// php -r "echo bin2hex(random_bytes(32));"
+define('REMEMBER_TOKEN_KEY', '<random hex>');
+
+// Stripe TEST-mode keys, or empty to disable checkout on the preview.
+define('STRIPE_SECRET_KEY', '');
+define('STRIPE_PUBLISHABLE_KEY', '');
+define('STRIPE_WEBHOOK_SECRET', '');
+
+// Empty so the public forms are testable without a captcha.
+define('RECAPTCHA_SITE_KEY', '');
+define('RECAPTCHA_SECRET_KEY', '');
+
+// No deploy webhook on the preview: the bridge is what updates the tree.
+define('GIT_WEBHOOK_SECRET', '');
+
+// Session files in a directory this account owns. All of this account's
+// previews share the directory; logins do not carry across hostnames, because
+// the session cookie is per host.
+define('SESSION_SAVE_PATH', '/home/bcmagent/var/sessions');
+
+// config.local.php lives INSIDE each worktree's www/, so the local-checkout
+// form works and always points at the migrations of the tree being served.
+define('MIGRATIONS_DIR', dirname(__DIR__) . '/db_migrations');
+// SAMPLE_DATA_DIR: leave undefined; sample_data/ beside www/ is found automatically.
+
+// All of this account's previews share one Apache log pair (vhost_combined
+// format, so each line starts with the hostname).
+define('ADMIN_LOG_FILES', [
+    'apache-access' => '/var/log/apache2/preview-bcmagent-access.log',
+    'apache-error'  => '/var/log/apache2/preview-bcmagent-error.log',
+]);

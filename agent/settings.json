@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Read", "Edit", "Write", "Glob", "Grep",
+      "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)", "Bash(git show*)",
+      "Bash(git blame*)", "Bash(git grep*)", "Bash(git ls-files*)", "Bash(git rev-parse*)",
+      "Bash(php *)", "Bash(mysql *)", "Bash(mariadb *)", "Bash(mysqldump *)", "Bash(mariadb-dump *)",
+      "Bash(ls *)", "Bash(cat *)", "Bash(head *)", "Bash(tail *)", "Bash(grep *)", "Bash(find *)",
+      "Bash(wc *)", "Bash(echo *)", "Bash(cd *)", "Bash(pwd)", "Bash(sort *)", "Bash(uniq *)",
+      "Bash(diff *)", "Bash(mkdir *)", "Bash(cp *)", "Bash(mv *)", "Bash(touch *)", "Bash(sed *)",
+      "Bash(awk *)", "Bash(date*)", "Bash(curl *)",
+      "Bash(sudo -n systemctl reload apache2)",
+      "Bash(sudo -n apache2ctl configtest)", "Bash(sudo -n tail *)", "Bash(sudo -n journalctl *)"
+    ],
+    "deny": [
+      "Bash(git commit*)", "Bash(git push*)", "Bash(git merge*)", "Bash(git rebase*)",
+      "Bash(git checkout*)", "Bash(git switch*)", "Bash(git reset*)", "Bash(git stash*)",
+      "Bash(git clean*)", "Bash(git branch*)", "Bash(git worktree*)", "Bash(git remote*)",
+      "Bash(git config*)",
+      "Bash(rm -r*)", "Bash(rm -f*)", "Bash(ssh *)", "Bash(scp *)", "Bash(wget *)",
+      "Bash(sudo -i*)", "Bash(sudo -s*)", "Bash(sudo su*)", "Bash(sudo bash*)", "Bash(sudo sh*)",
+      "Bash(sudo rm*)", "Bash(sudo useradd*)", "Bash(sudo usermod*)", "Bash(sudo visudo*)",
+      "Read(**/config.local.php)", "Edit(**/config.local.php)", "Write(**/config.local.php)",
+      "Read(**/.agent.env)", "Read(**/.my.cnf)", "Read(**/.ssh/**)",
+      "Edit(**/.claude/**)", "Write(**/.claude/**)"
+    ]
+  }
+}

@@ -7,3 +7,4 @@ Local dev quickstart:
 - Migrations: Admin > Migrations in the portal (tracked in schema_migrations; files in db_migrations/ at the
   top level, outside the web root — the page is enabled only where MIGRATIONS_DIR is set in config.local.php)
 - Server logs: Admin > Maintenance > Server Logs (paths configurable via ADMIN_LOG_FILES in config.local.php)
+- Discord engineer agent ("SWE - bronxconservatory"): files in agent/, setup in docs/engineer-agent.md; per-account preview hostnames in docs/preview-hosts.md

@@ -1,0 +1,21 @@
+# /etc/systemd/system/bcm-bridge.service
+# Runs agent/bridge.py from the agent's main clone, as bcmagent.
+#   sudo systemctl daemon-reload && sudo systemctl enable --now bcm-bridge
+#   journalctl -fu bcm-bridge
+[Unit]
+Description=Discord bridge for the Bronx Conservatory engineer agent (SWE - bronxconservatory)
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+User=bcmagent
+WorkingDirectory=/home/bcmagent/agents/bcm
+EnvironmentFile=/home/bcmagent/.agent.env
+Environment=PATH=/home/bcmagent/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/bcmagent/agents/venv/bin/python /home/bcmagent/agents/bcm/repo/agent/bridge.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

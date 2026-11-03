@@ -321,8 +321,9 @@ test email should arrive with the "[Redirected ...]" subject tag. A database
 connection error almost always means the allowable-hosts setting in step 2.
 Every page should show the thin yellow "Dev site — note this is test data"
 strip at the top (`DEV_SITE`). Then Admin > Get Started
-(`/admin/setup/index.php`) > **Load All Sample Data** fills the database with
-the `sample_data/` roster, both semesters and the fall schedule in one click.
+(`/admin/setup/index.php`) > **Reset & Load All Sample Data** clears any
+previous load and fills the database with the `sample_data/` roster, both
+semesters, the fall schedule and a set of leads in one click.
 
 **15. GitHub webhook (github.com).** Repo Settings > Webhooks > Add webhook:
 payload URL `https://dev-bronxconservatory.lillyrosenthal.org/gitwebhook.php`,

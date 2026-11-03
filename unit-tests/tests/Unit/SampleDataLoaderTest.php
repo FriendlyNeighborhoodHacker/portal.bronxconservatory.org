@@ -87,12 +87,12 @@ final class SampleDataLoaderTest extends TestCase
         $this->assertSame(5, LeadManagement::countLeads(['source' => 'registration']));
         $this->assertSame(3, LeadManagement::countLeads(['source' => 'inquiry']));
         $this->assertSame(2, (int)pdo()->query('SELECT COUNT(*) FROM leads WHERE amount_paid_cents > 0 AND paid_at IS NOT NULL')->fetchColumn());
-        $this->assertSame(5, (int)pdo()->query('SELECT COUNT(*) FROM lead_notes')->fetchColumn());
+        $this->assertSame(6, (int)pdo()->query('SELECT COUNT(*) FROM lead_notes')->fetchColumn());
         $this->assertSame(3, (int)pdo()->query('SELECT COUNT(*) FROM incomplete_inquiries')->fetchColumn());
         $this->assertSame(1, (int)pdo()->query("SELECT COUNT(*) FROM incomplete_inquiries WHERE source = 'registration' AND last_step_completed = 4")->fetchColumn());
         $this->assertSame((string)$fall, Settings::get('registration_semester_id', ''));
         $summary = SampleDataLoader::summarize($result);
-        $this->assertStringStartsWith('Sample data loaded. general/locations.csv: 2 ', $summary); // seeded by schema.sql, so updated not created
+        $this->assertStringStartsWith('Sample data loaded. Reset sample tables: 1 deleted; general/locations.csv: 2 ', $summary); // locations are seeded by schema.sql, so updated not created
         $this->assertStringContainsString('general/teachers.csv: 6 created', $summary);
         $this->assertStringContainsString('Pre-populate Spring 2027 from Fall 2026: 17 created', $summary);
 
@@ -110,7 +110,8 @@ final class SampleDataLoaderTest extends TestCase
         $this->assertCount(8, HoldBlockManagement::holdBlockReservationsForSemester($fall2));
         $this->assertSame(8, LeadManagement::countLeads([]));
         $this->assertSame(3, (int)pdo()->query('SELECT COUNT(*) FROM incomplete_inquiries')->fetchColumn());
-        $this->assertSame(33, (int)pdo()->query('SELECT COUNT(*) FROM users WHERE is_developer = 0 AND id <> ' . $ctx->id)->fetchColumn());
+        // 33 students and parents + 6 teachers, exactly once.
+        $this->assertSame(39, (int)pdo()->query('SELECT COUNT(*) FROM users WHERE is_developer = 0 AND id <> ' . $ctx->id)->fetchColumn());
         $this->assertNotNull(UserManagement::findById($developer));
     }
 
