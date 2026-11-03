@@ -7,4 +7,4 @@ Local dev quickstart:
 - Migrations: Admin > Migrations in the portal (tracked in schema_migrations; files in db_migrations/ at the
   top level, outside the web root — the page is enabled only where MIGRATIONS_DIR is set in config.local.php)
 - Server logs: Admin > Maintenance > Server Logs (paths configurable via ADMIN_LOG_FILES in config.local.php)
-- Discord engineer agent for this repo: agent/ plus docs/engineer-agent.md. The shared bridge, the preview-host scheme and the IT agent live in the sibling repository dreamhost.dev.agent (its docs/swe-bridge.md is the overview).
+- Discord engineer agent for this repo: agent/ plus docs/engineer-agent.md. The shared bridge, the preview-host scheme and the IT agent live in the sibling repository it-agents (its docs/swe-bridge.md is the overview).

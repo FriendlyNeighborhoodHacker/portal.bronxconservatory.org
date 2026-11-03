@@ -20,7 +20,7 @@ directory holds the pieces that document installs:
 | `sudoers.d/bronxconservatory` | `/etc/sudoers.d/` | Optional: full passwordless sudo for the account (which is also the dev site's); the model's sudo is limited by `settings.json` |
 
 The bridge itself, the preview-host scheme and the server helpers live in
-the `dreamhost.dev.agent` repository (`bridge/bridge.py`, `docs/`,
+the `it-agents` repository (`bridge/bridge.py`, `docs/`,
 `server/`), together with templates for new agents. Because the prompt,
 permissions and hook are read from the main clone, changing this agent is an
 ordinary change to this repository: edit here, push to `main` (or have the
