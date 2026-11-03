@@ -74,9 +74,14 @@ function fx_semester(UserContext $ctx, string $season = 'fall', int $year = 2030
  * Returns [semesterId, locationId, teacherId, dayOfWeek, dates[]].
  */
 function fx_semester_with_dates(UserContext $ctx, int $teacherId, string $firstDate, int $count, string $season = 'fall', int $year = 2030, ?string $start = null, ?string $end = null): array {
+    // Calendar arithmetic, not seconds: "+N weeks" keeps the weekday across a
+    // daylight-saving change, where N * 7 * 86400 lands an hour early and, from
+    // a midnight start, on the previous day. (Only visible when PHP's timezone
+    // observes DST, as the servers' America/New_York does.)
     $firstTs = strtotime($firstDate);
-    $start = $start ?? date('Y-m-d', $firstTs - 7 * 86400);
-    $end = $end ?? date('Y-m-d', $firstTs + ($count + 2) * 7 * 86400);
+    $weeks = static fn(int $n): string => date('Y-m-d', strtotime(($n >= 0 ? '+' : '') . $n . ' weeks', $firstTs));
+    $start = $start ?? $weeks(-1);
+    $end = $end ?? $weeks($count + 2);
     $semesterId = SemesterManagement::createSemester($ctx, $season, $year, $start, $end, [
         'registration_fee' => '50.00',
         'lesson_fee_30_minutes' => '300.00',
@@ -94,7 +99,7 @@ function fx_semester_with_dates(UserContext $ctx, int $teacherId, string $firstD
 
     $dates = [];
     for ($i = 0; $i < $count; $i++) {
-        $date = date('Y-m-d', $firstTs + $i * 7 * 86400);
+        $date = $weeks($i);
         SemesterManagement::upsertLocationDate($ctx, $semesterId, $locationId, $date, '09:00:00', '17:00:00', 'active', 'Day ' . ($i + 1));
         $dates[] = $date;
     }
