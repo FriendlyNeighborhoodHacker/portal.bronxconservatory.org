@@ -9,12 +9,12 @@ whatever production needs by hand (a migration, a config constant).
 
 This is the setup guide: follow it top to bottom on the dev VPS. The files it
 installs live in [agent/](../agent/) (see its README for the map). Two
-machine-wide pieces are set up once and shared by every agent on the box:
-the preview scheme in [preview-hosts.md](preview-hosts.md) and the bridge
-itself in [swe-bridge.md](swe-bridge.md), which also explains the commands,
-the `agent/` contract and the pitfalls every agent has in common. The design
-came from the "Engineer Agent (VS Code handoff)" brainstorm; the differences
-are listed at the end.
+machine-wide pieces are set up once and shared by every agent on the box,
+and are documented in the `dreamhost.dev.agent` repository: the preview
+scheme (`docs/preview-hosts.md`) and the bridge itself (`docs/swe-bridge.md`,
+which also explains the thread words, the `agent/` contract and the pitfalls
+every agent has in common). The design came from the "Engineer Agent (VS Code
+handoff)" brainstorm; the differences are listed at the end.
 
 ## The workflow you get
 
@@ -83,8 +83,8 @@ session or a secret.
 
 ### 0. Prerequisites: the preview scheme and the bridge
 
-Do [preview-hosts.md](preview-hosts.md) "One-time machine setup" and
-[swe-bridge.md](swe-bridge.md) "Install the bridge" first if they have not
+Do `docs/preview-hosts.md` "One-time machine setup" and `docs/swe-bridge.md`
+"Install the bridge" (both in `dreamhost.dev.agent`) first if they have not
 been done. Check:
 
 ```
@@ -218,7 +218,7 @@ Admin > Maintenance > Migrations lists everything as applied; Admin > Get
 Started > **Reset & Load All Sample Data** fills the preview database with the
 sample roster (it stays loaded for every later preview, since they share the
 database). A 500 with "Permission denied" on `config.local.php` means PHP ran
-in the wrong pool (preview-hosts.md pitfalls). Then clean up:
+in the wrong pool (`docs/preview-hosts.md` pitfalls, in `dreamhost.dev.agent`). Then clean up:
 
 ```
 rm ~/previews/bronxconservatory-smoke
@@ -320,7 +320,7 @@ Do the whole loop once with something harmless, from your own account.
   are on `main` and the clone has synced (it syncs on every new request and
   approve). Changes to `agent/` can go through the agent's own approve flow;
   the prompt tells it not to touch that directory unless asked. The bridge
-  itself is shared: see swe-bridge.md to update it.
+  itself is shared: see `docs/swe-bridge.md` in `dreamhost.dev.agent` to update it.
 - **Logs.** `journalctl -fu swe-portal.bronxconservatory.org` for the bridge; Admin > Maintenance >
   Server Logs on any preview for Apache (one log pair for all of the
   account's previews, hostname first on each line); `www/logs/` in the
@@ -351,7 +351,7 @@ Do the whole loop once with something harmless, from your own account.
 | The agent edits before **go**, or ignores the report format | prompt file not found (the clone's `agent/agent-prompt.md` missing or the clone behind) | `git -C ~bronxconservatory/agents/portal.bronxconservatory.org/repo log -1 -- agent/`; the bridge posts the `claude` command's stderr in the thread as `(agent error)` |
 | Every tool call refused | `agent/settings.json` missing or invalid JSON | `python3 -m json.tool ~bronxconservatory/agents/portal.bronxconservatory.org/repo/agent/settings.json` |
 | New preview link is 404 "No such preview" | `preview-account-add bronxconservatory` not run, or `PREVIEW_PREFIX` in `agent.env` differs from the provisioned prefix | step 2; `grep PREVIEW_PREFIX ~bronxconservatory/agents/portal.bronxconservatory.org/agent.env` |
-| Preview 403 / 500 | see preview-hosts.md pitfalls | |
+| Preview 403 / 500 | see `docs/preview-hosts.md` pitfalls in `dreamhost.dev.agent` | |
 | Tests fail with `Access denied ... CREATE DATABASE` | the grant on `bronx_music_conservatory_test` is missing | step 4 |
 | **approve** says main changed and left conflict markers | someone else pushed to `main` touching the same files | tell the agent to resolve the markers, then **approve** again |
 | `git push` rejected | deploy key read-only, or branch protection | GitHub → Deploy keys → Allow write access; or add the key to the protection allowlist |
