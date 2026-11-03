@@ -302,8 +302,8 @@ preview database.
 
 Do the whole loop once with something harmless, from your own account.
 
-- [ ] Post in `#bronxconservatory-features`: *Add an HTML comment `<!-- agent test -->` at the top of the login page.* The bot opens a thread, posts the branch and a `bronxconservatory-<slug>` preview link that already loads, and replies with a plan or a question. **No diff is attached** (it has not edited).
-- [ ] Reply **go**. The reply has bullets, a `Preview:` link that shows the comment in the page source, a `Commit message:` line, and `changes.diff` attached.
+- [ ] Post in `#bronxconservatory-features`: *Add an HTML comment `<!-- agent test -->` at the top of the login page.* The bot opens a thread and replies with a plan or a question. **No diff is attached and no link is posted** (it has not edited).
+- [ ] Reply **go**. The reply has bullets, a `Preview:` link (`bronxconservatory-<slug>.preview1...`) whose page source shows the comment, a `Commit message:` line, and `changes.diff` attached.
 - [ ] Reply **status**: one request in flight, with its link.
 - [ ] Reply **discard**: the preview link now returns 404; `git -C ~bronxconservatory/agents/portal.bronxconservatory.org/repo worktree list` shows only the main clone.
 - [ ] Repeat the request, **go**, then **approve**. The bridge posts the sha; the commit appears on GitHub `main`; the dev site and production show the comment (view source on the login page). Then request its removal the same way.

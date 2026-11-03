@@ -36,7 +36,7 @@ in the channel opens a new thread and worktree.
 
 Environment (from $AGENT_DIR/agent.env via the unit): DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID,
 PREVIEW_DOMAIN, PREVIEW_PREFIX, and optionally AGENT_DIR, PREVIEW_MODE, CODE_MODEL,
-MAX_BUDGET_USD, CLAUDE_TIMEOUT_SECONDS, MAX_WORKTREES, MAIN_BRANCH, ROLE_BUILDER, ROLE_SHIPPER.
+FALLBACK_MODEL, MAX_BUDGET_USD, CLAUDE_TIMEOUT_SECONDS, MAX_WORKTREES, MAIN_BRANCH, ROLE_BUILDER, ROLE_SHIPPER.
 """
 import asyncio
 import json
@@ -64,6 +64,7 @@ CHANNEL = int(os.environ["DISCORD_CHANNEL_ID"])
 ROLE_BUILDER = os.environ.get("ROLE_BUILDER", "builder")
 ROLE_SHIPPER = os.environ.get("ROLE_SHIPPER", "shipper")
 MODEL = os.environ.get("CODE_MODEL", "claude-fable-5-1")
+FALLBACK = os.environ.get("FALLBACK_MODEL", "")          # e.g. "opus,sonnet": tried in order when MODEL is overloaded or unavailable
 PREVIEW_DOMAIN = os.environ["PREVIEW_DOMAIN"]                 # preview1.rosenthaltechnologies.com
 PREVIEW_PREFIX = os.environ.get("PREVIEW_PREFIX") or os.environ.get("USER") or HOME.name
 PREVIEW_MODE = os.environ.get("PREVIEW_MODE", "tree")         # tree | build
@@ -201,10 +202,13 @@ def run_claude(wt: Path, prompt: str, session: str | None):
            "--settings", str(SETTINGS_FILE),           # agent/settings.json from the main clone
            "--append-system-prompt-file", str(PROMPT_FILE),
            "--max-budget-usd", MAX_BUDGET_USD]
+    if FALLBACK:
+        cmd += ["--fallback-model", FALLBACK]
     if session:
         cmd += ["--resume", session]
     try:
-        r = subprocess.run(cmd, cwd=str(wt), capture_output=True, text=True, timeout=CLAUDE_TIMEOUT)
+        r = subprocess.run(cmd, cwd=str(wt), capture_output=True, text=True, timeout=CLAUDE_TIMEOUT,
+                           stdin=subprocess.DEVNULL)      # claude waits 3 s for stdin otherwise
     except subprocess.TimeoutExpired:
         return f"(agent timed out after {CLAUDE_TIMEOUT}s)", session
     try:
@@ -392,7 +396,6 @@ async def on_message(m: discord.Message):
                                 "author": m.author.display_name}
             save()
             log(f"[thread {tid}] new request -> slug {slug}, branch feature/{slug}, {preview_url(slug)}")
-            await thread.send(f"Working on branch `feature/{slug}`. Preview for this request: {preview_url(slug)}")
             text = (f"[Bridge: this thread's working tree is on branch feature/{slug} and is served live at "
                     f"{preview_url(slug)} . Request from {m.author.display_name} follows.]\n\n{text}")
         else:

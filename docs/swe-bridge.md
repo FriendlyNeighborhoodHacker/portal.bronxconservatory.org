@@ -40,9 +40,9 @@ preview exists as soon as `~/previews/<prefix>-<slug>/www` does.
 
 | Who says | What happens |
 |---|---|
-| anyone with `builder` or `shipper`, top level | a thread, a branch `feature/<slug>`, a worktree, a preview URL, and the agent plans |
+| anyone with `builder` or `shipper`, top level | a thread, a branch `feature/<slug>`, a worktree, and the agent reads the message: a question gets an answer, a request gets a plan or gets built, as the repository's prompt decides. The bridge posts nothing of its own at this point; the preview link first appears in the agent's report and with the diff, once there is something to look at |
 | **go** (or any discussion) | passed to the agent; it implements, the bridge refreshes the preview and attaches the diff |
-| **status** | lists in-flight requests and their links (top level or in a thread) |
+| **status** | lists in-flight threads and their links (top level or in a thread) |
 | **discard** | worktree, branch and preview removed |
 | **approve** (`shipper` only) | commit on the branch, fast-forward `main`, push, preview removed, any `Post-deploy:` block reposted |
 
@@ -56,7 +56,7 @@ once; previews themselves are served concurrently.
 
 | File in the repository | Required | Used how |
 |---|---|---|
-| `agent/agent-prompt.md` | yes | appended to Claude Code's system prompt on every turn: role, workflow (plan first, wait for go, implement, report with `Commit message:` and an optional `Post-deploy:` block last), rules |
+| `agent/agent-prompt.md` | yes | appended to Claude Code's system prompt on every turn: who the agent talks to and how much to check before building, how to report (`Commit message:` line, optional `Post-deploy:` block last), rules |
 | `agent/settings.json` | yes | Claude Code permissions, passed with `--settings`; with `--permission-mode dontAsk` anything not in `allow` is refused, so the `allow` list is the whole surface. `deny` git mutations regardless |
 | `agent/preview-setup.sh` | no | run with `bash` inside the worktree right after it is created and after every agent turn, with `PREVIEW_ROOT` (the directory the vhost serves), `PREVIEW_URL`, `PREVIEW_LABEL`, `SLUG`, `AGENT_DIR` in the environment. Copy config, build assets, anything that makes the tree servable. Must be idempotent. If it fails after an agent turn the bridge hands the error to the agent once, then reports it |
 | `agent/agent.env.example` | convention | template for `~/agents/<site>/agent.env` |
@@ -95,10 +95,11 @@ e.g. `~/agents/brianrosenthal.org/`, `~/agents/portal.bronxconservatory.org/`):
 | Variable | Required | Meaning |
 |---|---|---|
 | `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID` | yes | the bot and the one channel it watches |
-| `ANTHROPIC_API_KEY` | yes | read by Claude Code |
+| `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` | one of them | read by Claude Code. The API key meters usage separately on the Console org. The OAuth token (`claude setup-token` on a machine where you are logged in; it prints a `sk-ant-oat01-...` value once) runs the agent on your Claude subscription, sharing its limits with your own sessions. If both are set the API key wins, so remove it to use the subscription |
 | `PREVIEW_DOMAIN`, `PREVIEW_PREFIX` | yes | `preview1.rosenthaltechnologies.com` and the account's provisioned prefix |
 | `PREVIEW_MODE` | no | `tree` (default) or `build` |
 | `CODE_MODEL` | no | default `claude-fable-5-1` (needs Claude Code ≥ 2.1.251) |
+| `FALLBACK_MODEL` | no | models to try, in order, when `CODE_MODEL` is overloaded or not available to the account, e.g. `opus,sonnet` (Claude Code's `--fallback-model`); unset means fail the turn instead |
 | `MAX_BUDGET_USD` | no | spend cap per agent turn, default 15 |
 | `CLAUDE_TIMEOUT_SECONDS`, `HOOK_TIMEOUT_SECONDS` | no | 3600 and 900 |
 | `MAX_WORKTREES` | no | requests in flight at once, default 3 |
@@ -148,8 +149,9 @@ shape is always:
 8. **Service** (as debian): copy the repo's `agent/swe-<site>.service`
    into `/etc/systemd/system/`, `daemon-reload`, `enable --now`,
    `journalctl -fu swe-<site>` shows "bridge ready".
-9. **First run** with a trivial change: plan, **go**, preview, **discard**;
-   again with **approve**; a builder-only account is refused **approve**.
+9. **First run** with a trivial change: plan or build (as the prompt
+   decides), preview, **discard**; again with **approve**; a builder-only
+   account is refused **approve**.
 
 ## Pitfalls common to every agent
 
@@ -158,7 +160,7 @@ shape is always:
 | unit exits with `PrivilegedIntentsRequired` | Server Members or Message Content intent off | Developer Portal → Bot → enable both; restart |
 | `API Error: 400 ... does not support this model` | Claude Code older than 2.1.251 | as the account: `claude update`; restart the unit |
 | `(agent error)` with `claude: not found` in the thread | `~/.local/bin` not on the unit's `PATH` | the `Environment=PATH=` line in the unit |
-| the agent edits before **go**, or ignores the report format | `agent/agent-prompt.md` missing from the main clone, or the clone behind | `git -C ~/agents/<site>/repo log -1 -- agent/`; the clone syncs on each new request |
+| the agent edits before it should, or ignores the report format | `agent/agent-prompt.md` missing from the main clone, or the clone behind | `git -C ~/agents/<site>/repo log -1 -- agent/`; the clone syncs on each new request |
 | every tool call refused | `agent/settings.json` missing or invalid | `python3 -m json.tool ~/agents/<site>/repo/agent/settings.json` |
 | "Couldn't create a working tree" with a hook error | `preview-setup.sh` failed (missing config, missing toolchain) | run it by hand in a worktree with `PREVIEW_ROOT` set and read the output |
 | preview link 404 "No such preview" | `preview-account-add` not run for this account, or `PREVIEW_PREFIX` differs from the provisioned prefix | preview-hosts.md |
