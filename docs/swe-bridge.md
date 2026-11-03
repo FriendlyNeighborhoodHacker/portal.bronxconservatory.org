@@ -38,25 +38,50 @@ preview exists as soon as `~/previews/<prefix>-<slug>/www` does.
 
 ## What a thread looks like
 
-| Who says | What happens |
-|---|---|
-| anyone with `builder` or `shipper`, top level | a thread, a branch `feature/<slug>`, a worktree, and the agent reads the message: a question gets an answer, a request gets a plan or gets built, as the repository's prompt decides. The bridge posts nothing of its own at this point; the preview link first appears in the agent's report and with the diff, once there is something to look at |
-| **go** (or any discussion) | passed to the agent; it implements, the bridge refreshes the preview and attaches the diff |
-| **status** | lists in-flight threads and their links (top level or in a thread) |
-| **discard** | worktree, branch and preview removed |
-| **approve** (`shipper` only) | commit on the branch, fast-forward `main`, push, preview removed, any `Post-deploy:` block reposted |
+A thread is a conversation first. A top-level post by anyone with `builder`
+or `shipper` opens a thread, and that is all: no branch, no worktree, no
+preview. The agent answers from the main clone in Claude Code's plan mode,
+which is read-only (file writes are refused by the tool; only the
+allow-listed read-only commands run). A question gets an answer; a request
+gets built or gets a question back, as the repository's prompt decides.
+The brianrosenthal.org agent builds as soon as a request is specific; the
+portal's agent proposes and waits for a yes, because its users are the client.
+
+When the agent is going to change files it starts its reply with a line that
+says `BUILD`, followed by what it will do. The bridge posts that, creates the
+worktree on `feature/<slug>`, runs the repository's `preview-setup.sh`, posts
+the preview link, and hands the agent the plan to implement in the worktree
+(a fresh Claude Code session there; the conversation's session stays in the
+main clone). From then on every message in the thread reaches the agent in
+its worktree: it revises, the bridge refreshes the preview and attaches the
+diff. The preview link therefore never appears before there is something to
+look at.
+
+Nobody has to tidy up. `MAX_WORKTREES` (3) is how many threads may have a
+live worktree at once; when another build needs a slot the bridge **parks**
+the build that has been quiet longest: it commits that thread's uncommitted
+work on its branch as "WIP", removes the worktree and preview, and the next
+message in that thread rebuilds the worktree from the branch with the work
+uncommitted again, as if nothing happened. Conversations are never limited.
+
+| Who says | Conversation phase | Build phase |
+|---|---|---|
+| anything else | answered read-only from the main clone | passed to the agent in its worktree; preview refreshed, diff attached |
+| **status** | lists open threads: talking, building or parked, with preview links (top level or in a thread) | same |
+| **discard** | thread closed, nothing to remove | worktree, branch and preview removed (optional; parking covers the rest) |
+| **approve** (`shipper` only) | refused: nothing built yet | commit on the branch, fast-forward `main`, push, preview removed, any `Post-deploy:` block reposted |
 
 If `main` moved under a thread and the merge conflicts, the bridge leaves the
 conflict markers in the tree and asks for the agent to resolve them (by
-editing files), then **approve** again. `MAX_WORKTREES` (3) caps what is in
-flight. The bridge serializes git and agent work, so two threads never run at
-once; previews themselves are served concurrently.
+editing files), then **approve** again. The bridge serializes git and agent
+work, so two threads never run at once; previews themselves are served
+concurrently.
 
 ## The `agent/` contract
 
 | File in the repository | Required | Used how |
 |---|---|---|
-| `agent/agent-prompt.md` | yes | appended to Claude Code's system prompt on every turn: who the agent talks to and how much to check before building, how to report (`Commit message:` line, optional `Post-deploy:` block last), rules |
+| `agent/agent-prompt.md` | yes | appended to Claude Code's system prompt on every turn: who the agent talks to and how much to check before building, the `BUILD` line that starts a change (the bridge labels each message `CONVERSATION phase` or `BUILD phase`), how to report (`Commit message:` line, optional `Post-deploy:` block last), rules. Write it the way you would brief a colleague, not as a form |
 | `agent/settings.json` | yes | Claude Code permissions, passed with `--settings`; with `--permission-mode dontAsk` anything not in `allow` is refused, so the `allow` list is the whole surface. `deny` git mutations regardless |
 | `agent/preview-setup.sh` | no | run with `bash` inside the worktree right after it is created and after every agent turn, with `PREVIEW_ROOT` (the directory the vhost serves), `PREVIEW_URL`, `PREVIEW_LABEL`, `SLUG`, `AGENT_DIR` in the environment. Copy config, build assets, anything that makes the tree servable. Must be idempotent. If it fails after an agent turn the bridge hands the error to the agent once, then reports it |
 | `agent/agent.env.example` | convention | template for `~/agents/<site>/agent.env` |
@@ -149,9 +174,9 @@ shape is always:
 8. **Service** (as debian): copy the repo's `agent/swe-<site>.service`
    into `/etc/systemd/system/`, `daemon-reload`, `enable --now`,
    `journalctl -fu swe-<site>` shows "bridge ready".
-9. **First run** with a trivial change: plan or build (as the prompt
-   decides), preview, **discard**; again with **approve**; a builder-only
-   account is refused **approve**.
+9. **First run**: a question (answered, nothing created), then a trivial
+   change (built, preview link, diff), **discard**; again with **approve**;
+   a builder-only account is refused **approve**.
 
 ## Pitfalls common to every agent
 
@@ -160,7 +185,9 @@ shape is always:
 | unit exits with `PrivilegedIntentsRequired` | Server Members or Message Content intent off | Developer Portal → Bot → enable both; restart |
 | `API Error: 400 ... does not support this model` | Claude Code older than 2.1.251 | as the account: `claude update`; restart the unit |
 | `(agent error)` with `claude: not found` in the thread | `~/.local/bin` not on the unit's `PATH` | the `Environment=PATH=` line in the unit |
-| the agent edits before it should, or ignores the report format | `agent/agent-prompt.md` missing from the main clone, or the clone behind | `git -C ~/agents/<site>/repo log -1 -- agent/`; the clone syncs on each new request |
+| the agent ignores the report format, or never starts a change (every reply is read-only) | `agent/agent-prompt.md` missing from the main clone or behind, or it lacks the `BUILD` line protocol | `git -C ~/agents/<site>/repo log -1 -- agent/`; the clone syncs on each new thread |
+| the agent says it cannot write files | the thread is still in the conversation phase (no `BUILD` line was given) | tell it to go ahead; it replies `BUILD` and the bridge takes it from there |
+| a thread's preview link is 404 and `status` says parked | the slot was given to a newer build | post anything in the thread; the worktree comes back from the branch |
 | every tool call refused | `agent/settings.json` missing or invalid | `python3 -m json.tool ~/agents/<site>/repo/agent/settings.json` |
 | "Couldn't create a working tree" with a hook error | `preview-setup.sh` failed (missing config, missing toolchain) | run it by hand in a worktree with `PREVIEW_ROOT` set and read the output |
 | preview link 404 "No such preview" | `preview-account-add` not run for this account, or `PREVIEW_PREFIX` differs from the provisioned prefix | preview-hosts.md |

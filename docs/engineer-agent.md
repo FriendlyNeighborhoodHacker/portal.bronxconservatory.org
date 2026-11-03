@@ -302,15 +302,16 @@ preview database.
 
 Do the whole loop once with something harmless, from your own account.
 
-- [ ] Post in `#bronxconservatory-features`: *Add an HTML comment `<!-- agent test -->` at the top of the login page.* The bot opens a thread and replies with a plan or a question. **No diff is attached and no link is posted** (it has not edited).
-- [ ] Reply **go**. The reply has bullets, a `Preview:` link (`bronxconservatory-<slug>.preview1...`) whose page source shows the comment, a `Commit message:` line, and `changes.diff` attached.
-- [ ] Reply **status**: one request in flight, with its link.
-- [ ] Reply **discard**: the preview link now returns 404; `git -C ~bronxconservatory/agents/portal.bronxconservatory.org/repo worktree list` shows only the main clone.
-- [ ] Repeat the request, **go**, then **approve**. The bridge posts the sha; the commit appears on GitHub `main`; the dev site and production show the comment (view source on the login page). Then request its removal the same way.
+- [ ] Post in `#bronxconservatory-features`: *What does the portal use for payments?* The bot opens a thread and answers from the code. No branch, no preview, no diff: `status` says the thread is "talking".
+- [ ] Post: *Add an HTML comment `<!-- agent test -->` at the top of the login page.* The bot proposes the change and asks whether to go ahead. Still nothing created.
+- [ ] Reply **yes**. The bot posts its plan, then "Building on branch `feature/<slug>`" with a `bronxconservatory-<slug>` preview link, then the report: bullets, a `Preview:` link whose page source shows the comment, a `Commit message:` line, and `changes.diff` attached.
+- [ ] Reply **status**: one thread talking, one building, with its link.
+- [ ] Reply **discard** in the building thread: the preview link now returns 404; `git -C ~bronxconservatory/agents/portal.bronxconservatory.org/repo worktree list` shows only the main clone.
+- [ ] Repeat the request, **yes**, then **approve**. The bridge posts the sha; the commit appears on GitHub `main`; the dev site and production show the comment (view source on the login page). Then request its removal the same way.
 - [ ] From a `builder`-only account: **approve** is refused with the "only a shipper" message.
 - [ ] Ask the agent in-thread to *commit this for me*: it declines and explains that approve does it.
-- [ ] Two top-level requests at once: two threads, two branches, two hostnames that both load, `worktree list` shows both, **discard** in one removes only that one.
-- [ ] A request that needs a migration (e.g. a nullable column on `settings`): the plan says so; after **go** the preview's Admin > Migrations shows it applied, `schema.sql` is in the diff, and the report ends with a `Post-deploy:` block naming the file. After **approve**, apply it on production and on the dev site from Admin > Maintenance > Migrations, as the block says.
+- [ ] Four changes in a row without discarding: the fourth parks the quietest one (`status` shows it parked); a message in the parked thread brings its preview back with the work intact.
+- [ ] A request that needs a migration (e.g. a nullable column on `settings`): the proposal says so; after **yes** the preview's Admin > Migrations shows it applied, `schema.sql` is in the diff, and the report ends with a `Post-deploy:` block naming the file. After **approve**, apply it on production and on the dev site from Admin > Maintenance > Migrations, as the block says.
 
 ## Day to day
 

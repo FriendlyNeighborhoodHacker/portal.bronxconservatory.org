@@ -27,12 +27,26 @@ Layout, under the agent account's home:
                               PREVIEW_MODE=tree   a symlink to the worktree (the repo's www/ is the web root)
                               PREVIEW_MODE=build  a real directory the hook fills
 
+A thread has two phases. It starts in the CONVERSATION phase: no worktree, no
+branch, no preview; the agent runs read-only (Claude Code plan mode) in the
+main clone and talks until it understands the change and the person has
+clearly said yes. It signals that by starting a reply with the line `BUILD`,
+followed by the agreed plan. Only then does the bridge create the worktree,
+branch and preview and start the BUILD phase, where the agent implements,
+the preview follows the tree, and revisions continue until approve or discard.
+
+Nobody has to tidy up. At most MAX_WORKTREES threads have a live worktree; when
+another build needs one, the least recently active build is PARKED: its
+uncommitted work is committed on its branch, the worktree and preview are
+removed, and the next message in that thread rebuilds the worktree from the
+branch and carries on.
+
 Words the bridge understands, typed in a thread by a builder or shipper:
-  status    list in-flight requests and their preview links (also at top level)
-  discard   delete this thread's worktree, branch and preview
+  status    list open threads, their phase and preview links (also at top level)
+  discard   close the thread; in the build phase also delete worktree, branch and preview
   approve   commit, fast-forward main, push (shipper only); whatever deploys main does the rest
-Anything else is a message to the agent ("go" included). A new top-level post
-in the channel opens a new thread and worktree.
+Anything else is a message to the agent. A new top-level post in the channel
+opens a new thread (and nothing else).
 
 Environment (from $AGENT_DIR/agent.env via the unit): DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID,
 PREVIEW_DOMAIN, PREVIEW_PREFIX, and optionally AGENT_DIR, PREVIEW_MODE, CODE_MODEL,
@@ -40,6 +54,7 @@ FALLBACK_MODEL, MAX_BUDGET_USD, CLAUDE_TIMEOUT_SECONDS, MAX_WORKTREES, MAIN_BRAN
 """
 import asyncio
 import json
+import time
 import os
 import random
 import re
@@ -179,6 +194,58 @@ def remove_worktree(slug: str) -> None:
         shutil.rmtree(tree(slug), ignore_errors=True)
 
 
+def park_worktree(rec: dict) -> None:
+    """Free a slot without losing anything: WIP goes onto the branch, worktree and preview go away."""
+    slug = rec["slug"]
+    wt = tree(slug)
+    if wt.exists():
+        if sh(["git", "status", "--porcelain"], wt)[1]:
+            sh(["git", "add", "-A"], wt)
+            sh(["git", "commit", "-q", "-m", "WIP (parked by the bridge)"], wt)
+    p = preview_dir(slug)
+    if p.is_symlink():
+        p.unlink()
+    elif p.exists():
+        shutil.rmtree(p, ignore_errors=True)
+    sh(["git", "worktree", "remove", "--force", str(wt)], REPO)
+    sh(["git", "worktree", "prune"], REPO)
+    rec["parked"] = True
+    log(f"parked slug {slug} (branch feature/{slug} keeps the work)")
+
+
+def unpark_worktree(rec: dict) -> str | None:
+    """Recreate a parked thread's worktree from its branch, with the WIP uncommitted again."""
+    slug = rec["slug"]
+    wt = tree(slug)
+    WORKTREES.mkdir(parents=True, exist_ok=True)
+    rc, out = sh(["git", "worktree", "add", str(wt), f"feature/{slug}"], REPO)
+    if rc:
+        return f"`git worktree add` failed:\n```{out[-1200:]}```"
+    _, base = sh(["git", "merge-base", MAIN, "HEAD"], wt)
+    if base:
+        sh(["git", "reset", "-q", "--mixed", base], wt)       # branch back to its base; WIP is plain edits again
+    if PREVIEW_MODE == "tree":
+        preview_dir(slug).symlink_to(wt)
+    else:
+        (preview_dir(slug) / "www").mkdir(parents=True, exist_ok=True)
+    rc, out = run_hook(slug)
+    if rc:
+        return f"`agent/preview-setup.sh` failed:\n```{out[-1500:]}```"
+    rec["parked"] = False
+    log(f"unparked slug {slug}")
+    return None
+
+
+def make_room() -> None:
+    """If every slot is taken, park the build thread that has been quiet longest."""
+    live = [r for r in state.values() if r.get("phase") == "build" and not r.get("parked")]
+    while len(live) >= MAX_WORKTREES:
+        victim = min(live, key=lambda r: r.get("last", 0))
+        park_worktree(victim)
+        live.remove(victim)
+    save()
+
+
 def tree_is_dirty(wt: Path) -> bool:
     return sh(["git", "status", "--porcelain"], wt)[1] != ""
 
@@ -194,11 +261,13 @@ def conflicted_files(wt: Path) -> list[str]:
 
 # ---- Claude -----------------------------------------------------------------------------------
 
-def run_claude(wt: Path, prompt: str, session: str | None):
+def run_claude(cwd: Path, prompt: str, session: str | None, phase: str = "build"):
+    # phase "plan": Claude Code plan mode (read-only) in the main clone.
+    # phase "build": dontAsk in the worktree; anything not allow-listed is refused.
     cmd = ["claude", "-p", prompt,
            "--output-format", "json",
            "--model", MODEL,
-           "--permission-mode", "dontAsk",             # anything not allow-listed is refused
+           "--permission-mode", "plan" if phase == "plan" else "dontAsk",
            "--settings", str(SETTINGS_FILE),           # agent/settings.json from the main clone
            "--append-system-prompt-file", str(PROMPT_FILE),
            "--max-budget-usd", MAX_BUDGET_USD]
@@ -207,7 +276,7 @@ def run_claude(wt: Path, prompt: str, session: str | None):
     if session:
         cmd += ["--resume", session]
     try:
-        r = subprocess.run(cmd, cwd=str(wt), capture_output=True, text=True, timeout=CLAUDE_TIMEOUT,
+        r = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=CLAUDE_TIMEOUT,
                            stdin=subprocess.DEVNULL)      # claude waits 3 s for stdin otherwise
     except subprocess.TimeoutExpired:
         return f"(agent timed out after {CLAUDE_TIMEOUT}s)", session
@@ -252,11 +321,8 @@ async def post_diff(thread, wt: Path, slug: str) -> None:
     DIFFS.mkdir(parents=True, exist_ok=True)
     p = DIFFS / f"{slug}.diff"
     p.write_text(diff + ("\n\n# New (untracked) files:\n" + new if new else ""))
-    await thread.send(
-        content=f"```{(stat or new)[:1600]}```\nPreview: {preview_url(slug)}\n"
-                f"**approve** = merge to {MAIN} and deploy · **discard** = throw away · "
-                f"or keep talking to revise.",
-        file=discord.File(p, filename="changes.diff"))
+    await thread.send(content=f"```{(stat or new)[:1700]}```",
+                      file=discord.File(p, filename="changes.diff"), suppress_embeds=True)
 
 
 # ---- approve / discard ------------------------------------------------------------------------
@@ -323,11 +389,30 @@ async def approve(thread, rec: dict, approver) -> bool:
     return True
 
 
+def build_marker(reply: str) -> str | None:
+    # If the agent's reply starts with the BUILD line, return the plan that follows it.
+    lines = reply.strip().splitlines()
+    if lines and lines[0].strip().strip("*`#:").upper() == "BUILD":
+        return "\n".join(lines[1:]).strip()
+    return None
+
+
+def building() -> int:
+    return sum(1 for r in state.values() if r.get("phase") == "build" and not r.get("parked"))
+
+
 def status_text() -> str:
     if not state:
-        return "No requests in flight."
-    lines = [f"- <#{tid}> {preview_url(r['slug'])} {r.get('title', '')[:60]}" for tid, r in state.items()]
-    return f"In flight ({len(state)}/{MAX_WORKTREES}):\n" + "\n".join(lines)
+        return "No threads open."
+    lines = []
+    for tid, r in state.items():
+        if r.get("phase") == "build" and r.get("parked"):
+            lines.append(f"- <#{tid}> parked (work kept on `feature/{r['slug']}`): {r.get('title', '')[:60]}")
+        elif r.get("phase") == "build":
+            lines.append(f"- <#{tid}> building: {preview_url(r['slug'])} {r.get('title', '')[:60]}")
+        else:
+            lines.append(f"- <#{tid}> talking: {r.get('title', '')[:60]}")
+    return f"Open threads ({building()}/{MAX_WORKTREES} building):\n" + "\n".join(lines)
 
 
 # ---- Discord ----------------------------------------------------------------------------------
@@ -360,7 +445,7 @@ async def on_message(m: discord.Message):
     log(f"[{where}] {m.author}: {text[:300]!r}")
 
     if word == "status":
-        await m.reply(status_text())
+        await m.reply(status_text(), suppress_embeds=True)
         return
     if word == "approve" and not has_role(m.author, ROLE_SHIPPER):
         await m.reply("**approve** ships to production, so only a shipper can say it.")
@@ -376,33 +461,80 @@ async def on_message(m: discord.Message):
         if word in ("approve", "discard", "go"):
             await m.reply("Say that inside a request's thread.")
             return
-        if len(state) >= MAX_WORKTREES:
-            await m.reply(f"Already {MAX_WORKTREES} requests in flight; **approve** or **discard** one first.\n" + status_text())
-            return
         thread = await m.create_thread(name=text[:80] or "request")
         tid = str(thread.id)
 
     async with lock:
         rec = state.get(tid)
-        if rec is None:                                   # new request: new branch + worktree + hostname
-            slug = new_slug()
+        if rec is not None:
+            rec["last"] = time.time()
+        if rec is None:                                   # new thread: conversation only, nothing created
+            rec = state[tid] = {"phase": "plan", "plan_session": None, "session": None,
+                                "title": text[:80], "author": m.author.display_name, "last": time.time()}
+            save()
+            log(f"[thread {tid}] new thread (conversation phase)")
+            err = await asyncio.to_thread(sync_main)
+            if err:
+                log(f"[thread {tid}] main clone sync failed: {err[:200]!r}")
+            text = (f"[Bridge: CONVERSATION phase, read-only in the main clone. Nothing has been built. "
+                    f"Message from {m.author.display_name}:]\n\n{text}")
+        elif rec.get("phase") == "plan":
+            text = f"[Bridge: CONVERSATION phase. {m.author.display_name} in Discord:]\n\n{text}"
+        else:
+            text = f"[{m.author.display_name} in Discord]: {text}"
+        if m.attachments:
+            text += "\n\nAttachments (fetch with curl if useful):\n" + "\n".join(a.url for a in m.attachments)
+
+        # ---- conversation phase: talk in the main clone until the agent says BUILD ----
+        if rec.get("phase") == "plan":
+            if word == "approve":
+                await thread.send("Nothing has been built in this thread yet, so there is nothing to approve.")
+                return
+            if word == "discard":
+                log(f"[thread {tid}] discard (conversation phase) by {m.author}")
+                state.pop(tid, None)
+                save()
+                await thread.send("Closed; nothing was built.")
+                return
             async with thread.typing():
+                log(f"[thread {tid}] claude ({MODEL}) planning in {REPO}" + (" (resume)" if rec.get("plan_session") else " (new session)"))
+                reply, rec["plan_session"] = await asyncio.to_thread(run_claude, REPO, text, rec.get("plan_session"), "plan")
+                save()
+                log(f"[thread {tid}] claude done, {len(reply)} chars")
+            plan = build_marker(reply)
+            if plan is None:
+                await send(thread, reply)
+                return
+            # The agent is starting a change: make room if needed, create the worktree, build.
+            slug = new_slug()
+            await send(thread, plan)
+            async with thread.typing():
+                await asyncio.to_thread(make_room)
                 err = await asyncio.to_thread(create_worktree, slug)
             if err:
                 remove_worktree(slug)
                 await thread.send(f"Couldn't create a working tree:\n{err}")
                 return
-            rec = state[tid] = {"slug": slug, "session": None, "title": text[:80],
-                                "author": m.author.display_name}
+            rec.update(phase="build", slug=slug, plan=plan, session=None)
             save()
-            log(f"[thread {tid}] new request -> slug {slug}, branch feature/{slug}, {preview_url(slug)}")
-            text = (f"[Bridge: this thread's working tree is on branch feature/{slug} and is served live at "
-                    f"{preview_url(slug)} . Request from {m.author.display_name} follows.]\n\n{text}")
-        else:
-            text = f"[{m.author.display_name} in Discord]: {text}"
+            log(f"[thread {tid}] BUILD -> slug {slug}, branch feature/{slug}, {preview_url(slug)}")
+            await thread.send(f"Building on branch `feature/{slug}`. Preview for this change: {preview_url(slug)}")
+            text = (f"[Bridge: BUILD phase. This is your own worktree on branch feature/{slug}, served live at "
+                    f"{preview_url(slug)} (the bridge refreshes it after each of your turns). The plan you "
+                    f"agreed with {rec['author']} in Discord:]\n\n{plan}\n\n[Implement it now, run the "
+                    f"checks, then report as your instructions say.]")
+
+        # ---- build phase: the worktree ----
         slug = rec["slug"]
         wt = tree(slug)
-
+        if rec.get("parked") and word != "discard":
+            async with thread.typing():
+                await asyncio.to_thread(make_room)
+                err = await asyncio.to_thread(unpark_worktree, rec)
+            save()
+            if err:
+                await thread.send(f"Couldn't bring this thread's tree back:\n{err}")
+                return
         if word == "approve":
             log(f"[thread {tid}] approve by {m.author} for slug {slug}")
             if await approve(thread, rec, m.author):
@@ -417,10 +549,8 @@ async def on_message(m: discord.Message):
             await thread.send(f"Discarded; branch `feature/{slug}` and {preview_url(slug)} are gone.")
             return
 
-        if m.attachments:
-            text += "\n\nAttachments (fetch with curl if useful):\n" + "\n".join(a.url for a in m.attachments)
         async with thread.typing():
-            log(f"[thread {tid}] claude ({MODEL}) starting in {wt}" + (" (resume)" if rec.get("session") else " (new session)"))
+            log(f"[thread {tid}] claude ({MODEL}) building in {wt}" + (" (resume)" if rec.get("session") else " (new session)"))
             reply, rec["session"] = await asyncio.to_thread(run_claude, wt, text, rec.get("session"))
             log(f"[thread {tid}] claude done, {len(reply)} chars; session {rec.get('session')}")
             # Make the preview reflect the tree (copy config, build, ...). One automatic retry
@@ -444,7 +574,6 @@ async def on_message(m: discord.Message):
         save()
         await send(thread, reply)
         await post_diff(thread, wt, slug)
-        await thread.send(f"{m.author.mention} done.")
         log(f"[thread {tid}] replied" + (f"; commit message {rec['commit']!r}" if rec.get("commit") else ""))
 
 
