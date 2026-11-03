@@ -347,10 +347,13 @@ async def on_message(m: discord.Message):
     in_thread = isinstance(m.channel, discord.Thread)
     if (m.channel.parent_id if in_thread else m.channel.id) != CHANNEL:
         return
+    where = f"thread {m.channel.id}" if in_thread else "channel"
     if not (has_role(m.author, ROLE_BUILDER) or has_role(m.author, ROLE_SHIPPER)):
+        log(f"[{where}] ignored message from {m.author} (no {ROLE_BUILDER}/{ROLE_SHIPPER} role): {m.content[:120]!r}")
         return
     text = m.content.strip()
     word = text.lower().strip("*_` .!")
+    log(f"[{where}] {m.author}: {text[:300]!r}")
 
     if word == "status":
         await m.reply(status_text())
@@ -388,6 +391,7 @@ async def on_message(m: discord.Message):
             rec = state[tid] = {"slug": slug, "session": None, "title": text[:80],
                                 "author": m.author.display_name}
             save()
+            log(f"[thread {tid}] new request -> slug {slug}, branch feature/{slug}, {preview_url(slug)}")
             await thread.send(f"Working on branch `feature/{slug}`. Preview for this request: {preview_url(slug)}")
             text = (f"[Bridge: this thread's working tree is on branch feature/{slug} and is served live at "
                     f"{preview_url(slug)} . Request from {m.author.display_name} follows.]\n\n{text}")
@@ -397,11 +401,13 @@ async def on_message(m: discord.Message):
         wt = tree(slug)
 
         if word == "approve":
+            log(f"[thread {tid}] approve by {m.author} for slug {slug}")
             if await approve(thread, rec, m.author):
                 state.pop(tid, None)
                 save()
             return
         if word == "discard":
+            log(f"[thread {tid}] discard by {m.author} for slug {slug}")
             remove_worktree(slug)
             state.pop(tid, None)
             save()
@@ -411,10 +417,13 @@ async def on_message(m: discord.Message):
         if m.attachments:
             text += "\n\nAttachments (fetch with curl if useful):\n" + "\n".join(a.url for a in m.attachments)
         async with thread.typing():
+            log(f"[thread {tid}] claude ({MODEL}) starting in {wt}" + (" (resume)" if rec.get("session") else " (new session)"))
             reply, rec["session"] = await asyncio.to_thread(run_claude, wt, text, rec.get("session"))
+            log(f"[thread {tid}] claude done, {len(reply)} chars; session {rec.get('session')}")
             # Make the preview reflect the tree (copy config, build, ...). One automatic retry
             # through the agent if the hook fails, then the humans hear about it.
             rc, out = await asyncio.to_thread(run_hook, slug)
+            log(f"[thread {tid}] preview-setup.sh " + ("ok" if rc == 0 else f"FAILED rc={rc}: {out[-300:]!r}"))
             if rc:
                 fix = (f"[Bridge: after your changes, agent/preview-setup.sh failed while refreshing the "
                        f"preview. Fix the cause and report again.]\n```{out[-3000:]}```")
@@ -433,6 +442,7 @@ async def on_message(m: discord.Message):
         await send(thread, reply)
         await post_diff(thread, wt, slug)
         await thread.send(f"{m.author.mention} done.")
+        log(f"[thread {tid}] replied" + (f"; commit message {rec['commit']!r}" if rec.get("commit") else ""))
 
 
 client.run(os.environ["DISCORD_BOT_TOKEN"])
