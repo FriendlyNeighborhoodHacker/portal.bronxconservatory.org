@@ -39,6 +39,12 @@ hackleyclubz's); the helper takes another name as its third argument.
 The wildcard certificate covers exactly one label, so hostnames are always
 `something.preview1.rosenthaltechnologies.com`, never two labels deep.
 
+Keep the label from resembling a real domain. Chrome's lookalike protection
+reads `lillyrosenthal-org-x` as `lillyrosenthal.org` with the dot replaced
+and interposes a "Did you mean lillyrosenthal.org?" page, so a prefix or
+slug must not spell out a domain with hyphens (`name-org`, `name-com`,
+`name-net`). `lillyrosenthal-coral-juniper` is fine.
+
 ## One-time machine setup
 
 **1. Move `rosenthaltechnologies.com` DNS to Cloudflare (BRIAN).** Let's

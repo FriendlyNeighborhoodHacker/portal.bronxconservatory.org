@@ -23,7 +23,7 @@ unit; adding an engineer is adding an account (preview-hosts.md).
 |---|---|---|---|---|
 | `brianrosenthal` | brianjrosenthal/brianrosenthal.org | `swe-brianrosenthal.org` | SWE - brianrosenthal.org | that repo's `docs/engineer-agent.md` |
 | `bronxconservatory` | this repository | `swe-portal.bronxconservatory.org` | SWE - bronxconservatory | [engineer-agent.md](engineer-agent.md) |
-| `lillyrosenthal` | (planned) | | | |
+| `lillyrosenthal` | FriendlyNeighborhoodHacker/lillyrosenthal.com | `swe-lillyrosenthal.org` | SWE - lillyrosenthal.org | that repo's `docs/engineer-agent.md` |
 
 Discord side: one bot per site is the simplest (one token, one channel, one
 unit). An engineer can instead present as one bot across its sites: create
@@ -112,7 +112,7 @@ e.g. `~/agents/brianrosenthal.org/`, `~/agents/portal.bronxconservatory.org/`):
 | `~/agents/<site>/repo/` | main clone, always on `main`; synced before each new request and each approve; never edited, never served |
 | `~/agents/<site>/worktrees/<slug>/` | one worktree per in-flight thread |
 | `~/agents/<site>/threads.json`, `diffs/` | state, attached diffs |
-| `~/previews/<prefix>-<slug>` | the preview (symlink or built directory); `PREVIEW_PREFIX` starts with the account's provisioned prefix and may add a site tag (`brianrosenthal-org`) so an engineer's sites stay apart |
+| `~/previews/<prefix>-<slug>` | the preview (symlink or built directory); `PREVIEW_PREFIX` is the account's provisioned prefix. Do not add a site tag like `-org`: Chrome treats `brianrosenthal-org-x` as a lookalike of brianrosenthal.org and shows a warning page instead of the preview |
 | `~/.claude/projects/` | Claude Code transcripts, resumable per thread (shared by the account's sites) |
 
 ## Environment variables (`~/agents/<site>/agent.env`)
