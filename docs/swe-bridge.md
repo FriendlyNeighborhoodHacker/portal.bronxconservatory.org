@@ -144,8 +144,20 @@ sudo /usr/local/lib/swe-bridge/venv/bin/pip install -U pip discord.py
 /usr/local/lib/swe-bridge/venv/bin/python -c 'import discord; print(discord.__version__)'
 ```
 
-To update the bridge later: copy the new `bridge.py` over the installed one
-and `sudo systemctl restart 'swe-*'`.
+To update the bridge later, run its self-test with the installed venv first,
+then copy it over the installed one and restart every agent:
+
+```
+DISCORD_CHANNEL_ID=1 PREVIEW_DOMAIN=x PREVIEW_PREFIX=x /usr/local/lib/swe-bridge/venv/bin/python /path/to/new/bridge.py --selftest
+sudo install -m 644 /path/to/new/bridge.py /usr/local/lib/swe-bridge/bridge.py
+sudo systemctl restart 'swe-*'
+```
+
+The self-test covers the bridge's own logic (slugs, status, the `BUILD`
+marker, the report parsers, parking). The git and Discord plumbing is only
+proven by a real thread, so after a bridge change run the first few items of
+an agent's first-run checklist. If a message ever hits an unexpected error,
+the bridge says so in the thread and the traceback is in `journalctl`.
 
 ## Add an agent (per repository and account)
 
