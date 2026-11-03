@@ -1,25 +1,42 @@
 #!/usr/bin/env python3
 """
-Discord bridge for the Bronx Conservatory engineer agent ("SWE - bronxconservatory").
+swe-bridge: a Discord <-> Claude Code bridge for one "software engineer" agent.
 
 One Discord thread = one request = one git worktree on its own branch, served
-at its own preview hostname:  https://<PREVIEW_PREFIX>-<slug>.<PREVIEW_DOMAIN>/
-The worktree lives at ~/previews/<PREVIEW_PREFIX>-<slug>/ and the account's
-preview vhost (docs/preview-hosts.md) serves it the moment it exists, so
-creating a preview is a plain `git worktree add` with no privileges.
-
-The bridge relays messages between the thread and Claude Code (running as the
-`bcmagent` account inside that worktree) and performs every git mutation
+at its own preview hostname  https://<PREVIEW_PREFIX>-<slug>.<PREVIEW_DOMAIN>/
+(docs/preview-hosts.md in the portal.bronxconservatory.org repository). The
+bridge relays messages between the thread and Claude Code, running as the
+agent's Linux account inside that worktree, and performs every git mutation
 itself, on a human's word. The model never commits, merges or pushes.
+
+The same bridge serves any repository. A repository opts in with an `agent/`
+directory holding:
+  agent-prompt.md      the agent's role, workflow and rules (appended to the system prompt)
+  settings.json        Claude Code permission allow/deny lists (with --permission-mode dontAsk,
+                       anything not allowed is refused)
+  preview-setup.sh     optional hook, run inside the worktree after it is created and after
+                       every agent turn, with PREVIEW_ROOT set to the directory the preview
+                       vhost serves. It copies config, builds, whatever makes the tree servable.
+
+Layout, under the agent account's home:
+  $AGENT_DIR/repo/            main clone: always on main, never served, never edited;
+                              the prompt, settings and hook are read from its agent/ on every run
+  $AGENT_DIR/worktrees/<slug> one worktree per in-flight thread, branch feature/<slug>
+  $AGENT_DIR/threads.json, diffs/
+  ~/previews/<prefix>-<slug>  what the vhost serves (<label>/www is the web root):
+                              PREVIEW_MODE=tree   a symlink to the worktree (the repo's www/ is the web root)
+                              PREVIEW_MODE=build  a real directory the hook fills
 
 Words the bridge understands, typed in a thread by a builder or shipper:
   status    list in-flight requests and their preview links (also at top level)
-  discard   delete this thread's worktree and branch
-  approve   commit, fast-forward main, push  ->  production deploy (shipper only)
+  discard   delete this thread's worktree, branch and preview
+  approve   commit, fast-forward main, push (shipper only); whatever deploys main does the rest
 Anything else is a message to the agent ("go" included). A new top-level post
 in the channel opens a new thread and worktree.
 
-Setup, environment variables and the server layout: docs/engineer-agent.md.
+Environment (from the account's ~/.agent.env): DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID,
+PREVIEW_DOMAIN, PREVIEW_PREFIX, and optionally AGENT_DIR, PREVIEW_MODE, CODE_MODEL,
+MAX_BUDGET_USD, CLAUDE_TIMEOUT_SECONDS, MAX_WORKTREES, MAIN_BRANCH, ROLE_BUILDER, ROLE_SHIPPER.
 """
 import asyncio
 import json
@@ -33,24 +50,28 @@ from pathlib import Path
 import discord
 
 HOME = Path.home()
-BASE = HOME / "agents" / "bcm"
-REPO = BASE / "repo"                 # main clone: always on main, never edited, never served
-PREVIEWS = HOME / "previews"         # one worktree per in-flight thread; served by the vhost
-CONFIG_SRC = BASE / "config.local.php"   # preview app config, copied into each tree
-DIFFS = BASE / "diffs"
-STATE = BASE / "threads.json"
+AGENT_DIR = Path(os.environ.get("AGENT_DIR", str(HOME / "agent")))
+REPO = AGENT_DIR / "repo"
+WORKTREES = AGENT_DIR / "worktrees"
+DIFFS = AGENT_DIR / "diffs"
+STATE = AGENT_DIR / "threads.json"
+PREVIEWS = HOME / "previews"
 PROMPT_FILE = REPO / "agent" / "agent-prompt.md"
 SETTINGS_FILE = REPO / "agent" / "settings.json"
+SETUP_HOOK = REPO / "agent" / "preview-setup.sh"
 
 CHANNEL = int(os.environ["DISCORD_CHANNEL_ID"])
 ROLE_BUILDER = os.environ.get("ROLE_BUILDER", "builder")
 ROLE_SHIPPER = os.environ.get("ROLE_SHIPPER", "shipper")
 MODEL = os.environ.get("CODE_MODEL", "claude-fable-5-1")
 PREVIEW_DOMAIN = os.environ["PREVIEW_DOMAIN"]                 # preview1.rosenthaltechnologies.com
-PREVIEW_PREFIX = os.environ.get("PREVIEW_PREFIX", os.environ.get("USER", "bcmagent"))
+PREVIEW_PREFIX = os.environ.get("PREVIEW_PREFIX") or os.environ.get("USER") or HOME.name
+PREVIEW_MODE = os.environ.get("PREVIEW_MODE", "tree")         # tree | build
+MAIN = os.environ.get("MAIN_BRANCH", "main")
 MAX_WORKTREES = int(os.environ.get("MAX_WORKTREES", "3"))
 MAX_BUDGET_USD = os.environ.get("MAX_BUDGET_USD", "15")
 CLAUDE_TIMEOUT = int(os.environ.get("CLAUDE_TIMEOUT_SECONDS", "3600"))
+HOOK_TIMEOUT = int(os.environ.get("HOOK_TIMEOUT_SECONDS", "900"))
 
 WORDS = ("amber birch cedar coral delta ember grove heron iris juniper kestrel "
          "lumen maple nova opal pine quartz river sage tide umber vale willow").split()
@@ -67,9 +88,10 @@ def log(msg: str) -> None:
     print(msg, flush=True)
 
 
-def sh(cmd, cwd, timeout: int = 900):
+def sh(cmd, cwd, timeout: int = 900, env: dict | None = None):
     """Run a command; return (exit code, combined output)."""
-    r = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)
+    r = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout,
+                       env={**os.environ, **(env or {})})
     return r.returncode, (r.stdout + r.stderr).strip()
 
 
@@ -82,6 +104,10 @@ def label(slug: str) -> str:
 
 
 def tree(slug: str) -> Path:
+    return WORKTREES / slug
+
+
+def preview_dir(slug: str) -> Path:
     return PREVIEWS / label(slug)
 
 
@@ -92,43 +118,59 @@ def preview_url(slug: str) -> str:
 def new_slug() -> str:
     while True:
         s = f"{random.choice(WORDS)}-{random.choice(WORDS)}"
-        if not tree(s).exists() and s not in {r["slug"] for r in state.values()}:
+        if not tree(s).exists() and not preview_dir(s).exists() and s not in {r["slug"] for r in state.values()}:
             return s
 
 
 # ---- git plumbing: the bridge's job, never the model's -----------------------------------------
 
 def sync_main() -> str | None:
-    """Bring the main clone up to date with origin/main. Returns an error message or None."""
+    """Bring the main clone up to date with origin. Returns an error message or None."""
     for cmd in (["git", "fetch", "--prune", "origin"],
-                ["git", "merge", "--ff-only", "origin/main"]):
+                ["git", "merge", "--ff-only", f"origin/{MAIN}"]):
         rc, out = sh(cmd, REPO)
         if rc:
             return f"`{' '.join(cmd)}` failed in the main clone:\n```{out[-1200:]}```"
     return None
 
 
-def install_config(wt: Path) -> None:
-    if CONFIG_SRC.exists():
-        shutil.copy(CONFIG_SRC, wt / "www" / "config.local.php")
-        os.chmod(wt / "www" / "config.local.php", 0o600)
-    (wt / "www" / "logs").mkdir(exist_ok=True)
-    (wt / "www" / "cache").mkdir(exist_ok=True)
+def run_hook(slug: str) -> tuple[int, str]:
+    """Run the repository's agent/preview-setup.sh inside the worktree, if it has one."""
+    if not SETUP_HOOK.exists():
+        return 0, ""
+    env = {"PREVIEW_ROOT": str(preview_dir(slug) / "www"), "PREVIEW_URL": preview_url(slug),
+           "PREVIEW_LABEL": label(slug), "AGENT_DIR": str(AGENT_DIR), "SLUG": slug}
+    try:
+        return sh(["bash", str(SETUP_HOOK)], tree(slug), timeout=HOOK_TIMEOUT, env=env)
+    except subprocess.TimeoutExpired:
+        return 1, f"preview-setup.sh timed out after {HOOK_TIMEOUT}s"
 
 
 def create_worktree(slug: str) -> str | None:
     err = sync_main()
     if err:
         return err
+    WORKTREES.mkdir(parents=True, exist_ok=True)
     PREVIEWS.mkdir(exist_ok=True)
-    rc, out = sh(["git", "worktree", "add", "-b", f"feature/{slug}", str(tree(slug)), "main"], REPO)
+    rc, out = sh(["git", "worktree", "add", "-b", f"feature/{slug}", str(tree(slug)), MAIN], REPO)
     if rc:
         return f"`git worktree add` failed:\n```{out[-1200:]}```"
-    install_config(tree(slug))
+    if PREVIEW_MODE == "tree":
+        preview_dir(slug).symlink_to(tree(slug))
+    else:
+        (preview_dir(slug) / "www").mkdir(parents=True, exist_ok=True)
+    rc, out = run_hook(slug)
+    if rc:
+        return f"`agent/preview-setup.sh` failed:\n```{out[-1500:]}```"
     return None
 
 
 def remove_worktree(slug: str) -> None:
+    p = preview_dir(slug)
+    if p.is_symlink():
+        p.unlink()
+    elif p.exists():
+        shutil.rmtree(p, ignore_errors=True)
     sh(["git", "worktree", "remove", "--force", str(tree(slug))], REPO)
     sh(["git", "branch", "-D", f"feature/{slug}"], REPO)
     sh(["git", "worktree", "prune"], REPO)
@@ -141,7 +183,7 @@ def tree_is_dirty(wt: Path) -> bool:
 
 
 def branch_ahead_of_main(wt: Path) -> bool:
-    return sh(["git", "rev-list", "--count", "main..HEAD"], wt)[1] not in ("", "0")
+    return sh(["git", "rev-list", "--count", f"{MAIN}..HEAD"], wt)[1] not in ("", "0")
 
 
 def conflicted_files(wt: Path) -> list[str]:
@@ -203,12 +245,12 @@ async def post_diff(thread, wt: Path, slug: str) -> None:
     _, new = sh(["git", "ls-files", "--others", "--exclude-standard"], wt)
     if not diff and not new:
         return                                        # plan-only turn: nothing to attach
-    DIFFS.mkdir(exist_ok=True)
+    DIFFS.mkdir(parents=True, exist_ok=True)
     p = DIFFS / f"{slug}.diff"
     p.write_text(diff + ("\n\n# New (untracked) files:\n" + new if new else ""))
     await thread.send(
         content=f"```{(stat or new)[:1600]}```\nPreview: {preview_url(slug)}\n"
-                f"**approve** = merge to main and deploy to PRODUCTION · **discard** = throw away · "
+                f"**approve** = merge to {MAIN} and deploy · **discard** = throw away · "
                 f"or keep talking to revise.",
         file=discord.File(p, filename="changes.diff"))
 
@@ -243,35 +285,35 @@ async def approve(thread, rec: dict, approver) -> bool:
         return False
 
     # Make sure the branch contains main, so the merge below is a fast-forward.
-    rc, _ = sh(["git", "merge-base", "--is-ancestor", "main", "HEAD"], wt)
+    rc, _ = sh(["git", "merge-base", "--is-ancestor", MAIN, "HEAD"], wt)
     if rc:
-        rc, _ = sh(["git", "rebase", "main"], wt)
+        rc, _ = sh(["git", "rebase", MAIN], wt)
         if rc:
             sh(["git", "rebase", "--abort"], wt)
-            rc, out = sh(["git", "merge", "--no-edit", "main"], wt)
+            rc, out = sh(["git", "merge", "--no-edit", MAIN], wt)
             if rc:
                 files = "\n".join(conflicted_files(wt)) or out[-800:]
                 await thread.send(
-                    "`main` changed since this work started and the changes conflict. The conflict "
+                    f"`{MAIN}` changed since this work started and the changes conflict. The conflict "
                     "markers are now in this thread's tree, in:\n```" + files + "```\n"
                     "Tell the agent to resolve them (it edits the files), then **approve** again.")
                 return False
 
     rc, out = sh(["git", "merge", "--ff-only", f"feature/{slug}"], REPO)
     if rc:
-        await thread.send(f"Couldn't fast-forward main:\n```{out[-1200:]}```\nTry **approve** again.")
+        await thread.send(f"Couldn't fast-forward {MAIN}:\n```{out[-1200:]}```\nTry **approve** again.")
         return False
-    rc, out = sh(["git", "push", "origin", "main"], REPO)
+    rc, out = sh(["git", "push", "origin", MAIN], REPO)
     if rc:
-        sh(["git", "reset", "--hard", "origin/main"], REPO)   # undo the local merge; branch keeps the commit
+        sh(["git", "reset", "--hard", f"origin/{MAIN}"], REPO)   # undo the local merge; branch keeps the commit
         await thread.send(f"Push failed (main clone rolled back; **approve** again once fixed):\n```{out[-1500:]}```")
         return False
 
     _, sha = sh(["git", "rev-parse", "--short", "HEAD"], REPO)
-    text = (f"Merged `{sha}` into `main` and pushed. The GitHub webhooks are deploying it to "
-            f"production and to the dev site. Preview {preview_url(slug)} removed.")
+    text = (f"Merged `{sha}` into `{MAIN}` and pushed; whatever deploys `{MAIN}` is now running. "
+            f"Preview {preview_url(slug)} removed.")
     if rec.get("post_deploy"):
-        text += "\n\n**Production needs this now (from the agent's last report):**\n" + rec["post_deploy"]
+        text += "\n\n**Still to do by hand (from the agent's last report):**\n" + rec["post_deploy"]
     remove_worktree(slug)
     await send(thread, text)
     return True
@@ -294,7 +336,8 @@ client = discord.Client(intents=intents)
 
 @client.event
 async def on_ready():
-    log(f"bridge ready as {client.user}; channel {CHANNEL}; model {MODEL}; previews {PREVIEW_PREFIX}-*.{PREVIEW_DOMAIN}")
+    log(f"bridge ready as {client.user}; channel {CHANNEL}; model {MODEL}; "
+        f"previews {PREVIEW_PREFIX}-*.{PREVIEW_DOMAIN} ({PREVIEW_MODE}); repo {REPO}")
 
 
 @client.event
@@ -313,7 +356,7 @@ async def on_message(m: discord.Message):
         await m.reply(status_text())
         return
     if word == "approve" and not has_role(m.author, ROLE_SHIPPER):
-        await m.reply("**approve** deploys to production, so only a shipper can say it.")
+        await m.reply("**approve** ships to production, so only a shipper can say it.")
         return
 
     if in_thread:
@@ -336,8 +379,10 @@ async def on_message(m: discord.Message):
         rec = state.get(tid)
         if rec is None:                                   # new request: new branch + worktree + hostname
             slug = new_slug()
-            err = create_worktree(slug)
+            async with thread.typing():
+                err = await asyncio.to_thread(create_worktree, slug)
             if err:
+                remove_worktree(slug)
                 await thread.send(f"Couldn't create a working tree:\n{err}")
                 return
             rec = state[tid] = {"slug": slug, "session": None, "title": text[:80],
@@ -367,6 +412,17 @@ async def on_message(m: discord.Message):
             text += "\n\nAttachments (fetch with curl if useful):\n" + "\n".join(a.url for a in m.attachments)
         async with thread.typing():
             reply, rec["session"] = await asyncio.to_thread(run_claude, wt, text, rec.get("session"))
+            # Make the preview reflect the tree (copy config, build, ...). One automatic retry
+            # through the agent if the hook fails, then the humans hear about it.
+            rc, out = await asyncio.to_thread(run_hook, slug)
+            if rc:
+                fix = (f"[Bridge: after your changes, agent/preview-setup.sh failed while refreshing the "
+                       f"preview. Fix the cause and report again.]\n```{out[-3000:]}```")
+                more, rec["session"] = await asyncio.to_thread(run_claude, wt, fix, rec.get("session"))
+                reply += "\n\n" + more
+                rc, out = await asyncio.to_thread(run_hook, slug)
+                if rc:
+                    reply += f"\n\n**The preview could not be refreshed** (preview-setup.sh):\n```{out[-1200:]}```"
         c = extract_line(reply, "Commit message:")
         p = extract_block(reply, "Post-deploy:")
         if c:

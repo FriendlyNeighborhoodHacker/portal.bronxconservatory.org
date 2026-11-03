@@ -1,13 +1,13 @@
 <?php
 // Preview config for the engineer agent. Install as
-// ~bcmagent/agents/bcm/config.local.php (chmod 600); the bridge copies it into
+// ~bronxconservatory/agent/config.local.php (chmod 600); agent/preview-setup.sh copies it into
 // every worktree as www/config.local.php. See www/config.local.php.example for
 // commentary on each setting and docs/engineer-agent.md for the setup.
 
 // Local MariaDB on the VPS, never DreamHost's shared MySQL and never production.
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'bcmportalpreview');
-define('DB_USER', 'bcmagent');
+define('DB_USER', 'bronxconservatory');
 define('DB_PASS', '<preview db password>');
 define('APP_NAME', 'BCM Portal (PREVIEW)');
 
@@ -45,7 +45,7 @@ define('GIT_WEBHOOK_SECRET', '');
 // Session files in a directory this account owns. All of this account's
 // previews share the directory; logins do not carry across hostnames, because
 // the session cookie is per host.
-define('SESSION_SAVE_PATH', '/home/bcmagent/var/sessions');
+define('SESSION_SAVE_PATH', '/home/bronxconservatory/var/sessions');
 
 // config.local.php lives INSIDE each worktree's www/, so the local-checkout
 // form works and always points at the migrations of the tree being served.
@@ -55,6 +55,6 @@ define('MIGRATIONS_DIR', dirname(__DIR__) . '/db_migrations');
 // All of this account's previews share one Apache log pair (vhost_combined
 // format, so each line starts with the hostname).
 define('ADMIN_LOG_FILES', [
-    'apache-access' => '/var/log/apache2/preview-bcmagent-access.log',
-    'apache-error'  => '/var/log/apache2/preview-bcmagent-error.log',
+    'apache-access' => '/var/log/apache2/preview-bronxconservatory-access.log',
+    'apache-error'  => '/var/log/apache2/preview-bronxconservatory-error.log',
 ]);

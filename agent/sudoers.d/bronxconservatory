@@ -1,7 +1,9 @@
-# /etc/sudoers.d/bcmagent  (install with: sudo install -m 440 agent/sudoers.d/bcmagent /etc/sudoers.d/bcmagent)
+# /etc/sudoers.d/bronxconservatory  (install with: sudo install -m 440 agent/sudoers.d/bronxconservatory /etc/sudoers.d/bronxconservatory)
 #
-# The engineer agent's account has full passwordless sudo (Brian's decision,
-# Nov 2026) so it can be asked to do server chores. What the MODEL may run is
-# the much shorter sudo list in agent/settings.json; widen that, not this.
+# The engineer agent runs as bronxconservatory, the dev site's own account,
+# and gets full passwordless sudo (Brian's decision, Nov 2026) so it can be
+# asked to do server chores. Note the dev site's PHP runs as this user too.
+# What the MODEL may run is the much shorter sudo list in agent/settings.json;
+# widen that, not this. Optional: the agent workflow works without this file.
 # The bridge itself never uses sudo.
-bcmagent ALL=(ALL) NOPASSWD: ALL
+bronxconservatory ALL=(ALL) NOPASSWD: ALL

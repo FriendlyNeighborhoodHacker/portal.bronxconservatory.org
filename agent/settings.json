@@ -21,6 +21,10 @@
       "Bash(sudo -i*)", "Bash(sudo -s*)", "Bash(sudo su*)", "Bash(sudo bash*)", "Bash(sudo sh*)",
       "Bash(sudo rm*)", "Bash(sudo useradd*)", "Bash(sudo usermod*)", "Bash(sudo visudo*)",
       "Read(**/config.local.php)", "Edit(**/config.local.php)", "Write(**/config.local.php)",
+      "Read(/home/bronxconservatory/deploy/**)", "Edit(/home/bronxconservatory/deploy/**)", "Write(/home/bronxconservatory/deploy/**)",
+      "Edit(/home/bronxconservatory/dev-bronxconservatory.lillyrosenthal.org/**)", "Write(/home/bronxconservatory/dev-bronxconservatory.lillyrosenthal.org/**)",
+      "Edit(/home/bronxconservatory/agent/repo/**)", "Write(/home/bronxconservatory/agent/repo/**)",
+      "Read(/home/bronxconservatory/agent/threads.json)", "Edit(/home/bronxconservatory/agent/threads.json)",
       "Read(**/.agent.env)", "Read(**/.my.cnf)", "Read(**/.ssh/**)",
       "Edit(**/.claude/**)", "Write(**/.claude/**)"
     ]

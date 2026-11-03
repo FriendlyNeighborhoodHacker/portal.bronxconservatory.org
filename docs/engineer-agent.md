@@ -8,20 +8,21 @@ webhooks deploy to production and to the dev site. The agent then hands over
 whatever production needs by hand (a migration, a config constant).
 
 This is the setup guide: follow it top to bottom on the dev VPS. The files it
-installs live in [agent/](../agent/) (see its README for the map). Previews
-rely on the machine-wide scheme in [preview-hosts.md](preview-hosts.md), which
-is set up once and then serves every account on the box, the two other
-engineer agents and student developers included. The design came from the
-"Engineer Agent (VS Code handoff)" brainstorm; the differences are listed at
-the end.
+installs live in [agent/](../agent/) (see its README for the map). Two
+machine-wide pieces are set up once and shared by every agent on the box:
+the preview scheme in [preview-hosts.md](preview-hosts.md) and the bridge
+itself in [swe-bridge.md](swe-bridge.md), which also explains the commands,
+the `agent/` contract and the pitfalls every agent has in common. The design
+came from the "Engineer Agent (VS Code handoff)" brainstorm; the differences
+are listed at the end.
 
 ## The workflow you get
 
 1. **Request.** A builder or shipper posts in `#bronxconservatory-features`:
    *"Add a 'download receipt' button to the invoices page."* The bridge opens
    a thread, syncs the main clone, creates a worktree on `feature/<slug>` at
-   `~/previews/bcmagent-<slug>/`, which is live at once as
-   `https://bcmagent-<slug>.preview1.rosenthaltechnologies.com`, and hands the
+   `~/previews/bronxconservatory-<slug>/`, which is live at once as
+   `https://bronxconservatory-<slug>.preview1.rosenthaltechnologies.com`, and hands the
    request to the agent.
 2. **Plan.** The agent reads the code and replies with questions or a short
    plan (files, approach, risks, whether a migration is needed). It edits nothing.
@@ -41,24 +42,29 @@ the end.
 
 Machine: the self-managed Debian 13 VPS at 208.113.209.171 (DreamHost), the
 one that already hosts `dev-bronxconservatory.lillyrosenthal.org`. Sudo
-account `debian`.
+account `debian`. The agent runs as **`bronxconservatory`, the dev site's own
+account** (deployment.md), so it shares that account's php-fpm pool and home
+directory. Two things in that home are off limits to the agent and the
+bridge: the dev checkout `~/deploy/` (the webhook's) and the live root
+`~/dev-bronxconservatory.lillyrosenthal.org/`. The permission file denies
+edits there and the prompt says so; the agent works only in `~/previews/`.
 
-| Path (account `bcmagent`) | Purpose |
+| Path (account `bronxconservatory`) | Purpose |
 |---|---|
 | `~/.agent.env` | secrets and knobs (template: `agent/agent.env.example`) |
 | `~/.my.cnf` | preview DB credentials for the `mysql`/`mariadb` CLI |
-| `~/agents/venv/` | Python venv with discord.py |
-| `~/agents/bcm/repo/` | **main clone**, always on `main`, never served, never edited; the bridge syncs it, creates worktrees from it, merges and pushes from it, and reads the bridge, prompt and permissions from its `agent/` |
-| `~/previews/bcmagent-<slug>/` | one worktree per in-flight Discord thread, branch `feature/<slug>`, served as `https://bcmagent-<slug>.preview1.rosenthaltechnologies.com` |
-| `~/agents/bcm/config.local.php` | preview portal config; copied into each worktree's `www/` |
-| `~/agents/bcm/threads.json`, `diffs/` | bridge state and attached diffs |
+| `~/agent/repo/` | **main clone**, always on `main`, never served, never edited; the bridge syncs it, creates worktrees from it, merges and pushes from it, and reads the prompt, permissions and hook from its `agent/` |
+| `~/agent/worktrees/<slug>/` | one worktree per in-flight Discord thread, branch `feature/<slug>` |
+| `~/previews/bronxconservatory-<slug>` | symlink to that worktree (`PREVIEW_MODE=tree`); served as `https://bronxconservatory-<slug>.preview1.rosenthaltechnologies.com` |
+| `~/agent/config.local.php` | preview portal config; `agent/preview-setup.sh` copies it into each worktree's `www/` |
+| `~/agent/threads.json`, `diffs/` | bridge state and attached diffs |
 
 | Host / service | |
 |---|---|
-| Previews | `bcmagent-*.preview1.rosenthaltechnologies.com`, vhost `preview-bcmagent.conf` created by `preview-account-add` |
-| PHP | php-fpm 8.4 pool `bcmagent` (socket `/run/php/php8.4-fpm-bcmagent.sock`), runs as `bcmagent` |
-| Database | local MariaDB on the VPS: `bcmportalpreview` (previews) and `bronx_music_conservatory_test` (PHPUnit), user `bcmagent` |
-| Bridge | systemd `bcm-bridge.service`, runs `repo/agent/bridge.py` as `bcmagent` |
+| Previews | `bronxconservatory-*.preview1.rosenthaltechnologies.com`, vhost `preview-bronxconservatory.conf` created by `preview-account-add` |
+| PHP | php-fpm 8.4 pool `bronxconservatory` (socket `/run/php/php8.4-fpm-bronxconservatory.sock`), runs as `bronxconservatory` |
+| Database | local MariaDB on the VPS: `bcmportalpreview` (previews) and `bronx_music_conservatory_test` (PHPUnit), user `bronxconservatory` |
+| Bridge | systemd `swe-bronxconservatory.service`, runs the machine-wide `/usr/local/lib/swe-bridge/bridge.py` as `bronxconservatory` |
 | Discord | bot **SWE - bronxconservatory**, channel `#bronxconservatory-features`, roles `builder` / `shipper` |
 
 Why a local MariaDB rather than the DreamHost MySQL the dev site uses: the
@@ -69,43 +75,50 @@ agent's previews share the one preview database, so two open requests that
 both add migrations can collide; the agent's plan says when a migration is
 involved, and the first-run checklist exercises it.
 
-Every step names the account. From `debian`, `sudo -iu bcmagent` gives a shell
+Every step names the account. From `debian`, `sudo -iu bronxconservatory` gives a shell
 as the agent account; `exit` returns. Steps marked **BRIAN** need a browser
 session or a secret.
 
 ## Setup
 
-### 0. Prerequisite: the preview scheme
+### 0. Prerequisites: the preview scheme and the bridge
 
-Do [preview-hosts.md](preview-hosts.md) "One-time machine setup" first if it
-has not been done: the Cloudflare move, the wildcard certificate, the fallback
-vhost and the `preview-account-add` helper. Check:
+Do [preview-hosts.md](preview-hosts.md) "One-time machine setup" and
+[swe-bridge.md](swe-bridge.md) "Install the bridge" first if they have not
+been done. Check:
 
 ```
 sudo certbot certificates | grep -A2 preview1
 ls -l /usr/local/sbin/preview-account-add /etc/apache2/sites-enabled/preview-zz-fallback.conf
+ls -l /usr/local/lib/swe-bridge/bridge.py /usr/local/lib/swe-bridge/venv/bin/python
 ```
 
 ### 1. Accounts and packages (as debian)
 
-**1. Account and sudo.** The account gets full passwordless sudo, as decided;
-the model's own sudo is limited separately by `agent/settings.json` (an
-Apache reload or configtest, `tail`, `journalctl`). The sudoers file is one
-line (the commented copy is `agent/sudoers.d/bcmagent`).
+**1. Sudo.** The account already exists (deployment.md step 3) and is in
+`adm`. It gets full passwordless sudo, as decided; the model's own sudo is
+limited separately by `agent/settings.json` (an Apache reload or configtest,
+`tail`, `journalctl`), and the bridge never uses sudo. The sudoers file is one
+line (the commented copy is `agent/sudoers.d/bronxconservatory`).
+
+Be aware of what this means: `bronxconservatory` is also the user the dev
+site's PHP runs as, so a code-execution hole in the dev portal would now be a
+root hole on this machine. If that trade is not worth it, skip this step; the
+whole agent workflow runs without sudo.
 
 ```
-sudo adduser --disabled-password --gecos "BCM engineer agent" bcmagent
-sudo usermod -aG adm bcmagent            # read Apache logs without sudo
-echo 'bcmagent ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/bcmagent
-sudo chmod 440 /etc/sudoers.d/bcmagent
-sudo visudo -cf /etc/sudoers.d/bcmagent
+echo 'bronxconservatory ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/bronxconservatory
+sudo chmod 440 /etc/sudoers.d/bronxconservatory
+sudo visudo -cf /etc/sudoers.d/bronxconservatory
 ```
 
-**2. Preview prefix.** Creates the `bcmagent` php-fpm pool, the vhost for
-`bcmagent-*.preview1.rosenthaltechnologies.com` and `~bcmagent/previews`:
+**2. Preview prefix.** Creates the vhost for
+`bronxconservatory-*.preview1.rosenthaltechnologies.com` and
+`~bronxconservatory/previews`. The php-fpm pool `bronxconservatory` already
+exists from the dev site setup, so the helper reuses it:
 
 ```
-sudo preview-account-add bcmagent
+sudo preview-account-add bronxconservatory
 ```
 
 **3. Packages.** PHP 8.4 fpm, Apache, certbot and the MariaDB client are
@@ -122,55 +135,57 @@ name is what lets the PHPUnit bootstrap drop and recreate it.
 ```
 sudo mariadb <<'SQL'
 CREATE DATABASE bcmportalpreview CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'bcmagent'@'localhost' IDENTIFIED BY '<preview db password>';
-GRANT ALL PRIVILEGES ON `bcmportalpreview`.* TO 'bcmagent'@'localhost';
-GRANT ALL PRIVILEGES ON `bronx_music_conservatory_test`.* TO 'bcmagent'@'localhost';
+CREATE USER 'bronxconservatory'@'localhost' IDENTIFIED BY '<preview db password>';
+GRANT ALL PRIVILEGES ON `bcmportalpreview`.* TO 'bronxconservatory'@'localhost';
+GRANT ALL PRIVILEGES ON `bronx_music_conservatory_test`.* TO 'bronxconservatory'@'localhost';
 FLUSH PRIVILEGES;
 SQL
 ```
 
-### 2. The agent account (as bcmagent: `sudo -iu bcmagent`)
+### 2. The agent account (as bronxconservatory: `sudo -iu bronxconservatory`)
 
 **5. Claude Code.** Fable needs Claude Code 2.1.251 or newer; the installer
 fetches the current release.
 
 ```
 curl -fsSL https://claude.ai/install.sh | bash
-exit; sudo -iu bcmagent                  # new login so ~/.local/bin is on PATH
+exit; sudo -iu bronxconservatory                  # new login so ~/.local/bin is on PATH
 claude --version
 ```
 
-**6. Deploy key and clone.** The key needs **write** access because the
-bridge pushes `main`.
+**6. Deploy key and clone.** The account's key `~/.ssh/id_ed25519` is on
+GitHub as a **read-only** deploy key (deployment.md step 6). The bridge pushes
+`main`, so it needs write access, and GitHub cannot change that on an existing
+key:
 
 ```
-ssh-keygen -t ed25519 -N "" -f ~/.ssh/bcm_deploy -C "bcmagent@dev-vps"
-cat ~/.ssh/bcm_deploy.pub
+cat ~/.ssh/id_ed25519.pub
 ```
 
-**BRIAN:** GitHub repo → Settings → Deploy keys → Add, title `bcmagent (dev
-VPS)`, tick **Allow write access**. Then:
+**BRIAN:** GitHub repo → Settings → Deploy keys → delete the existing
+`bronxconservatory@dev` entry → Add deploy key with the same public key,
+title `bronxconservatory@dev (write)`, tick **Allow write access**. The dev
+site's webhook keeps working (it only fetches). Then:
 
 ```
-printf 'Host github.com\n  IdentityFile ~/.ssh/bcm_deploy\n  IdentitiesOnly yes\n' >> ~/.ssh/config
-chmod 600 ~/.ssh/config
-mkdir -p ~/agents/bcm/diffs ~/var/sessions
+ssh -T git@github.com                      # "Hi FriendlyNeighborhoodHacker/portal.bronxconservatory.org! ..."
+mkdir -p ~/agent/worktrees ~/agent/diffs ~/previews ~/var/sessions
 chmod 700 ~/var/sessions
-git clone git@github.com:FriendlyNeighborhoodHacker/portal.bronxconservatory.org ~/agents/bcm/repo
-git -C ~/agents/bcm/repo config user.name "BCM Engineer Agent"
-git -C ~/agents/bcm/repo config user.email "bcmagent@dev-bronxconservatory.lillyrosenthal.org"
+git clone git@github.com:FriendlyNeighborhoodHacker/portal.bronxconservatory.org ~/agent/repo
+git -C ~/agent/repo config user.name "BCM Engineer Agent"
+git -C ~/agent/repo config user.email "bronxconservatory@dev-bronxconservatory.lillyrosenthal.org"
 ```
 
 **7. Preview config, DB credentials, schema.**
 
 ```
-cp ~/agents/bcm/repo/agent/config.local.preview.php.example ~/agents/bcm/config.local.php
-chmod 600 ~/agents/bcm/config.local.php
-vim ~/agents/bcm/config.local.php        # DB_PASS, REMEMBER_TOKEN_KEY, SMTP_* (copy from the dev site's secrets)
+cp ~/agent/repo/agent/config.local.preview.php.example ~/agent/config.local.php
+chmod 600 ~/agent/config.local.php
+vim ~/agent/config.local.php        # DB_PASS, REMEMBER_TOKEN_KEY, SMTP_* (copy from the dev site's secrets)
 
 cat > ~/.my.cnf <<'EOT'
 [client]
-user=bcmagent
+user=bronxconservatory
 password=<preview db password>
 [mysql]
 database=bcmportalpreview
@@ -179,7 +194,9 @@ database=bcmportalpreview
 EOT
 chmod 600 ~/.my.cnf
 mariadb -e 'SELECT 1'
-mariadb < ~/agents/bcm/repo/schema.sql
+# ~/.my.cnf only affects the command-line client. The dev site's PHP ignores it,
+# and deployment.md's commands pass -h/-u/-p explicitly, so they still reach DreamHost.
+mariadb < ~/agent/repo/schema.sql
 ```
 
 `schema.sql` seeds the developer accounts (`brian.rosenthal@gmail.com` /
@@ -188,16 +205,14 @@ mariadb < ~/agents/bcm/repo/schema.sql
 **8. Smoke-test a preview by hand**, exactly the way the bridge makes one:
 
 ```
-cd ~/agents/bcm/repo
-git worktree add -b feature/smoke ~/previews/bcmagent-smoke main
-cp ~/agents/bcm/config.local.php ~/previews/bcmagent-smoke/www/config.local.php
-chmod 600 ~/previews/bcmagent-smoke/www/config.local.php
-mkdir -p ~/previews/bcmagent-smoke/www/cache
-curl -sI https://bcmagent-smoke.preview1.rosenthaltechnologies.com/login.php | head -1    # HTTP/2 200
-php ~/previews/bcmagent-smoke/www/bin/migrate.php                                         # all applied; "Up to date."
+git -C ~/agent/repo worktree add -b feature/smoke ~/agent/worktrees/smoke main
+ln -s ~/agent/worktrees/smoke ~/previews/bronxconservatory-smoke
+(cd ~/agent/worktrees/smoke && PREVIEW_ROOT=$PWD/www bash agent/preview-setup.sh)
+curl -sI https://bronxconservatory-smoke.preview1.rosenthaltechnologies.com/login.php | head -1    # HTTP/1.1 200
+php ~/agent/worktrees/smoke/www/bin/migrate.php                                                    # all applied; "Up to date."
 ```
 
-Browser check at `https://bcmagent-smoke.preview1.rosenthaltechnologies.com/`:
+Browser check at `https://bronxconservatory-smoke.preview1.rosenthaltechnologies.com/`:
 the login page with the yellow dev strip; sign in as the developer account;
 Admin > Maintenance > Migrations lists everything as applied; Admin > Get
 Started > **Reset & Load All Sample Data** fills the preview database with the
@@ -206,27 +221,28 @@ database). A 500 with "Permission denied" on `config.local.php` means PHP ran
 in the wrong pool (preview-hosts.md pitfalls). Then clean up:
 
 ```
-git worktree remove --force ~/previews/bcmagent-smoke
-git branch -D feature/smoke
+rm ~/previews/bronxconservatory-smoke
+git -C ~/agent/repo worktree remove --force ~/agent/worktrees/smoke
+git -C ~/agent/repo branch -D feature/smoke
 ```
 
 **9. Secrets.** Fill in what you have now; the Discord token and channel ID
-come in step 12.
+come in step 11.
 
 ```
-cp ~/agents/bcm/repo/agent/agent.env.example ~/.agent.env
+cp ~/agent/repo/agent/agent.env.example ~/.agent.env
 chmod 600 ~/.agent.env
 vim ~/.agent.env
 ```
 
 **BRIAN:** `ANTHROPIC_API_KEY` is a key from the Console org with the credits,
-named `bcmagent-portal`. Then prove the key, the version and the model work,
+named `bronxconservatory-portal`. Then prove the key, the version and the model work,
 and that the permission file is honoured (the second command must report that
 the commit was refused):
 
 ```
 set -a; source ~/.agent.env; set +a
-cd ~/agents/bcm/repo
+cd ~/agent/repo
 claude -p "Reply with the single word ok." --model "$CODE_MODEL" --output-format text
 claude -p "Run exactly: git commit --allow-empty -m test. Report whether it ran." --model "$CODE_MODEL" \
   --permission-mode dontAsk --settings agent/settings.json --append-system-prompt-file agent/agent-prompt.md
@@ -236,19 +252,12 @@ claude -p "Run exactly: git commit --allow-empty -m test. Report whether it ran.
 is asked to rely on it:
 
 ```
-cd ~/agents/bcm/repo && php unit-tests/tools/phpunit.phar -c unit-tests/phpunit.xml
-```
-
-**11. Python venv.**
-
-```
-python3 -m venv ~/agents/venv
-~/agents/venv/bin/pip install -U pip discord.py
+cd ~/agent/repo && php unit-tests/tools/phpunit.phar -c unit-tests/phpunit.xml
 ```
 
 ### 3. Discord and the service
 
-**12. Discord (BRIAN, about 10 minutes).** In the `Rosenthal Ops` server,
+**11. Discord (BRIAN, about 10 minutes).** In the `Rosenthal Ops` server,
 `#bronxconservatory-features` exists under PROJECTS and the roles `builder`,
 `shipper` and `client-bronxconservatory` exist. Check the channel permissions:
 `client-bronxconservatory` and `builder` have View Channel, Send Messages,
@@ -263,39 +272,40 @@ on (Server Members, Message Content) → **OAuth2 → URL Generator**: scope
 Create Public Threads, Read Message History, Attach Files, Add Reactions →
 open the URL and authorize it into `Rosenthal Ops`. Give the bot's role access
 to `#bronxconservatory-features`. Right-click the channel → Copy Channel ID
-(`DISCORD_CHANNEL_ID`). Put both values in `~bcmagent/.agent.env`.
+(`DISCORD_CHANNEL_ID`). Put both values in `~bronxconservatory/.agent.env`.
 
 You keep `builder` + `shipper`. A client contact gets
 `client-bronxconservatory` + `builder`: they can request, discuss, say **go**,
 review the preview and ask for revisions, but not **approve**, because approve
 is a production deploy. Give someone `shipper` to change that.
 
-**13. Service (as debian).**
+**12. Service (as debian).** The unit runs the machine-wide bridge with this
+account's environment.
 
 ```
-sudo cp /home/bcmagent/agents/bcm/repo/agent/bcm-bridge.service /etc/systemd/system/
+sudo cp /home/bronxconservatory/agent/repo/agent/swe-bronxconservatory.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now bcm-bridge
-journalctl -fu bcm-bridge          # "bridge ready as SWE - bronxconservatory#…; channel …; previews bcmagent-*.…"
+sudo systemctl enable --now swe-bronxconservatory
+journalctl -fu swe-bronxconservatory          # "bridge ready as SWE - bronxconservatory#…; channel …; previews bronxconservatory-*.…"
 ```
 
-Optional insurance, as `bcmagent` (`crontab -e`): a nightly dump of the
+Optional insurance, as `bronxconservatory` (`crontab -e`): a nightly dump of the
 preview database.
 
 ```
-30 2 * * * mariadb-dump bcmportalpreview | gzip > /home/bcmagent/agents/bcm/backups/preview-$(date +\%F).sql.gz
+30 2 * * * mariadb-dump bcmportalpreview | gzip > /home/bronxconservatory/agent/backups/preview-$(date +\%F).sql.gz
 ```
 
-(`mkdir ~/agents/bcm/backups` first; prune by hand now and then.)
+(`mkdir ~/agent/backups` first; prune by hand now and then.)
 
 ### 4. First run: a trivial, safe change
 
 Do the whole loop once with something harmless, from your own account.
 
-- [ ] Post in `#bronxconservatory-features`: *Add an HTML comment `<!-- agent test -->` at the top of the login page.* The bot opens a thread, posts the branch and a `bcmagent-<slug>` preview link that already loads, and replies with a plan or a question. **No diff is attached** (it has not edited).
+- [ ] Post in `#bronxconservatory-features`: *Add an HTML comment `<!-- agent test -->` at the top of the login page.* The bot opens a thread, posts the branch and a `bronxconservatory-<slug>` preview link that already loads, and replies with a plan or a question. **No diff is attached** (it has not edited).
 - [ ] Reply **go**. The reply has bullets, a `Preview:` link that shows the comment in the page source, a `Commit message:` line, and `changes.diff` attached.
 - [ ] Reply **status**: one request in flight, with its link.
-- [ ] Reply **discard**: the preview link now returns 404; `git -C ~bcmagent/agents/bcm/repo worktree list` shows only the main clone.
+- [ ] Reply **discard**: the preview link now returns 404; `git -C ~bronxconservatory/agent/repo worktree list` shows only the main clone.
 - [ ] Repeat the request, **go**, then **approve**. The bridge posts the sha; the commit appears on GitHub `main`; the dev site and production show the comment (view source on the login page). Then request its removal the same way.
 - [ ] From a `builder`-only account: **approve** is refused with the "only a shipper" message.
 - [ ] Ask the agent in-thread to *commit this for me*: it declines and explains that approve does it.
@@ -304,28 +314,27 @@ Do the whole loop once with something harmless, from your own account.
 
 ## Day to day
 
-- **Change the agent.** The bridge, prompt and permissions are read from the
-  main clone's `agent/` directory. Prompt and permission changes apply on the
-  next agent turn once they are on `main` and the clone has synced (it syncs
-  on every new request and approve). Bridge changes need
-  `sudo systemctl restart bcm-bridge`. Changes to `agent/` can go through the
-  agent's own approve flow; the prompt tells it not to touch that directory
-  unless asked.
-- **Logs.** `journalctl -fu bcm-bridge` for the bridge; Admin > Maintenance >
+- **Change the agent.** The prompt, permissions and hook are read from the
+  main clone's `agent/` directory and apply on the next agent turn once they
+  are on `main` and the clone has synced (it syncs on every new request and
+  approve). Changes to `agent/` can go through the agent's own approve flow;
+  the prompt tells it not to touch that directory unless asked. The bridge
+  itself is shared: see swe-bridge.md to update it.
+- **Logs.** `journalctl -fu swe-bronxconservatory` for the bridge; Admin > Maintenance >
   Server Logs on any preview for Apache (one log pair for all of the
   account's previews, hostname first on each line); `www/logs/` in the
   worktree for the app. Claude Code transcripts are under
-  `~bcmagent/.claude/projects/`.
-- **Reset the preview database.** As `bcmagent`:
+  `~bronxconservatory/.claude/projects/`.
+- **Reset the preview database.** As `bronxconservatory`:
   `mariadb -e 'DROP DATABASE bcmportalpreview; CREATE DATABASE bcmportalpreview CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'`
-  then `mariadb < ~/agents/bcm/repo/schema.sql`, then reload sample data from
+  then `mariadb < ~/agent/repo/schema.sql`, then reload sample data from
   Get Started. Do it when a discarded migration left the schema ahead of `main`.
 - **Spending.** `MAX_BUDGET_USD` in `.agent.env` caps one agent turn; a turn
   that hits it stops and reports, and the next message resumes the session.
 - **Stale state** after a manual git operation in the clone or a deleted
-  worktree: `git -C ~bcmagent/agents/bcm/repo worktree prune`, remove that
-  thread's entry from `~bcmagent/agents/bcm/threads.json`, and
-  `sudo systemctl restart bcm-bridge`.
+  worktree: `git -C ~bronxconservatory/agent/repo worktree prune`, remove that
+  thread's entry from `~bronxconservatory/agent/threads.json`, and
+  `sudo systemctl restart swe-bronxconservatory`.
 - **Another agent for another application** (`lillyrosenthal.org`,
   `brianrosenthal.org`): repeat this document with its own account, prefix,
   database, Discord bot and channel, and a copy of `agent/` in that
@@ -337,10 +346,10 @@ Do the whole loop once with something harmless, from your own account.
 | Symptom | Cause | Fix |
 |---|---|---|
 | Bridge exits with `PrivilegedIntentsRequired` | Server Members or Message Content intent off | Developer Portal → Bot → enable both; restart |
-| `API Error: 400 ... does not support this model` | Claude Code older than 2.1.251 | as `bcmagent`: `claude update`, then restart the bridge |
-| The agent edits before **go**, or ignores the report format | prompt file not found (the clone's `agent/agent-prompt.md` missing or the clone behind) | `git -C ~bcmagent/agents/bcm/repo log -1 -- agent/`; the bridge posts the `claude` command's stderr in the thread as `(agent error)` |
-| Every tool call refused | `agent/settings.json` missing or invalid JSON | `python3 -m json.tool ~bcmagent/agents/bcm/repo/agent/settings.json` |
-| New preview link is 404 "No such preview" | `preview-account-add bcmagent` not run, or `PREVIEW_PREFIX` in `.agent.env` differs from the provisioned prefix | step 2; `grep PREVIEW_PREFIX ~bcmagent/.agent.env` |
+| `API Error: 400 ... does not support this model` | Claude Code older than 2.1.251 | as `bronxconservatory`: `claude update`, then restart the bridge |
+| The agent edits before **go**, or ignores the report format | prompt file not found (the clone's `agent/agent-prompt.md` missing or the clone behind) | `git -C ~bronxconservatory/agent/repo log -1 -- agent/`; the bridge posts the `claude` command's stderr in the thread as `(agent error)` |
+| Every tool call refused | `agent/settings.json` missing or invalid JSON | `python3 -m json.tool ~bronxconservatory/agent/repo/agent/settings.json` |
+| New preview link is 404 "No such preview" | `preview-account-add bronxconservatory` not run, or `PREVIEW_PREFIX` in `.agent.env` differs from the provisioned prefix | step 2; `grep PREVIEW_PREFIX ~bronxconservatory/.agent.env` |
 | Preview 403 / 500 | see preview-hosts.md pitfalls | |
 | Tests fail with `Access denied ... CREATE DATABASE` | the grant on `bronx_music_conservatory_test` is missing | step 4 |
 | **approve** says main changed and left conflict markers | someone else pushed to `main` touching the same files | tell the agent to resolve the markers, then **approve** again |
@@ -356,10 +365,14 @@ Do the whole loop once with something harmless, from your own account.
   (`<prefix>-<slug>`), with a one-time `preview-account-add` per account
   instead of a hand-written vhost. `MAX_WORKTREES` (3) keeps the number of
   open requests from getting out of hand; approve and discard remove them.
-- **The account has sudo.** The handoff said no sudo; you asked for it. The
-  account has full passwordless sudo, but what the model may run with it is
-  the short list in `agent/settings.json`, and `dontAsk` mode refuses
-  everything else. The bridge itself never uses sudo.
+- **The dev site's account, with sudo.** The handoff wanted a separate,
+  sudo-less `bcmagent` account that could never reach the webhook's checkout.
+  You chose to reuse `bronxconservatory` and to give it sudo. The isolation
+  the separate account gave is replaced by permission rules (no edits under
+  `~/deploy/` or the live root; no reads of the secrets directory) and by the
+  prompt. What the model may run with sudo is the short list in
+  `agent/settings.json`, and `dontAsk` mode refuses everything else; the
+  bridge itself never uses sudo. See step 1 for the risk this carries.
 - **Fable, with budget caps.** `CODE_MODEL=claude-fable-5-1`. Claude Code no
   longer has `--max-turns`, so the bridge caps a turn with `--max-budget-usd`
   and a wall-clock timeout instead.

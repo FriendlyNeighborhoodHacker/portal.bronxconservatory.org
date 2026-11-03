@@ -7,4 +7,4 @@ Local dev quickstart:
 - Migrations: Admin > Migrations in the portal (tracked in schema_migrations; files in db_migrations/ at the
   top level, outside the web root — the page is enabled only where MIGRATIONS_DIR is set in config.local.php)
 - Server logs: Admin > Maintenance > Server Logs (paths configurable via ADMIN_LOG_FILES in config.local.php)
-- Discord engineer agent ("SWE - bronxconservatory"): files in agent/, setup in docs/engineer-agent.md; per-account preview hostnames in docs/preview-hosts.md
+- Discord engineer agents: the shared bridge is agent/bridge.py (docs/swe-bridge.md); this repo's agent is set up by docs/engineer-agent.md; per-account preview hostnames in docs/preview-hosts.md

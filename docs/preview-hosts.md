@@ -23,16 +23,16 @@ box gets `preview2`, and DNS picks the more specific record.
 Why the account's prefix is in the hostname: PHP has to run as the account
 that owns the files (so it can read that account's owner-only config and
 nobody else's), which means one php-fpm pool per account, and an Apache vhost
-can only name one pool. A wildcard alias per account, `alice-*`, lets Apache
-pick alice's vhost, and so alice's pool, from the hostname alone. The
+can only name one pool. A wildcard alias per account, `brianrosenthal-*`, lets Apache
+pick brianrosenthal's vhost, and so brianrosenthal's pool, from the hostname alone. The
 `mod_vhost_alias` module then maps the first hostname label to the directory.
 Everything after the prefix is the account's to invent.
 
 Naming: the prefix is lowercase letters and digits (it is the account name
 unless `preview-account-add` was given another); the slug is lowercase
 letters, digits and hyphens. The directory is the **whole label**:
-`~/previews/alice-mysite/www` serves `alice-mysite.preview1...`. The bare
-`alice.preview1...` serves `~/previews/alice/www`, the account's default site.
+`~/previews/brianrosenthal-mysite/www` serves `brianrosenthal-mysite.preview1...`. The bare
+`brianrosenthal.preview1...` serves `~/previews/brianrosenthal/www`, the account's default site.
 The web root inside each preview is `www/` by default (this repo's layout and
 hackleyclubz's); the helper takes another name as its third argument.
 
@@ -164,18 +164,29 @@ sudo cp $SRC/preview-zz-fallback.conf /etc/apache2/sites-available/
 sudo a2enmod vhost_alias ssl rewrite proxy_fcgi
 sudo a2ensite preview-zz-fallback
 sudo apache2ctl configtest && sudo systemctl reload apache2
-curl -sI https://nobody-here.preview1.rosenthaltechnologies.com/ | head -1      # HTTP/1.1 404
+curl -sI https://nobody-here.preview1.rosenthaltechnologies.com/ | head -1      # HTTP/1.1 404 (the "No such preview" page)
 ```
 
 ## Per account
 
-**Provision (as debian), once:**
+**Provision (as debian), once.** The account must exist first; a personal
+account gets a normal login, an agent account a locked password.
 
 ```
-sudo preview-account-add alice              # prefix "alice", web root "www"
-sudo preview-account-add bcmagent           # the portal's engineer agent
-sudo preview-account-add hcstudent3 hc3     # a different, shorter prefix
+sudo adduser brianrosenthal                 # personal accounts: prompts for a password
+sudo adduser lillyrosenthal
+sudo preview-account-add brianrosenthal     # prefix "brianrosenthal", web root "www"
+sudo preview-account-add lillyrosenthal     # prefix "lillyrosenthal"
+sudo preview-account-add bronxconservatory  # the dev site's account; also the portal's engineer agent
 ```
+
+The accounts on this machine and their prefixes, as of November 2026:
+
+| Account | Prefix | Used for |
+|---|---|---|
+| `brianrosenthal` | `brianrosenthal-` | Brian's own previews |
+| `lillyrosenthal` | `lillyrosenthal-` | Lilly's own previews |
+| `bronxconservatory` | `bronxconservatory-` | the dev site's account; the portal's engineer agent makes one preview per request |
 
 It creates the pool and the vhost, makes the home directory traversable, and
 prints the hostname pattern. Re-running it is harmless.
@@ -183,14 +194,14 @@ prints the hostname pattern. Re-running it is harmless.
 **Use (as the account), any time:**
 
 ```
-mkdir -p ~/previews/alice-hello/www
-echo '<h1>hello</h1>' > ~/previews/alice-hello/www/index.html
-curl -s https://alice-hello.preview1.rosenthaltechnologies.com/
+mkdir -p ~/previews/brianrosenthal-hello/www
+echo '<h1>hello</h1>' > ~/previews/brianrosenthal-hello/www/index.html
+curl -s https://brianrosenthal-hello.preview1.rosenthaltechnologies.com/
 ```
 
 A PHP app works the same way: put the checkout (or a git worktree) at
-`~/previews/alice-<slug>/` with its web root at `www/`, and its config inside
-the tree. PHP runs as `alice`, so an owner-only config file is fine. Files
+`~/previews/brianrosenthal-<slug>/` with its web root at `www/`, and its config inside
+the tree. PHP runs as `brianrosenthal`, so an owner-only config file is fine. Files
 must stay world-readable for Apache's static serving (the default umask does
 that). Delete the directory and the preview is gone.
 
@@ -203,8 +214,8 @@ sudo chmod 440 /etc/sudoers.d/previewadmins && sudo visudo -cf /etc/sudoers.d/pr
 sudo groupadd previewadmins && sudo usermod -aG previewadmins <who>
 ```
 
-**Remove an account's previews:** `sudo a2dissite preview-alice`, delete
-`/etc/php/8.4/fpm/pool.d/alice.conf`, reload both services.
+**Remove an account's previews:** `sudo a2dissite preview-brianrosenthal`, delete
+`/etc/php/8.4/fpm/pool.d/brianrosenthal.conf`, reload both services.
 
 ## Pitfalls
 
