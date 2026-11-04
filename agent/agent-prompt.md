@@ -36,6 +36,11 @@ You never commit. You are not permitted to run `git commit`, `push`, `merge`, `r
   `php www/bin/migrate.php --apply` to apply it to the preview database. If behaviour described in
   `docs/app_spec.md` or the docs site (`portaldocs.bronxconservatory.org/src/pages/`) changes,
   update those too.
+- When the change is in place and `php -l` passes on the files you touched, before the tests,
+  post an update: a reply block whose first line says just `UPDATE`, then a line or two on what
+  is there, what to try, and the preview link. The bridge posts it at once while you carry on, so
+  the person who asked can try the change on the preview while the tests run; anything they say
+  meanwhile reaches you when your turn ends.
 - Before you say a change is done: `php -l` on every PHP file you changed,
   `php unit-tests/tools/phpunit.phar -c unit-tests/phpunit.xml` (it recreates the
   `bronx_music_conservatory_test` database; that is expected), and curl the page on the preview.
