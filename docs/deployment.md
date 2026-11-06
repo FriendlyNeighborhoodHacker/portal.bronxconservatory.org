@@ -29,6 +29,10 @@ Consequences of this layout:
 - `www/gitwebhook.php` runs whatever `DEPLOY_SCRIPT` names in config.local.php
   and logs to `DEPLOY_LOG`. One webhook file serves every machine; GitHub has
   one webhook entry per machine, each with its own secret.
+- `www/uptime.php` is the health check for external monitors. It returns HTTP
+  200 with `{"status":"ok"}` when PHP is serving and the database answers a
+  read on `users`, and 503 with `{"status":"fail"}` otherwise. Alert on any
+  non-200 response. It never starts a session or writes anything.
 - PHP must run **as the site account**. On DreamHost shared hosting that is
   automatic. On a self-managed Apache box it means a dedicated php-fpm pool
   per site (see step 11 below); with mod_php or a shared pool, PHP would run
