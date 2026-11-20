@@ -27,14 +27,23 @@ $timeRange = function (string $start, string $end): string {
     return date('g:i a', strtotime($start)) . '–' . date('g:i a', strtotime($end));
 };
 
+// Straight to the weekly view for the two weeks staff look at most.
+$todayTs = strtotime(date('Y-m-d'));
+$thisWeek = date('Y-m-d', strtotime('-' . date('w', $todayTs) . ' days', $todayTs)); // Sunday
+$nextWeek = date('Y-m-d', strtotime('+7 days', strtotime($thisWeek)));
+
 header_html('Calendar');
 ?>
 
 <div class="page-head">
   <h2>Calendar — <?=h(SemesterManagement::label($semester))?></h2>
-  <span class="actions view-toggle">
+  <span class="actions">
+    <a class="button" href="/admin/calendar_week.php?date=<?=h($thisWeek)?>">This week</a>
+    <a class="button" href="/admin/calendar_week.php?date=<?=h($nextWeek)?>">Next week</a>
+    <span class="actions view-toggle">
     <a class="button<?=$view === 'month' ? ' active' : ''?>" href="/admin/calendar.php">Month</a>
     <a class="button<?=$view === 'list' ? ' active' : ''?>" href="/admin/calendar.php?view=list">List</a>
+    </span>
   </span>
 </div>
 
