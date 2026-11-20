@@ -60,7 +60,16 @@ class LessonUIManager {
         <div id="lessonModal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true">
           <div class="modal-content">
             <button class="close" type="button" aria-label="Close">&times;</button>
-            <h3 id="lessonModalTitle">Lesson</h3>
+            <h3 class="modal-title-with-link">
+              <span id="lessonModalTitle">Lesson</span>
+              <?php // The commonest next step from a lesson: the student's own page, in a new tab. ?>
+              <a id="lessonStudentLink" class="title-open-link" href="#" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>
+                </svg>
+              </a>
+            </h3>
             <p class="small" id="lessonModalContext"></p>
             <div class="error small hidden" id="lessonErr"></div>
 
@@ -120,10 +129,8 @@ class LessonUIManager {
               </label>
               <span class="small">Changing this moves only this week, not the standing booking.</span>
 
-              <p class="small">
-                <a id="lessonStudentLink" href="#" target="_blank" rel="noopener"></a> —
-                lesson notes, parents and charges all live there.
-              </p>
+              <p class="small">Lesson notes, parents and charges are on the student's page:
+              the icon next to their name above.</p>
               <p class="small">To move this lesson to another time or teacher, press
               <strong>Edit</strong> above and drag it.</p>
 
@@ -221,8 +228,11 @@ class LessonUIManager {
             // Way out of the modal: everything else about this student — the
             // lesson notes included — lives on their own page.
             var studentLink = document.getElementById('lessonStudentLink');
-            studentLink.textContent = 'Open ' + (cell.dataset.studentName || 'the student') + "'s page";
+            var openLabel = 'Open ' + (cell.dataset.studentName || 'the student') + ' in a new tab';
+            studentLink.title = openLabel;
+            studentLink.setAttribute('aria-label', openLabel);
             studentLink.href = '/admin/student.php?id=' + encodeURIComponent(cell.dataset.studentId || '');
+            studentLink.classList.toggle('hidden', !cell.dataset.studentId);
 
             modal.classList.remove('hidden');
             modal.setAttribute('aria-hidden', 'false');
