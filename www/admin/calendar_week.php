@@ -248,11 +248,6 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $weekStartTs) {
 $prevWeek = date('Y-m-d', strtotime('-7 days', $weekStartTs));
 $nextWeek = date('Y-m-d', strtotime('+7 days', $weekStartTs));
 
-// Shortcuts to the two weeks staff look at most, whatever week is on screen.
-$todayTs = strtotime(date('Y-m-d'));
-$thisWeek = date('Y-m-d', strtotime('-' . date('w', $todayTs) . ' days', $todayTs));
-$upcomingWeek = date('Y-m-d', strtotime('+7 days', strtotime($thisWeek)));
-
 header_html('Calendar Week', ['wide' => true]);
 ?>
 
@@ -260,10 +255,6 @@ header_html('Calendar Week', ['wide' => true]);
   <h2>Week of <?=h(date('M j', $weekStartTs))?>–<?=h(date('M j, Y', strtotime($weekEnd)))?>
     — <?=h(SemesterManagement::label($semester))?></h2>
   <span class="actions">
-    <?php foreach (['This week' => $thisWeek, 'Next week' => $upcomingWeek] as $label => $start): ?>
-      <a class="button<?=$start === $weekStart ? ' primary' : ''?>" href="/admin/calendar_week.php?date=<?=h($start)?>"
-         <?=$start === $weekStart ? 'aria-current="page"' : ''?>><?=h($label)?></a>
-    <?php endforeach; ?>
     <a class="button" href="/admin/calendar_week.php?date=<?=h($prevWeek)?>">&larr; Previous</a>
     <a class="button" href="/admin/calendar_week.php?date=<?=h($nextWeek)?>">Next &rarr;</a>
     <?=schedule_edit_toggle_html()?>
