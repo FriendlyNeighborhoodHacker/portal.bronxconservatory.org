@@ -1,3 +1,5 @@
+README
+
 # agent/ — the Discord engineer agent
 
 Everything that makes up "SWE - bronxconservatory", the Claude Code agent that
