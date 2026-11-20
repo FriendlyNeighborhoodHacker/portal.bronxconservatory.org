@@ -900,6 +900,12 @@ button:disabled,
   font-weight: 600;
 }
 
+/* A modal title followed by an icon link to the thing it names (schedule slot -> student page). */
+.modal-title-with-link { display: flex; align-items: center; gap: 8px; padding-right: 32px; }
+.title-open-link { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  border-radius: 6px; color: inherit; opacity: .65; flex: none; }
+.title-open-link:hover, .title-open-link:focus-visible { opacity: 1; background: rgba(127, 127, 127, .18); }
+
 .modal .close {
   position: absolute;
   right: 8px;

@@ -139,7 +139,16 @@ class ReservationUIManager {
         <div id="resEditModal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true">
           <div class="modal-content">
             <button class="close" type="button" aria-label="Close">&times;</button>
-            <h3 id="resEditTitle">Reservation</h3>
+            <h3 class="modal-title-with-link">
+              <span id="resEditTitle">Reservation</span>
+              <?php // The commonest next step from a slot: the student's own page, in a new tab. ?>
+              <a id="resEditStudentLink" class="title-open-link" href="#" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>
+                </svg>
+              </a>
+            </h3>
             <p class="small" id="resEditContext"></p>
             <p class="small" id="resEditBalance"></p>
             <div class="error small hidden" id="resEditErr"></div>
@@ -175,7 +184,6 @@ class ReservationUIManager {
               <p class="small">Confirming generates the semester's lessons; reverting to pending
               deletes the future lessons. Either way, a dialog will itemize the charge or
               credit line items for review before anything is posted.</p>
-              <p class="small"><a id="resEditStudentLink" href="#" target="_blank" rel="noopener"></a></p>
               <div class="actions actions-split">
                 <button type="button" class="button danger" id="resEditDelete">Delete reservation</button>
                 <span class="actions-right">
@@ -457,8 +465,11 @@ class ReservationUIManager {
               // Way out of the grid: everything else about this student
               // (parents, instruments, charges) lives on their own page.
               var studentLink = document.getElementById('resEditStudentLink');
-              studentLink.textContent = 'Open ' + (item.dataset.studentName || 'student');
+              var openLabel = 'Open ' + (item.dataset.studentName || 'student') + ' in a new tab';
+              studentLink.title = openLabel;
+              studentLink.setAttribute('aria-label', openLabel);
               studentLink.href = '/admin/student.php?id=' + encodeURIComponent(item.dataset.studentId || '');
+              studentLink.classList.toggle('hidden', !item.dataset.studentId);
               document.getElementById('resEditErr').classList.add('hidden');
               openModal(editModal);
               return;
