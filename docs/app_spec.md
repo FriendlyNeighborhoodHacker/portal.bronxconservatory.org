@@ -82,7 +82,11 @@ carried forward to the next semester.
 The same two-level pattern covers teachers' non-teaching time: a **hold block
 reservation** (lunch, a standing errand) generates dated **hold blocks**. Hold
 blocks have no confirmation state and no billing — they materialize immediately
-— and they occupy the slot in every conflict check.
+— and they occupy the slot in every conflict check. A hold block's length is any
+multiple of 30 minutes up to four hours: every duration field offers the usual
+lengths plus **Other**, which takes the minutes directly (an imported block may
+be 2½ hours). The Semester Schedule edits the standing length; the weekly
+calendar edits one week's length, time and title.
 
 Every hold block carries a **block type**. A plain `hold` is the teacher's own
 unpaid time (lunch, an errand). The other types — `guitar_ensemble` and
