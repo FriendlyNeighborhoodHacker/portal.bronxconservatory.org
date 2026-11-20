@@ -28,6 +28,10 @@ class LessonManagement {
      * The reservation still wins where there is one, which keeps every
      * existing row behaving exactly as before. `is_ad_hoc` lets callers tell
      * the two apart without knowing how it is stored.
+     *
+     * `room` is the standing teacher's room at the lesson's location on that
+     * weekday (their meeting link when the location `is_online`); null when
+     * the lesson was moved somewhere they have no assignment.
      */
     private const LESSON_SELECT = "
         SELECT l.*,
@@ -45,13 +49,19 @@ class LessonManagement {
                su.preferred_name AS student_preferred_name,
                tu.first_name AS teacher_first_name, tu.last_name AS teacher_last_name,
                stu.first_name AS substitute_first_name, stu.last_name AS substitute_last_name,
-               loc.name AS location_name
+               loc.name AS location_name, loc.is_online AS is_online,
+               slt.room AS room
         FROM lessons l
         LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
         JOIN users su ON su.id = COALESCE(r.student_user_id, l.student_user_id)
         JOIN users tu ON tu.id = COALESCE(r.teacher_user_id, l.teacher_user_id)
         LEFT JOIN users stu ON stu.id = l.substitute_teacher_user_id
         JOIN locations loc ON loc.id = COALESCE(l.location_id_override, r.location_id, l.location_id)
+        LEFT JOIN semester_location_teachers slt
+               ON slt.semester_id = COALESCE(r.semester_id, l.semester_id)
+              AND slt.location_id = loc.id
+              AND slt.teacher_user_id = COALESCE(r.teacher_user_id, l.teacher_user_id)
+              AND slt.day_of_week = DAYOFWEEK(l.start_datetime) - 1
     ";
 
     // Filters cannot use the SELECT's aliases (MySQL resolves WHERE before

@@ -76,7 +76,7 @@ header_html('My Schedule');
          date('g:i A', strtotime($nextLesson['start_datetime']) + ($nextLesson['duration_minutes'] * 60)))?>
   </div>
   <div style="margin-bottom:4px;">
-    <strong><?=h($nextLesson['location_name'])?></strong>
+    <strong><?=lesson_place_html($nextLesson)?></strong>
   </div>
   <div style="margin-bottom:12px;">
     Teacher: <?=h(trim(($nextLesson['substitute_first_name'] ?? null ?: $nextLesson['teacher_first_name']) . ' '

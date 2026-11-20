@@ -887,10 +887,48 @@ class SemesterManagement {
         ]);
     }
 
+    /**
+     * Set (or clear, with '') the room a teacher uses at a location on a day
+     * this semester. At an online location the same field holds their meeting
+     * link. Shown in the schedule grid's column header and on every view of
+     * the lessons taught there.
+     */
+    public static function setLocationTeacherRoom(
+        ?UserContext $ctx, int $semesterId, int $locationId, int $teacherUserId, int $dayOfWeek, ?string $room
+    ): void {
+        self::assertAdmin($ctx);
+        $room = trim((string)$room);
+        if (mb_strlen($room) > 255) {
+            throw new InvalidArgumentException('That is too long (255 characters at most).');
+        }
+        $st = self::pdo()->prepare(
+            'UPDATE semester_location_teachers SET room=?
+             WHERE semester_id=? AND location_id=? AND teacher_user_id=? AND day_of_week=?'
+        );
+        $st->execute([$room !== '' ? $room : null, $semesterId, $locationId, $teacherUserId, $dayOfWeek]);
+        self::log($ctx, 'semester.location_teacher_room_set', [
+            'semester_id' => $semesterId, 'location_id' => $locationId,
+            'teacher_user_id' => $teacherUserId, 'day_of_week' => $dayOfWeek, 'room' => $room,
+        ]);
+    }
+
+    /** Rooms keyed "locationId:teacherUserId:dayOfWeek" ('' when none is set). */
+    public static function locationTeacherRooms(int $semesterId): array {
+        $st = self::pdo()->prepare(
+            'SELECT location_id, teacher_user_id, day_of_week, room FROM semester_location_teachers WHERE semester_id=?'
+        );
+        $st->execute([$semesterId]);
+        $rooms = [];
+        foreach ($st->fetchAll() as $row) {
+            $rooms[$row['location_id'] . ':' . $row['teacher_user_id'] . ':' . $row['day_of_week']] = (string)($row['room'] ?? '');
+        }
+        return $rooms;
+    }
+
     /** One teacher's (location, day) assignments, ordered for display. */
     public static function locationTeacherDaysForTeacher(int $semesterId, int $teacherUserId): array {
         $st = self::pdo()->prepare(
-            'SELECT slt.location_id, slt.day_of_week, l.name AS location_name
+            'SELECT slt.location_id, slt.day_of_week, slt.room, l.name AS location_name, l.is_online AS location_is_online
              FROM semester_location_teachers slt
              JOIN locations l ON l.id = slt.location_id
              WHERE slt.semester_id = ? AND slt.teacher_user_id = ?
@@ -928,7 +966,7 @@ class SemesterManagement {
      * caller that does not care about days expects.
      */
     public static function locationTeachers(int $semesterId, ?int $dayOfWeek = null): array {
-        $sql = 'SELECT slt.*, l.name AS location_name,
+        $sql = 'SELECT slt.*, l.name AS location_name, l.is_online AS location_is_online,
                     u.first_name AS teacher_first_name, u.last_name AS teacher_last_name,
                     u.preferred_name AS teacher_preferred_name
              FROM semester_location_teachers slt

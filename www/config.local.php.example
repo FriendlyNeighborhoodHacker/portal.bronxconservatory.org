@@ -26,12 +26,17 @@ define('SMTP_SECURE', 'tls');          // 'tls' or 'ssl'
 define('SMTP_FROM_EMAIL', '');         // often the same as SMTP_USER
 define('SMTP_FROM_NAME', 'Bronx Conservatory of Music'); // From name seen in emails
 
-// Demo safety net: when EMAIL_REDIRECT_TO is a non-empty address, EVERY email
-// the portal sends is delivered there instead of to its real recipient, with
-// the subject tagged "[Redirected — was to <address>]" — so a demo can never
-// accidentally email a family. Leave '' to send normally. Addresses on
-// EMAIL_REDIRECT_ALLOWLIST are still delivered normally while the redirect is
-// on (case-insensitive). Stripe's own payment receipts are not covered.
+// ===== Email redirect (the "do not email real people" switch) =====
+// When EMAIL_REDIRECT_TO is a non-empty address, EVERY email the portal sends
+// is delivered there instead of to its real recipient, with the subject
+// tagged "[Redirected — was to <address>]". Addresses on
+// EMAIL_REDIRECT_ALLOWLIST are the exceptions: mail to them is delivered
+// normally (case-insensitive). Leave EMAIL_REDIRECT_TO as '' to send normally.
+// The current state is shown on Admin > Maintenance (Email Log card) and on
+// the Load Real Data card. Stripe's own payment receipts are not covered.
+// Example for a soft launch where only staff should get mail:
+//   define('EMAIL_REDIRECT_TO', 'you@example.org');
+//   define('EMAIL_REDIRECT_ALLOWLIST', ['director@example.org', 'you@example.org']);
 define('EMAIL_REDIRECT_TO', '');
 define('EMAIL_REDIRECT_ALLOWLIST', []);
 
@@ -96,6 +101,16 @@ define('MIGRATIONS_DIR', dirname(__DIR__) . '/db_migrations');
 // undefined for a local checkout (sample_data/ beside www/ is found
 // automatically).
 // define('SAMPLE_DATA_DIR', '/home/bronxconservatory/deploy/dev-bronxconservatory.lillyrosenthal.org/sample_data');
+
+// ===== Real data (launch: Get Started > Reset & Load Real Data) =====
+// Absolute path to the real-data directory (real families' details: never in
+// git, never under the web root — keep it beside this file in the secrets
+// directory). While this is set, a DEVELOPER admin sees "Load Real Data" on
+// Get Started (also linked from Admin > Maintenance): it WIPES the database
+// and loads that directory, keeping developer accounts and the admins named
+// in its general/admins.csv exactly as they are. There is no fallback path.
+// REMOVE THIS LINE AFTER LAUNCH — it is the only thing that enables the wipe.
+// define('REAL_DATA_DIR', '/home/bronxconservatory/deploy/portal.bronxconservatory.org.secrets/real_data');
 
 // ===== Server logs (Admin > Maintenance > Server Logs) =====
 // Per-machine overrides for the server log files developers can tail in the

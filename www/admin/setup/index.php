@@ -7,6 +7,8 @@ require_once __DIR__ . '/../../lib/LocationManagement.php';
 require_once __DIR__ . '/../../lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../../lib/SemesterManagement.php';
 require_once __DIR__ . '/../../lib/SampleDataLoader.php';
+require_once __DIR__ . '/../../lib/RealDataLoader.php';
+require_once __DIR__ . '/../../mailer.php';
 Application::init();
 require_admin();
 
@@ -21,6 +23,18 @@ unset($_SESSION['import_flash'], $_SESSION['import_flash_error']);
 // Dev instances only (DEV_SITE in config.local.php): one click loads the whole sample_data/ set.
 $sampleDataAvailable = SampleDataLoader::isAvailable();
 
+// Launch loader (REAL_DATA_DIR in config.local.php), developers only.
+$realData = null;
+$realDataError = null;
+if (is_developer() && RealDataLoader::isAvailable()) {
+    try {
+        $realData = RealDataLoader::describe(RealDataLoader::dataDir());
+    } catch (\Throwable $e) {
+        $realDataError = $e->getMessage();
+    }
+}
+$emailRedirect = email_redirect_status();
+
 header_html('Get Started');
 ?>
 
@@ -31,6 +45,51 @@ this page disappears once a semester exists.</p>
 
 <?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
 <?php if ($flashError): ?><p class="error"><?=h($flashError)?></p><?php endif; ?>
+
+<?php if ($realDataError !== null): ?>
+<div class="card" id="real-data">
+  <h3>Load Real Data <span class="badge">developers only</span></h3>
+  <p class="error">The real-data directory cannot be read: <?=h($realDataError)?></p>
+</div>
+<?php elseif ($realData !== null): ?>
+<div class="card" id="real-data">
+  <h3>Load Real Data <span class="badge">developers only</span></h3>
+  <p class="small">Resets this database to exactly what is in the real-data directory
+  (<code>REAL_DATA_DIR</code> in <code>config.local.php</code>, files built <?=h($realData['built_at'])?>):
+  <?=(int)$realData['locations']?> locations, <?=(int)$realData['teachers']?> teachers,
+  <?=(int)$realData['people']?> parents and students, and
+  <?php foreach ($realData['semesters'] as $i => $semester): ?>
+    <?=$i > 0 ? ' and ' : ''?><strong><?=h($semester['label'])?></strong>
+    (<?=h(date('M j, Y', strtotime($semester['start'])))?> – <?=h(date('M j, Y', strtotime($semester['end'])))?><?php
+      if ($semester['slots'] !== null): ?>, <?=(int)$semester['slots']?> weekly slots<?php else: ?>, no schedule<?php endif;
+      if ($semester['ledger_rows'] !== null): ?>, <?=(int)$semester['ledger_rows']?> ledger rows<?php else: ?>, no charges<?php endif; ?>)<?php
+  endforeach; ?>.</p>
+  <p class="small"><strong>Deleted first:</strong> every semester, lesson, ledger entry, lead and person now in
+  this database. <strong>Kept untouched</strong> (passwords included): developer accounts, your own account<?php
+  if ($realData['admins']): ?>, and these admins: <?=h(implode(', ', $realData['admins']))?>. Any of them without
+  an account gets one with no password and is <em>not</em> emailed — invite them from Users<?php endif; ?>.
+  Settings, announcements and email templates are kept. The load itself sends no email and posts no charges.</p>
+  <?php if ($emailRedirect['on']): ?>
+    <p class="flash">Email redirect is <strong>ON</strong>: everything the portal sends goes to
+    <?=h($emailRedirect['to'])?><?php if ($emailRedirect['allowlist']): ?>, except mail to
+    <?=h(implode(', ', $emailRedirect['allowlist']))?><?php endif; ?>.</p>
+  <?php else: ?>
+    <p class="error">Email redirect is <strong>OFF</strong>: once this data is loaded, anything the portal sends
+    (invites, reminders, notices) goes to the real families and teachers. Set <code>EMAIL_REDIRECT_TO</code> in
+    <code>config.local.php</code> first unless that is what you want.</p>
+  <?php endif; ?>
+  <form method="post" action="/admin/setup/load_real_data_eval.php" class="actions" style="margin-top:10px;"
+        onsubmit="return confirm('Delete everything in this database and load the real data?');">
+    <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+    <label class="small">Type RESET to confirm
+      <input type="text" name="confirm" autocomplete="off" required pattern="RESET" style="width:8em;">
+    </label>
+    <button type="submit" class="button primary">Reset &amp; Load Real Data</button>
+  </form>
+  <p class="small">After launch, remove <code>REAL_DATA_DIR</code> from <code>config.local.php</code> so this
+  card — and the ability to wipe live data — goes away.</p>
+</div>
+<?php endif; ?>
 
 <?php if ($sampleDataAvailable): ?>
 <div class="card">

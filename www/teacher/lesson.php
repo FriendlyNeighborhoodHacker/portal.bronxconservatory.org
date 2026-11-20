@@ -29,7 +29,7 @@ header_html('Lesson — ' . $studentName);
   <?php if (LessonManagement::isCancelled($lesson)): ?><span class="badge">Cancelled</span><?php endif; ?></h2>
 <p class="small">
   <?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?>
-  · <?=h($lesson['location_name'])?>
+  · <?=lesson_place_html($lesson)?>
   <?php if (!empty($lesson['substitute_teacher_user_id'])): ?>
     · covered by <?=h(trim(($lesson['substitute_first_name'] ?? '') . ' ' . ($lesson['substitute_last_name'] ?? '')))?>
   <?php endif; ?>

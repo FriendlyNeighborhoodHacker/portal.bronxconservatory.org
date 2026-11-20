@@ -77,7 +77,7 @@ class LessonUIHelper {
             $start = strtotime($lesson['start_datetime']);
             $end = $start + ((int)$lesson['duration_minutes'] * 60);
             $timeDisplay = date('D, M j · g:i', $start) . '–' . date('g:i A', $end);
-            $locationDisplay = $lesson['location_name'] ?? '';
+            $locationDisplay = lesson_place_html($lesson);
             $teacherDisplay = trim(
                 ($lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name']) . ' ' .
                 ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])
@@ -93,7 +93,7 @@ class LessonUIHelper {
             $html .= '    <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;">' . "\n";
             $html .= '      <div>' . "\n";
             $html .= '        <div style="font-weight:500;margin-bottom:4px;">' . h($timeDisplay) . '</div>' . "\n";
-            $html .= '        <div style="font-size:14px;color:var(--color-text-secondary);margin-bottom:4px;">' . h($locationDisplay) . '</div>' . "\n";
+            $html .= '        <div style="font-size:14px;color:var(--color-text-secondary);margin-bottom:4px;">' . $locationDisplay . '</div>' . "\n";
             $html .= '        <div style="font-size:14px;">' . h($studentDisplay . $teacherDisplay) . '</div>' . "\n";
             $html .= '      </div>' . "\n";
             if ($countLabel !== '') {

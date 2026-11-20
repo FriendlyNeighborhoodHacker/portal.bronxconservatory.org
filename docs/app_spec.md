@@ -41,7 +41,15 @@ than one weekday — Saturdays at both sites and Tuesday evenings at one, say �
 and each date carries its own hours, defaulting to the declared ones. Imported
 class dates must fall on the declared weekdays. Teachers are assigned per
 (location, **day**), so a Saturday-only teacher never shows up on a Tuesday
-grid. Schedules, lessons, and money all hang off a semester.
+grid. Each assignment can carry a **room** (`semester_location_teachers.room`,
+set on the Edit Teacher page or the location-teachers CSV's `Room` column),
+shown in the grid's column header and wherever a lesson's place is shown.
+Schedules, lessons, and money all hang off a semester.
+
+A location flagged **online** (`locations.is_online`) is an ordinary location
+in every other respect — its own class days, hours and teacher columns, the
+same conflict checks — but has no address, lesson views say "Online", and the
+room field holds the teacher's meeting link (rendered as a "Join" link).
 
 *Current semester resolution* (`SemesterManagement::resolveDefaultSemester`):
 the semester containing today → else the next future one → else the most recent
@@ -59,6 +67,17 @@ active class date** at that location on that weekday, and it **posts the
 semester's charges** to the student's ledger. Lessons are the *events*: they
 carry attendance, notes, materials, substitutes, cancellations, and per-week
 overrides.
+
+A reservation may carry a **first lesson date** for a student who joins
+part-way through the semester (set in the grid's add/edit dialog, or the
+schedule CSV's optional `First Lesson Date` column). Lessons are then generated
+only on class dates on or after it — keeping their calendar ordinal, so someone
+joining on Day 7 has lessons 7–15 — and confirming charges the lesson fee per
+lesson for the lessons that remain (`package fee ÷ lessons per semester ×
+remaining`); registration and recital fees are not prorated. Changing the date
+on a confirmed reservation adds or removes lessons (never one with attendance,
+a note or materials) but leaves posted charges alone. A late start is never
+carried forward to the next semester.
 
 The same two-level pattern covers teachers' non-teaching time: a **hold block
 reservation** (lunch, a standing errand) generates dated **hold blocks**. Hold
@@ -544,7 +563,21 @@ scheduling change including substitutes and cancellations.
 outgoing email to that one address instead of its real recipient, tagged
 `[Redirected — was to …]` in the subject; `EMAIL_REDIRECT_ALLOWLIST` lets named
 addresses through. Enforced at the single send function, so no code path can
-bypass it. Stripe's own receipts are not covered.
+bypass it. Stripe's own receipts are not covered. Admin > Maintenance shows
+whether the redirect is on (Email Log card).
+
+**Loading the real data (launch).** Where `REAL_DATA_DIR` in `config.local.php`
+points at a real-data directory (the layout of `sample_data/` plus
+`semesters.json` and `general/admins.csv`; real families' details, so never in
+git or the web root), a developer admin sees **Load Real Data** on Get Started
+(also linked from Admin > Maintenance). After typing RESET it wipes the
+database exactly as the sample-data loader does and loads the directory
+through the wizard's importers (`RealDataLoader`). Developer accounts, the
+admin running it and everyone in `general/admins.csv` are left untouched,
+passwords included; listed admins with no account get one with no password and
+are not emailed. The load sends no email and posts no charges, and the card
+shows the email-redirect state. Remove `REAL_DATA_DIR` after launch — it is
+the only thing that enables the wipe. See docs/deployment.md.
 
 ---
 

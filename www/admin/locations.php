@@ -31,7 +31,7 @@ header_html('Locations');
       <?php foreach ($locations as $loc): ?>
       <tr>
         <td><?=h($loc['name'])?></td>
-        <td class="small"><?=h($loc['address'] ?? '')?></td>
+        <td class="small"><?php if (!empty($loc['is_online'])): ?><span class="online-tag">&#128187; Online</span><?php else: ?><?=h($loc['address'] ?? '')?><?php endif; ?></td>
         <td><?=$loc['is_active'] ? 'Yes' : 'No'?></td>
         <td><a href="/admin/location_edit.php?id=<?=(int)$loc['id']?>">Edit</a></td>
       </tr>
@@ -52,6 +52,10 @@ header_html('Locations');
         <input type="text" name="address">
       </label>
     </div>
+    <label class="inline">
+      <input type="checkbox" name="is_online" value="1">
+      Online — lessons here are taught by video (no address)
+    </label>
     <button type="submit" class="button">Add Location</button>
   </form>
 </div>

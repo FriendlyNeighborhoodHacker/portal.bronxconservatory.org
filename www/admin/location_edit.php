@@ -34,6 +34,11 @@ header_html('Edit ' . $location['name']);
       </label>
     </div>
     <label class="inline">
+      <input type="checkbox" name="is_online" value="1"<?=!empty($location['is_online']) ? ' checked' : ''?>>
+      Online — lessons here are taught by video. No address; it has its own days and hours each
+      semester, and each teacher's meeting link goes where a room number would.
+    </label>
+    <label class="inline">
       <input type="checkbox" name="is_active" value="1"<?=$location['is_active'] ? ' checked' : ''?>>
       Active (offered on the registration form and lesson forms)
     </label>

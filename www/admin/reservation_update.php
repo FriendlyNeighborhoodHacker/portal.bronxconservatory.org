@@ -1,6 +1,9 @@
 <?php
-// POST JSON: change a weekly reservation's length and/or status (schedule
-// grid edit modal).
+// POST JSON: change a weekly reservation's length, late-start date and/or
+// status (schedule grid edit modal).
+//
+// The first-lesson date is saved before the status, so confirming generates
+// lessons (and charges the lesson fee) from that date.
 //
 // Length goes first: it is the one that can be refused for a clash, and
 // confirming afterwards generates the semester's lessons at the new length
@@ -44,6 +47,9 @@ try {
             'error' => 'This change affects charges — please review and confirm them first.',
         ]);
         exit;
+    }
+    if (array_key_exists('first_lesson_date', $_POST)) {
+        ReservationManagement::setFirstLessonDate($ctx, $reservationId, (string)$_POST['first_lesson_date']);
     }
     if ($duration > 0 && $duration !== (int)$reservation['duration_minutes']) {
         // Duration is changing. If confirmed, the review page recomputes and

@@ -106,7 +106,7 @@ header_html($title);
       <?=h(date('g:i A', strtotime($lesson['start_datetime'])))?>, <?=h(date('M j', strtotime($lesson['start_datetime'])))?>
     </div>
     <div class="small" style="color:var(--color-text-muted);margin-top:2px;">
-      <?=h($lesson['location_name'])?>
+      <?=lesson_place_html($lesson)?>
     </div>
 
     <?php $lessonParents = $parentNames[(int)$lesson['student_user_id']] ?? []; ?>

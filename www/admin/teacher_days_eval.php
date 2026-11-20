@@ -1,5 +1,6 @@
 <?php
-// POST: add or remove one of a teacher's (location, day) schedule assignments
+// POST: add or remove one of a teacher's (location, day) schedule assignments,
+// or set the room (online: meeting link) they use for one
 // for a semester (the Edit Teacher page's "Schedule Days" card). The rules
 // live in SemesterManagement::{add,remove}LocationTeacherDay, which throw
 // sentences worth showing.
@@ -28,6 +29,13 @@ try {
         }
         SemesterManagement::addLocationTeacherDay($ctx, $semesterId, (int)$parts[0], $teacherId, (int)$parts[1]);
         $_SESSION['people_flash'] = 'Assignment added.';
+    } elseif ($action === 'room') {
+        SemesterManagement::setLocationTeacherRoom(
+            $ctx, $semesterId,
+            (int)($_POST['location_id'] ?? 0), $teacherId, (int)($_POST['day_of_week'] ?? -1),
+            (string)($_POST['room'] ?? '')
+        );
+        $_SESSION['people_flash'] = 'Saved.';
     } elseif ($action === 'remove') {
         SemesterManagement::removeLocationTeacherDay(
             $ctx, $semesterId,

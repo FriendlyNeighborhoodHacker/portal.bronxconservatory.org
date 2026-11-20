@@ -11,7 +11,8 @@ require_once __DIR__ . '/Billing.php';
 // Semester lesson reservations: a weekly slot (teacher + location + day +
 // time) reserved for a student for a whole semester. Confirming a reservation
 // materializes its lessons from the location's active dates and posts the
-// semester's charges; unconfirming deletes only FUTURE lessons (attended
+// semester's charges (a late start — first_lesson_date — leaves out the earlier
+// dates and prorates the lesson fee); unconfirming deletes only FUTURE lessons (attended
 // history is never erased) and reverses charges when Billing allows it.
 class ReservationManagement {
 
@@ -35,7 +36,9 @@ class ReservationManagement {
     /**
      * Create a reservation. $fields: semester_id, teacher_user_id,
      * location_id, student_user_id, day_of_week (0=Sun..6=Sat), start_time
-     * ("HH:MM"), duration_minutes, status? (defaults pending_reach_out).
+     * ("HH:MM"), duration_minutes, status? (defaults pending_reach_out),
+     * first_lesson_date? ("Y-m-d" — a late start: no lessons before it, and
+     * the lesson fee is charged for the lessons that remain).
      *
      * $options['post_charges'] (default true) controls whether confirming
      * here also posts the semester's charges. Bulk loads that describe a
@@ -56,9 +59,11 @@ class ReservationManagement {
         $durationMinutes = (int)($fields['duration_minutes'] ?? 30);
         $status = (string)($fields['status'] ?? 'pending_reach_out');
 
-        if ($semesterId <= 0 || !SemesterManagement::find($semesterId)) {
+        $semester = $semesterId > 0 ? SemesterManagement::find($semesterId) : null;
+        if (!$semester) {
             throw new InvalidArgumentException('A valid semester is required.');
         }
+        $firstLessonDate = self::normalizeFirstLessonDate($fields['first_lesson_date'] ?? null, $semester);
         if ($studentUserId <= 0) {
             throw new InvalidArgumentException('A student is required.');
         }
@@ -81,11 +86,11 @@ class ReservationManagement {
         self::pdo()->prepare(
             'INSERT INTO semester_lesson_reservations
                (semester_id, teacher_user_id, location_id, student_user_id, status,
-                day_of_week, start_time, duration_minutes, created_by_user_id)
-             VALUES (?,?,?,?,?,?,?,?,?)'
+                day_of_week, start_time, duration_minutes, first_lesson_date, created_by_user_id)
+             VALUES (?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $semesterId, $teacherUserId, $locationId, $studentUserId, $status,
-            $dayOfWeek, $startTime, $durationMinutes, $ctx?->id,
+            $dayOfWeek, $startTime, $durationMinutes, $firstLessonDate, $ctx?->id,
         ]);
         $id = (int)self::pdo()->lastInsertId();
 
@@ -94,7 +99,8 @@ class ReservationManagement {
             if ($options['post_charges'] ?? true) {
                 Billing::postSemesterConfirmationCharges(
                     $ctx, $studentUserId, $semesterId, $durationMinutes,
-                    (bool)($options['include_installment_fee'] ?? false)
+                    (bool)($options['include_installment_fee'] ?? false),
+                    self::lateStartLessonCount($semesterId, $locationId, $dayOfWeek, $firstLessonDate)
                 );
             }
         }
@@ -217,7 +223,11 @@ class ReservationManagement {
             self::generateLessonsForReservation($ctx, $reservationId);
             Billing::postSemesterConfirmationCharges(
                 $ctx, (int)$r['student_user_id'], (int)$r['semester_id'], (int)$r['duration_minutes'],
-                (bool)($options['include_installment_fee'] ?? false)
+                (bool)($options['include_installment_fee'] ?? false),
+                self::lateStartLessonCount(
+                    (int)$r['semester_id'], (int)$r['location_id'], (int)$r['day_of_week'],
+                    $r['first_lesson_date'] !== null ? (string)$r['first_lesson_date'] : null
+                )
             );
         } elseif ($oldStatus === 'confirmed') {
             self::deleteFutureLessons($reservationId);
@@ -230,6 +240,66 @@ class ReservationManagement {
         self::log($ctx, 'reservation.status_changed', [
             'reservation_id' => $reservationId, 'from' => $oldStatus, 'to' => $newStatus,
         ]);
+    }
+
+    /**
+     * Set or clear a reservation's late start ("Y-m-d", or null/'' for the
+     * whole semester). On a confirmed reservation the lessons follow: the
+     * ones before the new date are removed and any newly included class dates
+     * are generated. A lesson that already records something — an attendance
+     * mark, a note, a material — is never removed. Charges already posted are
+     * NOT changed; adjust the ledger by hand if the fee should differ.
+     */
+    public static function setFirstLessonDate(?UserContext $ctx, int $reservationId, ?string $firstLessonDate): void {
+        self::assertAdmin($ctx);
+        $r = self::requireReservation($reservationId);
+        if ($r['status'] === 'deleted') {
+            throw new RuntimeException('This reservation was deleted.');
+        }
+        $semester = SemesterManagement::find((int)$r['semester_id']);
+        $new = self::normalizeFirstLessonDate($firstLessonDate, (array)$semester);
+        $old = $r['first_lesson_date'] !== null ? (string)$r['first_lesson_date'] : null;
+        if ($new === $old) {
+            return;
+        }
+
+        self::pdo()->prepare('UPDATE semester_lesson_reservations SET first_lesson_date=? WHERE id=?')
+            ->execute([$new, $reservationId]);
+
+        if ($r['status'] === 'confirmed') {
+            if ($new !== null) {
+                self::pdo()->prepare(
+                    'DELETE FROM lessons
+                     WHERE semester_lesson_reservation_id=? AND DATE(start_datetime) < ? AND attended IS NULL
+                       AND NOT EXISTS (SELECT 1 FROM lesson_notes n WHERE n.lesson_id = lessons.id)
+                       AND NOT EXISTS (SELECT 1 FROM lesson_resources x WHERE x.lesson_id = lessons.id)'
+                )->execute([$reservationId, $new]);
+            }
+            self::generateLessonsForReservation($ctx, $reservationId);
+        }
+
+        self::log($ctx, 'reservation.first_lesson_date_changed', [
+            'reservation_id' => $reservationId, 'from' => $old, 'to' => $new,
+        ]);
+    }
+
+    /**
+     * How many lessons a late-starting slot gets: the active class dates on
+     * its weekday on or after $firstLessonDate. Null when there is no late
+     * start — the slot is then billed as the semester's full package,
+     * whatever the calendar's length.
+     */
+    public static function lateStartLessonCount(int $semesterId, int $locationId, int $dayOfWeek, ?string $firstLessonDate): ?int {
+        if ($firstLessonDate === null || $firstLessonDate === '') {
+            return null;
+        }
+        $count = 0;
+        foreach (SemesterManagement::activeDatesForLocationWeekday($semesterId, $locationId, $dayOfWeek) as $dateRow) {
+            if ((string)$dateRow['date'] >= $firstLessonDate) {
+                $count++;
+            }
+        }
+        return $count;
     }
 
     /**
@@ -395,7 +465,10 @@ class ReservationManagement {
      * date in that calendar, so it is stable across regeneration: if past
      * lessons were kept from an earlier confirmation, new rows slot in around
      * them with consistent numbering. Idempotent — existing lesson dates are
-     * skipped. Returns the number of lessons created.
+     * skipped. A late start (first_lesson_date) leaves out the class dates
+     * before it; the later lessons keep their calendar ordinal, so a student
+     * who joins on Day 7 has lessons numbered 7 onward. Returns the number of
+     * lessons created.
      */
     public static function generateLessonsForReservation(?UserContext $ctx, int $reservationId): int {
         self::assertAdmin($ctx);
@@ -407,6 +480,7 @@ class ReservationManagement {
         if (!$dates) {
             return 0;
         }
+        $firstLessonDate = $r['first_lesson_date'] !== null ? (string)$r['first_lesson_date'] : null;
 
         $pdo = self::pdo();
         $st = $pdo->prepare('SELECT DATE(start_datetime) AS d, lesson_number FROM lessons WHERE semester_lesson_reservation_id=?');
@@ -430,7 +504,7 @@ class ReservationManagement {
             );
             foreach ($dates as $i => $dateRow) {
                 $date = (string)$dateRow['date'];
-                if (isset($existingSet[$date])) {
+                if (isset($existingSet[$date]) || ($firstLessonDate !== null && $date < $firstLessonDate)) {
                     continue;
                 }
                 // The date's ordinal in the calendar; if a kept past lesson
@@ -735,6 +809,7 @@ class ReservationManagement {
             'date'
         );
         $activeSet = array_flip($activeDates);
+        $firstLessonDate = $r['first_lesson_date'] !== null ? (string)$r['first_lesson_date'] : null;
 
         $st = self::pdo()->prepare(
             'SELECT id, DATE(start_datetime) AS d FROM lessons
@@ -742,7 +817,7 @@ class ReservationManagement {
         );
         $st->execute([$reservationId]);
         foreach ($st->fetchAll() as $lesson) {
-            if (!isset($activeSet[$lesson['d']])) {
+            if (!isset($activeSet[$lesson['d']]) || ($firstLessonDate !== null && $lesson['d'] < $firstLessonDate)) {
                 self::pdo()->prepare('DELETE FROM lessons WHERE id=?')->execute([(int)$lesson['id']]);
             }
         }
@@ -781,6 +856,22 @@ class ReservationManagement {
             $number = $ordinals[$lesson['d']] ?? ++$fallback; // kept past lessons on now-inactive dates
             $set->execute([$number, (int)$lesson['id']]);
         }
+    }
+
+    /** '' / null -> null; otherwise a Y-m-d date inside the semester. */
+    private static function normalizeFirstLessonDate(mixed $raw, array $semester): ?string {
+        $raw = trim((string)($raw ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $raw);
+        if (!$parsed || $parsed->format('Y-m-d') !== $raw) {
+            throw new InvalidArgumentException('First lesson date must look like 2026-11-07.');
+        }
+        if ($raw < (string)($semester['start_date'] ?? '') || $raw > (string)($semester['end_date'] ?? '')) {
+            throw new InvalidArgumentException('First lesson date must fall inside the semester.');
+        }
+        return $raw;
     }
 
     private static function normalizeTime(string $time): string {

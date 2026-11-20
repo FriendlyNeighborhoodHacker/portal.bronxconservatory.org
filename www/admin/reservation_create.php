@@ -34,6 +34,7 @@ try {
         'start_time' => (string)($_POST['start_time'] ?? ''),
         'duration_minutes' => (int)($_POST['duration_minutes'] ?? 30),
         'status' => $status,
+        'first_lesson_date' => (string)($_POST['first_lesson_date'] ?? ''),
     ], [
         'include_installment_fee' => (string)($_POST['include_installment_fee'] ?? '') === '1',
     ]);

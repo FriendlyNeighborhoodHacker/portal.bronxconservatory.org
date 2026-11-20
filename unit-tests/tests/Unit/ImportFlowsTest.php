@@ -990,4 +990,69 @@ final class ImportFlowsTest extends TestCase
         $this->assertSame('2030-09-21', LocationDatesCsvImport::parseDate('2030-09-21'));
         $this->assertNull(LocationDatesCsvImport::parseDate('2030-02-31'));
     }
+
+    // ── Rooms and online locations ─────────────────────────────────────────
+
+    public function testLocationTeachersCsvSetsRoomsAndLessonsCarryThem(): void
+    {
+        $teacher = fx_teacher('Rita', 'Roomy');
+        [$semesterId, $locationId, , $dayOfWeek] = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 2);
+        $locationName = (string)LocationManagement::find($locationId)['name'];
+        $context = ['semester_id' => $semesterId];
+
+        // Already assigned by the fixture, so this row only sets the room.
+        $rows = [['teacher_name' => 'Rita Roomy', 'location_name' => $locationName, 'day' => 'Saturday', 'room' => '333']];
+        $validated = LocationTeachersCsvImport::validateRows($rows, $context);
+        $this->assertSame('valid', $validated[0]['status']);
+        $this->assertStringStartsWith('Set room "333"', $validated[0]['changes']);
+        $summary = LocationTeachersCsvImport::commit($this->ctx, $validated, $context);
+        $this->assertSame(1, $summary['updated']);
+
+        // Re-importing the same file changes nothing.
+        $again = LocationTeachersCsvImport::validateRows($rows, $context);
+        $this->assertSame('Already assigned (no change)', $again[0]['changes']);
+
+        $columns = SemesterManagement::locationTeachers($semesterId, $dayOfWeek);
+        $this->assertSame('333', $columns[0]['room']);
+
+        $student = fx_student();
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+            'student_user_id' => $student, 'day_of_week' => $dayOfWeek, 'start_time' => '10:00', 'status' => 'confirmed',
+        ], ['post_charges' => false]);
+        $lessons = LessonManagement::upcomingLessonsForStudent($student, '2030-01-01');
+        $this->assertCount(2, $lessons);
+        $this->assertSame('333', $lessons[0]['room']);
+        $this->assertStringContainsString('Room 333', lesson_place_html($lessons[0]));
+    }
+
+    public function testOnlineLocationHasNoAddressAndShowsAMeetingLink(): void
+    {
+        $validated = LocationCsvImport::validateRows([
+            ['name' => 'Online', 'address' => 'ignored', 'online' => 'yes'],
+            ['name' => 'Nowhere', 'online' => 'maybe'],
+        ]);
+        $this->assertSame('valid', $validated[0]['status']);
+        $this->assertSame('error', $validated[1]['status']);
+        LocationCsvImport::commit($this->ctx, $validated);
+
+        $online = null;
+        foreach (LocationManagement::all() as $location) {
+            if ($location['name'] === 'Online') {
+                $online = $location;
+            }
+        }
+        $this->assertNotNull($online);
+        $this->assertSame(1, (int)$online['is_online']);
+        $this->assertNull($online['address']);
+
+        // A re-import without the Online column leaves the flag alone.
+        LocationCsvImport::commit($this->ctx, LocationCsvImport::validateRows([['name' => 'Online']]));
+        $this->assertSame(1, (int)LocationManagement::find((int)$online['id'])['is_online']);
+
+        $html = lesson_place_html(['is_online' => 1, 'room' => 'https://example.org/meet/abc', 'location_name' => 'Online']);
+        $this->assertStringContainsString('Online', $html);
+        $this->assertStringContainsString('href="https://example.org/meet/abc"', $html);
+        $this->assertStringNotContainsString('Room', $html);
+    }
 }

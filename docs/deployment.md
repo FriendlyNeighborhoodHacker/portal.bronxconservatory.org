@@ -348,6 +348,44 @@ crontab -e
 15 2 * * * php /home/bronxconservatory/dev-bronxconservatory.lillyrosenthal.org/bin/apply_installment_fees.php >> /home/bronxconservatory/deploy/logs/dev-bronxconservatory.lillyrosenthal.org.installment_fees.log 2>&1
 ```
 
+## Loading the real data (launch)
+
+The real roster and schedule live in a directory that is never in git: on a
+developer's machine it is the gitignored `real_data/` at the top of the
+checkout; on a server it sits in the secrets directory,
+`~/deploy/{site}.secrets/real_data/`. Only the files the loader reads go to
+the server (`general/`, the semester directories and `semesters.json`) — not
+the source workbook or the reconciliation report.
+
+1. **Copy the files** from the developer's machine (needs an SSH key in the
+   server account's `~/.ssh/authorized_keys`):
+
+       real_data/tools/push.sh bronxconservatory@HOST portal.bronxconservatory.org
+
+2. **Config** — in `~/deploy/{site}.secrets/config.local.php`, then re-run the
+   deploy script so the web root gets it:
+
+       // Nobody outside this list gets mail until the launch is announced.
+       define('EMAIL_REDIRECT_TO', 'you@example.org');
+       define('EMAIL_REDIRECT_ALLOWLIST', ['you@example.org']);
+       define('REAL_DATA_DIR', '/home/bronxconservatory/deploy/{site}.secrets/real_data');
+
+3. **Migrations** — Admin > Migrations, apply everything pending.
+4. **Back up the database**, then as a developer admin open Get Started
+   (`/admin/setup/index.php`, also linked from Admin > Maintenance > Load Real
+   Data). The card says what will be loaded, who is kept, and whether the email
+   redirect is on. Type RESET and press **Reset & Load Real Data**.
+5. **Afterwards** — remove the `REAL_DATA_DIR` line and re-run the deploy
+   script; it is the only thing that enables the wipe. Loosen the email
+   redirect (grow the allowlist, then clear `EMAIL_REDIRECT_TO`) when families
+   and teachers should start hearing from the portal. Invite the staff admins
+   from Users: the load creates their accounts without a password and does not
+   email them.
+
+What is deleted and kept is described in `www/lib/RealDataLoader.php`. The
+load is repeatable: it always starts with the reset, so a corrected file is
+one more push and one more click.
+
 ## Day to day
 
 - **Deploy by hand:** as the site account, run `~/deploy/{site}.sh`. Then, if

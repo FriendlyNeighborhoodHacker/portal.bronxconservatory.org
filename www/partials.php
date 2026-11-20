@@ -43,12 +43,20 @@ function lesson_time_html(string $startDatetime, int $durationMinutes): string {
     return h(date('D, M j', $start) . ' · ' . $startLabel . '–' . date('g:i A', $end));
 }
 
-// Where a lesson happens: "Online" (with icon), "Room 12 · Bronx Community
-// College", or an em dash when nothing is set. $lesson needs is_online, room,
-// location_name keys.
+// Where a lesson happens: "Online" (with icon, plus a "Join" link when the
+// teacher's meeting link is set), "Room 12 · Bronx Community College", or an
+// em dash when nothing is set. $lesson needs is_online, room, location_name
+// keys. At an online location `room` holds the meeting link.
 function lesson_place_html(array $lesson): string {
     if (!empty($lesson['is_online'])) {
-        return '<span class="online-tag" title="Online lesson">&#128187; Online</span>';
+        $link = trim((string)($lesson['room'] ?? ''));
+        $html = '<span class="online-tag" title="Online lesson">&#128187; Online</span>';
+        if (preg_match('#^https?://#i', $link)) {
+            $html .= ' · <a href="' . h($link) . '" target="_blank" rel="noopener">Join</a>';
+        } elseif ($link !== '') {
+            $html .= ' · ' . h($link);
+        }
+        return $html;
     }
     $parts = array_filter([
         trim((string)($lesson['room'] ?? '')) !== '' ? 'Room ' . $lesson['room'] : '',

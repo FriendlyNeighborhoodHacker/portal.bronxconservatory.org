@@ -38,12 +38,14 @@ class SemesterReservationsCsvImport {
             'start_time' => 'Start Time',
             'duration_minutes' => 'Duration Minutes',
             'status' => 'Status',
+            'first_lesson_date' => 'First Lesson Date',
         ];
     }
 
     public static function validateRows(array $mappedRows, array $context = []): array {
         $semesterId = (int)($context['semester_id'] ?? 0);
-        if (!SemesterManagement::find($semesterId)) {
+        $semester = SemesterManagement::find($semesterId);
+        if (!$semester) {
             throw new InvalidArgumentException('A semester is required for a schedule import.');
         }
 
@@ -179,6 +181,20 @@ class SemesterReservationsCsvImport {
                 }
             }
 
+            // Optional late start: lessons are generated from this date on.
+            $firstLessonRaw = trim((string)($row['first_lesson_date'] ?? ''));
+            $firstLessonDate = null;
+            if ($firstLessonRaw !== '') {
+                $firstLessonDate = LocationDatesCsvImport::parseDate($firstLessonRaw);
+                if ($firstLessonDate === null) {
+                    $status = 'error';
+                    $messages[] = 'First lesson date "' . $firstLessonRaw . '" is not a date (use 11/7/2026 or 2026-11-07).';
+                } elseif ($firstLessonDate < (string)$semester['start_date'] || $firstLessonDate > (string)$semester['end_date']) {
+                    $status = 'error';
+                    $messages[] = 'First lesson date ' . $firstLessonRaw . ' is outside the semester.';
+                }
+            }
+
             $activeDates = [];
             if ($status !== 'error' && $location && $dayOfWeek !== null) {
                 // A reservation only produces lessons on class dates that fall
@@ -252,6 +268,10 @@ class SemesterReservationsCsvImport {
                         $row['_start_time'] = $startTime;
                         $row['_duration_minutes'] = $duration;
                         $row['_status'] = $reservationStatus;
+                        $row['_first_lesson_date'] = $firstLessonDate;
+                        if ($firstLessonDate !== null) {
+                            $changes .= ' — starts ' . date('M j', strtotime($firstLessonDate));
+                        }
                     }
                 }
             }
@@ -291,6 +311,7 @@ class SemesterReservationsCsvImport {
                 'start_time' => substr((string)$row['_start_time'], 0, 5),
                 'duration_minutes' => (int)$row['_duration_minutes'],
                 'status' => (string)$row['_status'],
+                'first_lesson_date' => $row['_first_lesson_date'] ?? null,
             ], ['post_charges' => false]);
             $added++;
         }

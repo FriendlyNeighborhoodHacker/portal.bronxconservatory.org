@@ -551,4 +551,114 @@ final class ReservationManagementTest extends TestCase
 
         $this->assertSame('11:00:00', ReservationManagement::findReservation($reservationId)['start_time']);
     }
+
+    // ── Late starts (first_lesson_date) ────────────────────────────────────
+
+    private function lessonEntry(int $studentId, int $semesterId): ?array
+    {
+        foreach (Billing::ledgerForStudent($studentId, $semesterId) as $entry) {
+            if ($entry['entry_type'] === 'lessons') {
+                return $entry;
+            }
+        }
+        return null;
+    }
+
+    public function testLateStartSkipsEarlierDatesAndProratesTheLessonFee(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 4);
+        [$semesterId, $locationId, $teacherId, $dayOfWeek] = $setup;
+        $student = fx_student();
+
+        // A date between class days: lessons start on the next class day.
+        $id = ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacherId, 'location_id' => $locationId,
+            'student_user_id' => $student, 'day_of_week' => $dayOfWeek, 'start_time' => '10:00',
+            'duration_minutes' => 30, 'status' => 'confirmed', 'first_lesson_date' => '2030-09-17',
+        ]);
+
+        $lessons = $this->lessonRows($id);
+        $this->assertSame(
+            ['2030-09-21 10:00:00', '2030-09-28 10:00:00'],
+            array_column($lessons, 'start_datetime')
+        );
+        // Lessons keep their calendar ordinal.
+        $this->assertSame([3, 4], array_map(fn($l) => (int)$l['lesson_number'], $lessons));
+
+        // $300 for a 15-lesson package = $20 a lesson; two lessons remain.
+        $entry = $this->lessonEntry($student, $semesterId);
+        $this->assertNotNull($entry);
+        $this->assertSame(4000, (int)$entry['amount_cents']);
+        $this->assertStringContainsString('2 of 15', (string)$entry['description']);
+        // Registration is not prorated.
+        $this->assertSame(4000 + 5000 + 2500, Billing::balanceForStudentSemesterCents($student, $semesterId));
+    }
+
+    public function testNoLateStartChargesTheFullPackageWhateverTheCalendarLength(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 4);
+        $student = fx_student();
+        $this->makeReservation($setup, 'confirmed', $student);
+        $this->assertSame(30000, (int)$this->lessonEntry($student, $setup[0])['amount_cents']);
+    }
+
+    public function testFirstLessonDateMustBeInsideTheSemester(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 4);
+        $this->expectException(InvalidArgumentException::class);
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $setup[0], 'teacher_user_id' => $setup[2], 'location_id' => $setup[1],
+            'student_user_id' => fx_student(), 'day_of_week' => $setup[3], 'start_time' => '10:00',
+            'first_lesson_date' => '2031-06-01',
+        ]);
+    }
+
+    public function testChangingTheFirstLessonDateAddsAndRemovesLessonsButKeepsRecordedOnes(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 4);
+        [$reservationId] = $this->makeReservation($setup, 'confirmed');
+        $lessons = $this->lessonRows($reservationId);
+        $this->assertCount(4, $lessons);
+        // Week 1 was taught and marked: it records something, so it stays.
+        pdo()->prepare('UPDATE lessons SET attended=1 WHERE id=?')->execute([(int)$lessons[0]['id']]);
+
+        ReservationManagement::setFirstLessonDate($this->ctx, $reservationId, '2030-09-21');
+        $this->assertSame(
+            ['2030-09-07 10:00:00', '2030-09-21 10:00:00', '2030-09-28 10:00:00'],
+            array_column($this->lessonRows($reservationId), 'start_datetime')
+        );
+
+        // Clearing the date brings the missing week back, with its own number.
+        ReservationManagement::setFirstLessonDate($this->ctx, $reservationId, '');
+        $lessons = $this->lessonRows($reservationId);
+        $this->assertCount(4, $lessons);
+        $this->assertSame([1, 2, 3, 4], array_map(fn($l) => (int)$l['lesson_number'], $lessons));
+    }
+
+    public function testPendingLateStartGeneratesFromItsDateWhenConfirmed(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 4);
+        [$reservationId] = $this->makeReservation($setup);
+        ReservationManagement::setFirstLessonDate($this->ctx, $reservationId, '2030-09-28');
+        $this->assertCount(0, $this->lessonRows($reservationId));
+
+        ReservationManagement::setStatus($this->ctx, $reservationId, 'confirmed');
+        $this->assertSame(['2030-09-28 10:00:00'], array_column($this->lessonRows($reservationId), 'start_datetime'));
+        $preview = Billing::confirmationChargesPreview(fx_student('Other', 'Kid'), $setup[0], 30, 1);
+        $this->assertSame(2000, (int)$preview['lines'][1]['amount_cents']);
+    }
+
+    public function testCarryForwardDoesNotCopyALateStart(): void
+    {
+        $teacher = fx_teacher();
+        $fall = fx_semester_with_dates($this->ctx, $teacher, '2030-09-07', 4);
+        $spring = fx_semester_with_dates($this->ctx, $teacher, '2031-02-01', 4, 'spring', 2031);
+        [$reservationId] = $this->makeReservation($fall);
+        ReservationManagement::setFirstLessonDate($this->ctx, $reservationId, '2030-09-21');
+
+        ReservationManagement::carryForwardFromSemester($this->ctx, $spring[0], $fall[0]);
+        $carried = ReservationManagement::reservationsForSemester($spring[0]);
+        $this->assertCount(1, $carried);
+        $this->assertNull($carried[0]['first_lesson_date']);
+    }
 }

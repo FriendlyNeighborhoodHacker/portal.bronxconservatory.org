@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 require_csrf();
 
 try {
-    LocationManagement::create(UserContext::getLoggedInUserContext(), (string)($_POST['name'] ?? ''), $_POST['address'] ?? null);
+    LocationManagement::create(UserContext::getLoggedInUserContext(), (string)($_POST['name'] ?? ''), $_POST['address'] ?? null, !empty($_POST['is_online']));
     $_SESSION['location_flash'] = 'Location added.';
 } catch (\Throwable $e) {
     $_SESSION['location_flash_error'] = $e->getMessage();

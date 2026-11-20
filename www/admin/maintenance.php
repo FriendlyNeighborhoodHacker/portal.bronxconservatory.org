@@ -4,6 +4,8 @@
 // is the same gate each tool below applies for itself.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/MigrationRunner.php';
+require_once __DIR__ . '/../lib/RealDataLoader.php';
+require_once __DIR__ . '/../mailer.php';
 Application::init();
 require_developer();
 
@@ -11,6 +13,8 @@ require_developer();
 // db_migrations directory; elsewhere the card is shown inert with a hint.
 $migrationsConfigured = MigrationRunner::isConfigured();
 $pendingMigrations = $migrationsConfigured ? count(MigrationRunner::pendingFilenames()) : 0;
+
+$emailRedirect = email_redirect_status();
 
 $tools = [
     [
@@ -37,7 +41,18 @@ $tools = [
         'path' => '/admin/email_log.php',
         'label' => 'Email Log',
         'blurb' => 'Every email the portal has sent, with delivery status.',
-        'note' => null,
+        'note' => $emailRedirect['on']
+            ? 'Redirect ON — all mail goes to ' . $emailRedirect['to']
+                . ($emailRedirect['allowlist'] ? ' (except ' . count($emailRedirect['allowlist']) . ' allowlisted)' : '')
+            : 'Redirect off — mail goes to real recipients',
+    ],
+    [
+        'path' => RealDataLoader::isAvailable() ? '/admin/setup/index.php#real-data' : null,
+        'label' => 'Load Real Data',
+        'blurb' => 'Reset the database and load the real roster and schedule (launch only).',
+        'note' => RealDataLoader::isAvailable()
+            ? 'Enabled — remove REAL_DATA_DIR from config.local.php after launch'
+            : 'Not enabled here — set REAL_DATA_DIR in config.local.php',
     ],
     [
         'path' => '/admin/installment_fees.php',

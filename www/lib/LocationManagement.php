@@ -27,27 +27,33 @@ class LocationManagement {
         return $row ?: null;
     }
 
-    public static function create(?UserContext $ctx, string $name, ?string $address = null): int {
+    public static function create(?UserContext $ctx, string $name, ?string $address = null, bool $isOnline = false): int {
         self::assertAdmin($ctx);
         $name = trim($name);
         if ($name === '') {
             throw new InvalidArgumentException('Location name is required.');
         }
-        self::pdo()->prepare('INSERT INTO locations (name, address) VALUES (?,?)')
-            ->execute([$name, self::orNull($address)]);
+        // An online location has no street address.
+        self::pdo()->prepare('INSERT INTO locations (name, address, is_online) VALUES (?,?,?)')
+            ->execute([$name, $isOnline ? null : self::orNull($address), $isOnline ? 1 : 0]);
         $id = (int)self::pdo()->lastInsertId();
         self::log($ctx, 'location.created', ['location_id' => $id, 'name' => $name]);
         return $id;
     }
 
-    public static function update(?UserContext $ctx, int $id, string $name, ?string $address, bool $isActive): void {
+    /** $isOnline null leaves the flag as it is. */
+    public static function update(?UserContext $ctx, int $id, string $name, ?string $address, bool $isActive, ?bool $isOnline = null): void {
         self::assertAdmin($ctx);
         $name = trim($name);
         if ($name === '') {
             throw new InvalidArgumentException('Location name is required.');
         }
-        self::pdo()->prepare('UPDATE locations SET name=?, address=?, is_active=? WHERE id=?')
-            ->execute([$name, self::orNull($address), $isActive ? 1 : 0, $id]);
+        if ($isOnline === null) {
+            $current = self::find($id);
+            $isOnline = $current ? (bool)$current['is_online'] : false;
+        }
+        self::pdo()->prepare('UPDATE locations SET name=?, address=?, is_active=?, is_online=? WHERE id=?')
+            ->execute([$name, $isOnline ? null : self::orNull($address), $isActive ? 1 : 0, $isOnline ? 1 : 0, $id]);
         self::log($ctx, 'location.updated', ['location_id' => $id]);
     }
 

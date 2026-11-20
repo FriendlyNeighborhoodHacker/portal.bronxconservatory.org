@@ -56,3 +56,6 @@ var/
 xcschememanagement.plist
 secret/
 db_backups/
+
+# ===== Real roster / schedule data (contains personal information) =====
+real_data/

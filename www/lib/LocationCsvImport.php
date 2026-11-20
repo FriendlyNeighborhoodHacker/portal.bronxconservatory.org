@@ -16,6 +16,7 @@ class LocationCsvImport {
             'name' => 'Location Name',
             'address' => 'Address',
             'status' => 'Status',
+            'online' => 'Online',
         ];
     }
 
@@ -44,6 +45,20 @@ class LocationCsvImport {
                 $messages[] = 'Status must be "active" or "inactive" (blank means active).';
             }
 
+            // Optional: yes marks a location taught by video (no address).
+            $onlineRaw = strtolower(trim((string)($row['online'] ?? '')));
+            $isOnline = null;
+            if ($onlineRaw !== '') {
+                if (in_array($onlineRaw, ['yes', 'y', 'true', '1', 'online'], true)) {
+                    $isOnline = true;
+                } elseif (in_array($onlineRaw, ['no', 'n', 'false', '0'], true)) {
+                    $isOnline = false;
+                } else {
+                    $status = 'error';
+                    $messages[] = 'Online must be "yes" or "no" (blank means no change).';
+                }
+            }
+
             $norm = self::norm($name);
             if ($status !== 'error' && isset($seen[$norm])) {
                 $status = 'error';
@@ -60,6 +75,7 @@ class LocationCsvImport {
                     $changes = 'Create location';
                 }
                 $row['_status'] = $rowStatus;
+                $row['_is_online'] = $isOnline;
             }
 
             $out[] = [
@@ -102,11 +118,12 @@ class LocationCsvImport {
                     $locationId,
                     (string)$current['name'],
                     $address !== '' ? $address : ($current['address'] ?? null),
-                    $isActive
+                    $isActive,
+                    $row['_is_online'] ?? null
                 );
                 $updated++;
             } else {
-                $newId = LocationManagement::create($ctx, $name, $address !== '' ? $address : null);
+                $newId = LocationManagement::create($ctx, $name, $address !== '' ? $address : null, (bool)($row['_is_online'] ?? false));
                 if (!$isActive) {
                     LocationManagement::update($ctx, $newId, $name, $address !== '' ? $address : null, false);
                 }

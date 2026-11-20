@@ -248,6 +248,7 @@ CREATE TABLE locations (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(200) NOT NULL,
   address VARCHAR(255) DEFAULT NULL,
+  is_online TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = lessons here are taught online: no address, own days and hours',
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
@@ -346,6 +347,7 @@ CREATE TABLE semester_location_teachers (
   location_id INT NOT NULL,
   teacher_user_id INT NOT NULL,
   day_of_week TINYINT NOT NULL COMMENT '0=Sunday..6=Saturday, PHP date(w)',
+  room VARCHAR(255) DEFAULT NULL COMMENT 'The teacher''s room there that day; at an online location, their meeting link',
   sort_order INT NOT NULL DEFAULT 0,
   UNIQUE KEY unique_sem_loc_teacher_day (semester_id, location_id, teacher_user_id, day_of_week),
   CONSTRAINT fk_slt_semester FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE CASCADE,
@@ -370,6 +372,7 @@ CREATE TABLE semester_lesson_reservations (
   day_of_week TINYINT NOT NULL COMMENT '0=Sunday ... 6=Saturday (PHP date("w"))',
   start_time TIME NOT NULL,
   duration_minutes INT NOT NULL DEFAULT 30,
+  first_lesson_date DATE DEFAULT NULL COMMENT 'Late start: lessons are generated only on class dates on or after this; NULL = whole semester',
   created_by_user_id INT DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

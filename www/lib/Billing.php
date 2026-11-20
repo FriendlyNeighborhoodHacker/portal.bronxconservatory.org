@@ -33,14 +33,17 @@ class Billing {
      * the balance goes unpaid. Idempotent per (student, semester, entry_type):
      * a student confirming a second reservation in the same semester (e.g. a
      * second instrument) is not charged twice.
+     *
+     * $lessonCount is set only for a late start: the lesson fee is then
+     * charged per lesson for that many lessons instead of the full package.
      */
-    public static function postSemesterConfirmationCharges(?UserContext $ctx, int $studentUserId, int $semesterId, int $durationMinutes = 30, bool $includeInstallmentFee = false): void {
+    public static function postSemesterConfirmationCharges(?UserContext $ctx, int $studentUserId, int $semesterId, int $durationMinutes = 30, bool $includeInstallmentFee = false, ?int $lessonCount = null): void {
         self::assertAdmin($ctx);
         $semester = SemesterManagement::find($semesterId);
         if (!$semester) {
             throw new InvalidArgumentException('Semester not found.');
         }
-        $charges = self::confirmationChargeAmounts($semester, $durationMinutes);
+        $charges = self::confirmationChargeAmounts($semester, $durationMinutes, $lessonCount);
         if ($includeInstallmentFee) {
             $charges['installment_plan_fee'] = [SemesterManagement::installmentPlanFeeCents($semester), 'Installment plan fee'];
         }
@@ -62,10 +65,21 @@ class Billing {
     }
 
     /** The base confirmation charges (installment fee handled separately). */
-    private static function confirmationChargeAmounts(array $semester, int $durationMinutes): array {
+    private static function confirmationChargeAmounts(array $semester, int $durationMinutes, ?int $lessonCount = null): array {
+        $lessonFee = SemesterManagement::lessonFeeCents($semester, $durationMinutes);
+        $lessonLabel = 'Semester lessons';
+        // Late start: the package price divided by the semester's lesson
+        // count, times the lessons that remain. Registration and recital
+        // fees are not prorated.
+        $package = max(1, (int)($semester['lessons_per_semester'] ?? 15));
+        if ($lessonCount !== null && $lessonCount < $package) {
+            $lessonCount = max(0, $lessonCount);
+            $lessonFee = (int)round($lessonFee * $lessonCount / $package);
+            $lessonLabel = 'Semester lessons (' . $lessonCount . ' of ' . $package . ', late start)';
+        }
         return [
             'registration' => [SemesterManagement::registrationFeeCents($semester), 'Semester registration'],
-            'lessons' => [SemesterManagement::lessonFeeCents($semester, $durationMinutes), 'Semester lessons'],
+            'lessons' => [$lessonFee, $lessonLabel],
             'recital_fee' => [SemesterManagement::recitalFeeCents($semester), 'Recital fee'],
         ];
     }
@@ -74,14 +88,14 @@ class Billing {
      * The line items that WOULD post if this student's reservation were
      * confirmed now — what the admin's confirmation dialog shows. Read-only.
      */
-    public static function confirmationChargesPreview(int $studentUserId, int $semesterId, int $durationMinutes): array {
+    public static function confirmationChargesPreview(int $studentUserId, int $semesterId, int $durationMinutes, ?int $lessonCount = null): array {
         $semester = SemesterManagement::find($semesterId);
         if (!$semester) {
             throw new InvalidArgumentException('Semester not found.');
         }
         $lines = [];
         $total = 0;
-        foreach (self::confirmationChargeAmounts($semester, $durationMinutes) as $entryType => [$amountCents, $description]) {
+        foreach (self::confirmationChargeAmounts($semester, $durationMinutes, $lessonCount) as $entryType => [$amountCents, $description]) {
             if ($amountCents <= 0) {
                 continue;
             }

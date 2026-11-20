@@ -105,8 +105,10 @@ header_html('Edit ' . $name);
 <?php if ($semester !== null): ?>
 <div class="card">
   <h3>Schedule Days — <?=h(SemesterManagement::label($semester))?></h3>
-  <p class="small">The days this teacher appears on the Semester Schedule, per location. An
-  assignment can be removed only once nothing is scheduled for them on that day there.</p>
+  <p class="small">The days this teacher appears on the Semester Schedule, per location, and the
+  room they teach in (for an online location, their meeting link) — shown on the schedule and to
+  their students. An assignment can be removed only once nothing is scheduled for them on that
+  day there.</p>
   <?php if (!$assignments): ?>
     <p class="small">Not on the schedule this semester.</p>
   <?php endif; ?>
@@ -114,6 +116,19 @@ header_html('Edit ' . $name);
     <div class="lesson-row">
       <span><strong><?=h($assignment['location_name'])?></strong>
         — <?=h(SemesterManagement::dayName((int)$assignment['day_of_week']))?>s</span>
+      <form method="post" action="/admin/teacher_days_eval.php" style="display:inline;">
+        <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+        <input type="hidden" name="teacher_user_id" value="<?=$userId?>">
+        <input type="hidden" name="semester_id" value="<?=(int)$semesterId?>">
+        <input type="hidden" name="action" value="room">
+        <input type="hidden" name="location_id" value="<?=(int)$assignment['location_id']?>">
+        <input type="hidden" name="day_of_week" value="<?=(int)$assignment['day_of_week']?>">
+        <?php $roomLabel = !empty($assignment['location_is_online']) ? 'Meeting link' : 'Room'; ?>
+        <input type="text" name="room" maxlength="255" value="<?=h((string)($assignment['room'] ?? ''))?>"
+          placeholder="<?=h($roomLabel)?>" aria-label="<?=h($roomLabel)?>"
+          style="width:<?=!empty($assignment['location_is_online']) ? '260px' : '110px'?>;display:inline-block;">
+        <button type="submit" class="button small">Save</button>
+      </form>
       <form method="post" action="/admin/teacher_days_eval.php" style="display:inline;"
         onsubmit="return confirm('Remove this assignment? They will no longer appear on the schedule for <?=h($assignment['location_name'])?> on <?=h(SemesterManagement::dayName((int)$assignment['day_of_week']))?>s.');">
         <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">

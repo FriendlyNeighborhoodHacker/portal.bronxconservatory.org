@@ -30,6 +30,18 @@ function email_redirect_target(string $toEmail): ?string {
 }
 
 /**
+ * The redirect as configured, for showing admins what will happen to mail:
+ * ['on' => bool, 'to' => address, 'allowlist' => [addresses still delivered normally]].
+ */
+function email_redirect_status(): array {
+  $to = defined('EMAIL_REDIRECT_TO') ? trim((string)EMAIL_REDIRECT_TO) : '';
+  $allowlist = (defined('EMAIL_REDIRECT_ALLOWLIST') && is_array(EMAIL_REDIRECT_ALLOWLIST))
+    ? array_values(array_filter(array_map(static fn($a) => strtolower(trim((string)$a)), EMAIL_REDIRECT_ALLOWLIST)))
+    : [];
+  return ['on' => $to !== '', 'to' => $to, 'allowlist' => $to !== '' ? $allowlist : []];
+}
+
+/**
  * Send an HTML email via SMTP (supports SSL 465 and STARTTLS 587).
  * Returns true on success, false on failure.
  */

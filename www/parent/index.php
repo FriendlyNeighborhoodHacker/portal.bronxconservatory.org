@@ -94,7 +94,7 @@ header_html('My Family');
       </div>
       <?php if ($nextLesson): ?>
         <div class="next-lesson">Next: <?=lesson_time_html($nextLesson['start_datetime'], (int)$nextLesson['duration_minutes'])?>
-          · <?=h($nextLesson['location_name'])?>
+          · <?=lesson_place_html($nextLesson)?>
           <?php if (LessonManagement::isCancelled($nextLesson)): ?><span class="badge">Cancelled</span><?php endif; ?>
         </div>
       <?php else: ?>

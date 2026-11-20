@@ -19,6 +19,7 @@ class LocationTeachersCsvImport {
             'teacher_name' => 'Teacher Name',
             'location_name' => 'Location Name',
             'day' => 'Day',
+            'room' => 'Room',
         ];
     }
 
@@ -32,6 +33,7 @@ class LocationTeachersCsvImport {
             $locationsByName[self::norm((string)$location['name'])] = $location;
         }
         $existingPairs = SemesterManagement::locationTeacherDayKeys($semesterId);
+        $existingRooms = SemesterManagement::locationTeacherRooms($semesterId);
 
         $out = [];
         $seen = [];
@@ -101,7 +103,25 @@ class LocationTeachersCsvImport {
                     }
                     $seen[$key] = true;
                 }
-                if (!$newDays) {
+                // Optional room (at an online location: the meeting link).
+                $room = trim((string)($row['room'] ?? ''));
+                $roomDays = [];
+                if (mb_strlen($room) > 255) {
+                    $status = 'error';
+                    $messages[] = 'Room is too long (255 characters at most).';
+                } elseif ($room !== '') {
+                    foreach ($days as $day) {
+                        if (($existingRooms[$location['id'] . ':' . $teacher['id'] . ':' . $day] ?? '') !== $room) {
+                            $roomDays[] = $day;
+                        }
+                    }
+                }
+                $row['_room'] = $room;
+                $row['_room_days'] = $roomDays;
+                if (!$newDays && $roomDays) {
+                    $changes = 'Set room "' . $room . '" for ' . $teacher['first_name'] . ' ' . $teacher['last_name']
+                        . ' at ' . $location['name'];
+                } elseif (!$newDays) {
                     $changes = 'Already assigned (no change)';
                 } else {
                     $changes = 'Assign ' . $teacher['first_name'] . ' ' . $teacher['last_name'] . ' to ' . $location['name']
@@ -127,6 +147,7 @@ class LocationTeachersCsvImport {
     public static function commit(?UserContext $ctx, array $validatedRows, array $context = []): array {
         $semesterId = (int)($context['semester_id'] ?? 0);
         $added = 0;
+        $updated = 0;
         $skipped = 0;
         foreach ($validatedRows as $entry) {
             if (($entry['status'] ?? '') !== 'valid') {
@@ -138,13 +159,23 @@ class LocationTeachersCsvImport {
                 continue;
             }
             $row = $entry['data'];
-            SemesterManagement::addLocationTeacher(
-                $ctx, $semesterId, (int)$row['_location_id'], (int)$row['_teacher_user_id'],
-                isset($row['_day_of_week']) ? (int)$row['_day_of_week'] : null
-            );
-            $added++;
+            $roomOnly = str_starts_with((string)($entry['changes'] ?? ''), 'Set room ');
+            if (!$roomOnly) {
+                SemesterManagement::addLocationTeacher(
+                    $ctx, $semesterId, (int)$row['_location_id'], (int)$row['_teacher_user_id'],
+                    isset($row['_day_of_week']) ? (int)$row['_day_of_week'] : null
+                );
+                $added++;
+            } else {
+                $updated++;
+            }
+            foreach ((array)($row['_room_days'] ?? []) as $day) {
+                SemesterManagement::setLocationTeacherRoom(
+                    $ctx, $semesterId, (int)$row['_location_id'], (int)$row['_teacher_user_id'], (int)$day, (string)$row['_room']
+                );
+            }
         }
-        return ['created' => $added, 'updated' => 0, 'skipped' => $skipped];
+        return ['created' => $added, 'updated' => $updated, 'skipped' => $skipped];
     }
 
     // ── internals ─────────────────────────────────────────────────────────

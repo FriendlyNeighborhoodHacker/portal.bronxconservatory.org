@@ -5,7 +5,9 @@
 //
 // action=confirm needs either reservation_id (optionally duration_minutes to
 // preview at a newly selected length) or, for a not-yet-created reservation,
-// semester_id + student_user_id + duration_minutes.
+// semester_id + student_user_id + duration_minutes (+ location_id,
+// day_of_week and first_lesson_date when the slot starts late, so the lesson
+// fee is previewed for the lessons that remain).
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/ReservationManagement.php';
 require_once __DIR__ . '/../lib/Billing.php';
@@ -38,15 +40,28 @@ try {
             $studentUserId = (int)$reservation['student_user_id'];
             $semesterId = (int)$reservation['semester_id'];
             $durationMinutes = (int)($_GET['duration_minutes'] ?? 0) ?: (int)$reservation['duration_minutes'];
+            $locationId = (int)$reservation['location_id'];
+            $dayOfWeek = (int)$reservation['day_of_week'];
+            // The edit dialog saves the date before confirming, so preview
+            // with what is in the form rather than what is stored.
+            $firstLessonDate = isset($_GET['first_lesson_date'])
+                ? trim((string)$_GET['first_lesson_date'])
+                : (string)($reservation['first_lesson_date'] ?? '');
         } else {
             $studentUserId = (int)($_GET['student_user_id'] ?? 0);
             $semesterId = (int)($_GET['semester_id'] ?? 0);
             $durationMinutes = (int)($_GET['duration_minutes'] ?? 30);
+            $locationId = (int)($_GET['location_id'] ?? 0);
+            $dayOfWeek = (int)($_GET['day_of_week'] ?? -1);
+            $firstLessonDate = trim((string)($_GET['first_lesson_date'] ?? ''));
         }
         if ($studentUserId <= 0 || $semesterId <= 0) {
             throw new InvalidArgumentException('A student and semester are required.');
         }
-        $preview = Billing::confirmationChargesPreview($studentUserId, $semesterId, $durationMinutes);
+        $lessonCount = ReservationManagement::lateStartLessonCount(
+            $semesterId, $locationId, $dayOfWeek, $firstLessonDate !== '' ? $firstLessonDate : null
+        );
+        $preview = Billing::confirmationChargesPreview($studentUserId, $semesterId, $durationMinutes, $lessonCount);
         $lines = [];
         foreach ($preview['lines'] as $line) {
             $lines[] = [

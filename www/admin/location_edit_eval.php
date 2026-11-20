@@ -18,7 +18,8 @@ try {
         $id,
         (string)($_POST['name'] ?? ''),
         $_POST['address'] ?? null,
-        !empty($_POST['is_active'])
+        !empty($_POST['is_active']),
+        !empty($_POST['is_online'])
     );
     $_SESSION['location_flash'] = 'Location saved.';
     header('Location: /admin/locations.php');

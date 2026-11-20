@@ -62,7 +62,7 @@ header_html($child['first_name'] . "'s lessons");
     ?>
   </div>
   <div style="margin-bottom:4px;">
-    <strong><?=h($nextLesson['location_name'])?></strong>
+    <strong><?=lesson_place_html($nextLesson)?></strong>
   </div>
   <div style="margin-bottom:12px;">
     Teacher: <?=h(trim(($nextLesson['substitute_first_name'] ?? null ?: $nextLesson['teacher_first_name']) . ' '
@@ -95,7 +95,7 @@ header_html($child['first_name'] . "'s lessons");
     <span class="lesson-row-time"><?=lesson_time_html($lesson['start_datetime'], (int)$lesson['duration_minutes'])?></span>
     <span>Lesson with <?=h(trim(($lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name']) . ' '
       . ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])))?></span>
-    <span><?=h($lesson['location_name'])?></span>
+    <span><?=lesson_place_html($lesson)?></span>
     <?php if ($cancelled): ?><span class="badge">Cancelled</span><?php endif; ?>
     <span class="small"><a href="#" data-lesson-detail="<?=(int)$lesson['id']?>">Notes &amp; materials</a></span>
   </div>

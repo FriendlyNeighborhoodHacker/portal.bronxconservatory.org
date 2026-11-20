@@ -33,6 +33,8 @@ class ReservationUIManager {
     }
 
     public static function renderModals(int $semesterId): void {
+        $semester = SemesterManagement::find($semesterId) ?: [];
+        $dateBounds = ' min="' . h((string)($semester['start_date'] ?? '')) . '" max="' . h((string)($semester['end_date'] ?? '')) . '"';
         ?>
         <!-- Add (empty cell): student lesson or hold block -->
         <div id="resAddModal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true">
@@ -78,8 +80,13 @@ class ReservationUIManager {
                     </select>
                   </label>
                 </div>
-                <p class="small">Confirming generates the semester's lessons — a dialog will
-                itemize the charges for review before anything is posted.</p>
+                <label>First lesson (only if starting late)
+                  <input type="date" name="first_lesson_date"<?=$dateBounds?>>
+                </label>
+                <p class="small">Leave the date blank for the whole semester. With a date, lessons
+                start on the first class day on or after it and the lesson fee covers only those
+                lessons. Confirming generates the lessons — a dialog will itemize the charges for
+                review before anything is posted.</p>
                 <div class="actions actions-split">
                   <span class="actions-right">
                     <button type="button" class="button" data-modal-close>Cancel</button>
@@ -150,6 +157,13 @@ class ReservationUIManager {
               </label>
               <p class="small">Changing the length moves every future week of this booking, and is
               refused if it would run into something else.</p>
+
+              <label>First lesson (only if starting late)
+                <input type="date" name="first_lesson_date" id="resEditFirstLesson"<?=$dateBounds?>>
+              </label>
+              <p class="small">Blank means the whole semester. Changing this on a confirmed booking
+              adds or removes the lessons before the date (never one with attendance, a note or
+              materials) and does not change charges already posted.</p>
 
               <label>Status
                 <select name="status" id="resEditStatus">
@@ -428,6 +442,7 @@ class ReservationUIManager {
               document.getElementById('resEditContext').textContent = item.dataset.context || '';
               document.getElementById('resEditBalance').textContent = item.dataset.balanceText || '';
               document.getElementById('resEditStatus').value = item.dataset.status;
+              document.getElementById('resEditFirstLesson').value = item.dataset.firstLessonDate || '';
               // An imported or older booking may run a length the dropdown does
               // not offer; show it as itself rather than rewriting it on save.
               var durationSelect = document.getElementById('resEditDuration');
@@ -474,6 +489,7 @@ class ReservationUIManager {
               var addForm = document.getElementById('resAddForm');
               addForm.elements.charges_acknowledged.value = '';
               addForm.elements.include_installment_fee.value = '';
+              addForm.elements.first_lesson_date.value = '';
               document.getElementById('resAddStudent_id').value = '';
               document.getElementById('resAddStudent_input').value = '';
               document.getElementById('holdAddTitle').value = '';
@@ -500,7 +516,10 @@ class ReservationUIManager {
                 'action=confirm'
                   + '&semester_id=' + encodeURIComponent(this.elements.semester_id.value)
                   + '&student_user_id=' + encodeURIComponent(studentId)
-                  + '&duration_minutes=' + encodeURIComponent(this.elements.duration_minutes.value),
+                  + '&duration_minutes=' + encodeURIComponent(this.elements.duration_minutes.value)
+                  + '&location_id=' + encodeURIComponent(this.elements.location_id.value)
+                  + '&day_of_week=' + encodeURIComponent(this.elements.day_of_week.value)
+                  + '&first_lesson_date=' + encodeURIComponent(this.elements.first_lesson_date.value),
                 { url: '/admin/reservation_create.php', form: this, errEl: errEl, mode: 'confirm' }
               );
               return;
@@ -529,7 +548,8 @@ class ReservationUIManager {
                 openChargesReview(
                   'action=confirm'
                     + '&reservation_id=' + encodeURIComponent(this.elements.reservation_id.value)
-                    + '&duration_minutes=' + encodeURIComponent(this.elements.duration_minutes.value),
+                    + '&duration_minutes=' + encodeURIComponent(this.elements.duration_minutes.value)
+                    + '&first_lesson_date=' + encodeURIComponent(this.elements.first_lesson_date.value),
                   { url: '/admin/reservation_update.php', form: this, errEl: errEl, mode: 'confirm' }
                 );
                 return;

@@ -225,7 +225,7 @@ class LessonDetailUIManager {
         <p style="margin-top:0;">
           <strong><?=lesson_time_html((string)$lesson['start_datetime'], (int)$lesson['duration_minutes'])?></strong><br>
           <?=h(trim((string)$lesson['student_first_name'] . ' ' . (string)$lesson['student_last_name']))?>
-          with <?=h($teacher)?> · <?=h((string)$lesson['location_name'])?>
+          with <?=h($teacher)?> · <?=lesson_place_html($lesson)?>
           <?php if (LessonManagement::isCancelled($lesson)): ?><span class="badge">Cancelled</span><?php endif; ?>
         </p>
 

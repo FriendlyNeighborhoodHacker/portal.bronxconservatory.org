@@ -158,6 +158,7 @@ function import_columns_help_html(array $flow): string {
                 ['Location Name', 'required', 'used everywhere the location is referenced'],
                 ['Address', 'optional', ''],
                 ['Status', 'optional', '"active" or "inactive" — blank means active'],
+                ['Online', 'optional', '"yes" for a location taught by video (no address) — blank means no change'],
             ];
             $example = "Location Name,Address\n"
                 . "Access Bronx Charter School,\"1180 Rev. James A. Polite Ave, Bronx, NY 10459\"\n"
@@ -277,6 +278,7 @@ function import_columns_help_html(array $flow): string {
                 ['Teacher Name', 'required', 'first and last name, e.g. "Marisol Vega"'],
                 ['Location Name', 'required', 'must match an active location for this semester'],
                 ['Day', 'optional', 'weekday name, e.g. "Saturday"; blank = every day the location holds classes'],
+                ['Room', 'optional', 'the room they teach in there, e.g. 333 — for an online location, their meeting link'],
             ];
             $example = "Teacher Name,Location Name,Day\n"
                 . "Marisol Vega,Bronx Community College,Saturday\n"
@@ -317,10 +319,11 @@ function import_columns_help_html(array $flow): string {
                 ['Start Time', 'required', '10:00 am, 10:00 AM, or 10:00'],
                 ['Duration Minutes', 'optional', 'e.g. 30, 60, 90 — blank means 30'],
                 ['Status', 'optional', 'pending reach out (default), pending confirmation, or confirmed'],
+                ['First Lesson Date', 'optional', 'only for a late start, e.g. 11/7/2026 — no lessons are generated before it'],
             ];
-            $example = "Student Name,Teacher Name,Location Name,Day,Start Time,Duration Minutes,Status\n"
-                . "Lucia Ramos,Marisol Vega,Bronx Community College,Saturday,10:00 am,30,confirmed\n"
-                . "Devon Brown,James Okafor,Access Bronx Charter School,Saturday,11:00 am,60,pending confirmation";
+            $example = "Student Name,Teacher Name,Location Name,Day,Start Time,Duration Minutes,Status,First Lesson Date\n"
+                . "Lucia Ramos,Marisol Vega,Bronx Community College,Saturday,10:00 am,30,confirmed,\n"
+                . "Devon Brown,James Okafor,Access Bronx Charter School,Saturday,11:00 am,60,pending confirmation,11/7/2026";
             break;
 
         case 'ledger_entries':

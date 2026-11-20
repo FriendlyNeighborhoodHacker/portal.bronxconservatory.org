@@ -188,7 +188,7 @@ function schedule_grid_html(array $columns, array $rows, callable $cellFn, strin
         $html .= '<th class="grid-teacher" data-col="' . $i . '"'
             . ' data-loc-key="' . h($spine[$i]['loc']) . '"'
             . ' data-short="' . h(schedule_short_teacher_name($teacherName)) . '">'
-            . h($teacherName) . '</th>';
+            . h($teacherName) . schedule_room_html($column) . '</th>';
     }
     $html .= '</tr></thead><tbody>';
 
@@ -230,6 +230,21 @@ function schedule_grid_html(array $columns, array $rows, callable $cellFn, strin
  * The reservation status class + label for a grid cell.
  * $balance from Billing::semesterBalancesByStudent (or null when unknown).
  */
+/**
+ * The small second line of a teacher's column header: "Room 333", or at an
+ * online location "Online" (linked when a meeting link is set). Empty when
+ * there is nothing to say. Only per-day column lists carry a single room.
+ */
+function schedule_room_html(array $column): string {
+    $room = trim((string)($column['room'] ?? ''));
+    if (!empty($column['location_is_online'])) {
+        return preg_match('#^https?://#i', $room)
+            ? '<div class="grid-room"><a href="' . h($room) . '" target="_blank" rel="noopener">Meeting link</a></div>'
+            : ($room !== '' ? '<div class="grid-room">' . h($room) . '</div>' : '');
+    }
+    return $room !== '' ? '<div class="grid-room">Room ' . h($room) . '</div>' : '';
+}
+
 function reservation_cell_presentation(array $reservation, ?array $balance): array {
     $status = (string)$reservation['status'];
     if ($status === 'pending_reach_out') {

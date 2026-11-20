@@ -95,6 +95,9 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $balances) {
         }
 
         $studentId = (int)$occupant['student_user_id'];
+        if (!empty($occupant['first_lesson_date'])) {
+            $context .= ' · starts ' . date('M j', strtotime((string)$occupant['first_lesson_date']));
+        }
         $balance = $balances[$studentId] ?? null;
         $presentation = reservation_cell_presentation($occupant, $balance);
         $studentName = trim($occupant['student_first_name'] . ' ' . $occupant['student_last_name']);
@@ -110,6 +113,7 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $balances) {
             'data-duration' => $duration,
             'data-context' => $context,
             'data-balance-text' => $balanceText,
+            'data-first-lesson-date' => (string)($occupant['first_lesson_date'] ?? ''),
             // Where this box currently sits — edit mode records it before a
             // drag so Ctrl+Z can move the box straight back.
             'data-location-id' => $column['location_id'],

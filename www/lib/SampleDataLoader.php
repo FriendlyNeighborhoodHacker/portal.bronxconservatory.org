@@ -161,8 +161,11 @@ class SampleDataLoader {
      * import updates them in place), both logs, and the people who must
      * survive — developer accounts and the admin doing the reset. Returns a
      * step summary whose 'deleted' is the number of user rows removed.
+     *
+     * $keepEmails names further accounts to leave exactly as they are (row,
+     * password and flags untouched) — RealDataLoader passes the staff admins.
      */
-    public static function reset(?UserContext $ctx): array {
+    public static function reset(?UserContext $ctx, array $keepEmails = []): array {
         if (!$ctx || !$ctx->admin) {
             throw new RuntimeException('Admins only');
         }
@@ -185,8 +188,15 @@ class SampleDataLoader {
             ] as $table) {
                 $pdo->exec('DELETE FROM ' . $table);
             }
-            $st = $pdo->prepare('DELETE FROM users WHERE is_developer = 0 AND id <> ?');
-            $st->execute([$ctx->id]);
+            $keep = array_values(array_filter(array_map(
+                static fn($email) => strtolower(trim((string)$email)), $keepEmails
+            ), static fn($email) => $email !== ''));
+            $sql = 'DELETE FROM users WHERE is_developer = 0 AND id <> ?';
+            if ($keep) {
+                $sql .= ' AND (email IS NULL OR LOWER(email) NOT IN (' . implode(',', array_fill(0, count($keep), '?')) . '))';
+            }
+            $st = $pdo->prepare($sql);
+            $st->execute(array_merge([$ctx->id], $keep));
             $deletedUsers = $st->rowCount();
             // Whoever is left is a clean admin with Maintenance access.
             $pdo->prepare('UPDATE users SET is_admin = 1, is_deleted = 0 WHERE is_developer = 1 OR id = ?')
@@ -195,7 +205,7 @@ class SampleDataLoader {
             $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
         }
         Application::clearRolesCacheForTesting();
-        ActivityLog::log($ctx, 'sample_data.reset', ['users_deleted' => $deletedUsers]);
+        ActivityLog::log($ctx, 'sample_data.reset', ['users_deleted' => $deletedUsers, 'accounts_kept_by_email' => count($keep)]);
         return ['label' => 'Reset sample tables', 'deleted' => $deletedUsers, 'created' => 0, 'updated' => 0, 'skipped' => 0];
     }
 
@@ -267,7 +277,7 @@ class SampleDataLoader {
     }
 
     /** The semester-scoped files, in wizard order. The two schedule files only exist for fall. */
-    private static function importSemesterFiles(UserContext $ctx, string $root, int $semesterId, string $dir): array {
+    public static function importSemesterFiles(UserContext $ctx, string $root, int $semesterId, string $dir): array {
         $context = ['semester_id' => $semesterId];
         $steps = [];
         $steps[] = self::importFile($ctx, $root, $dir . '/location_weekdays.csv', LocationWeekdaysCsvImport::class, $context);
@@ -284,7 +294,7 @@ class SampleDataLoader {
     }
 
     /** Parse, auto-map by header name, validate (every row must pass), commit. */
-    private static function importFile(UserContext $ctx, string $root, string $relPath, string $importer, array $context = []): array {
+    public static function importFile(UserContext $ctx, string $root, string $relPath, string $importer, array $context = []): array {
         $path = $root . '/' . $relPath;
         if (!is_file($path)) {
             throw new RuntimeException('Sample file missing: ' . $relPath);
@@ -339,7 +349,7 @@ class SampleDataLoader {
         return [$id, ['label' => $label, 'created' => 1, 'updated' => 0, 'skipped' => 0]];
     }
 
-    private static function findSemester(string $season, int $year): ?array {
+    public static function findSemester(string $season, int $year): ?array {
         foreach (SemesterManagement::listSemesters() as $semester) {
             if ((string)$semester['season'] === $season && (int)$semester['year'] === $year) {
                 return $semester;
