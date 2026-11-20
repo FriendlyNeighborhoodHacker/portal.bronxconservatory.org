@@ -2,11 +2,13 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../partials.php';
+require_once __DIR__ . '/HoldBlockManagement.php';
 
 /**
  * The admin hold-block modal (weekly calendar): edit ONE week of a standing
  * hold block — move it to another time that day (slots from
- * hold_block_slots.php), give that week its own title, or drop it entirely.
+ * hold_block_slots.php), change that week's length, give that week its own
+ * title, or drop it entirely.
  * The standing reservation and its other weeks are untouched; edit those on
  * the Semester Schedule.
  */
@@ -28,6 +30,8 @@ class HoldBlockUIManager {
               <label>Time (same day)
                 <select id="holdBlockSlotSelect"><option value="">Loading times…</option></select>
               </label>
+
+              <?=hold_duration_field_html('holdBlockDuration')?>
 
               <label>What this week is for
                 <input type="text" id="holdBlockTitle" maxlength="200">
@@ -76,6 +80,8 @@ class HoldBlockUIManager {
             document.getElementById('holdBlockModalTitle').textContent = cell.dataset.holdTitle || 'Hold block';
             document.getElementById('holdBlockModalContext').textContent = cell.dataset.context || '';
             document.getElementById('holdBlockTitle').value = cell.dataset.holdTitle || '';
+            bcmHoldDurationSet('holdBlockDuration', cell.dataset.duration || '30');
+            modal.dataset.originalDuration = cell.dataset.duration || '';
 
             var select = document.getElementById('holdBlockSlotSelect');
             select.innerHTML = '<option value="">Loading times…</option>';
@@ -97,14 +103,23 @@ class HoldBlockUIManager {
             modal.setAttribute('aria-hidden', 'false');
           });
 
-          // Save applies the time change (if any) then the title.
+          // Save applies the time and length changes (if any) then the title.
+          // A shorter block is shortened before it moves and a longer one is
+          // lengthened after, so neither step trips over space the other frees.
           document.getElementById('holdBlockSave').addEventListener('click', function () {
             errEl.classList.add('hidden');
             var steps = [];
             var slot = document.getElementById('holdBlockSlotSelect');
+            var duration = document.getElementById('holdBlockDuration').value;
+            var original = modal.dataset.originalDuration || '';
+            var resize = function () { return postJson('/admin/hold_block_duration.php', { duration_minutes: duration }); };
+            var durationChanged = duration !== original;
+            var shrinking = durationChanged && parseInt(duration, 10) < parseInt(original, 10);
+            if (durationChanged && shrinking) steps.push(resize);
             if (slot.value && !slot.options[slot.selectedIndex].textContent.includes('(current)')) {
               steps.push(function () { return postJson('/admin/hold_block_reschedule.php', { start_time: slot.value }); });
             }
+            if (durationChanged && !shrinking) steps.push(resize);
             steps.push(function () {
               return postJson('/admin/hold_block_title.php', { title: document.getElementById('holdBlockTitle').value });
             });

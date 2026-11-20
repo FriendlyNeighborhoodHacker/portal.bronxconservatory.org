@@ -443,6 +443,41 @@ class HoldBlockManagement {
     }
 
     /**
+     * Change one week's length. Same rules as a standing hold block: a whole
+     * number of half-hour rows, up to MAX_DURATION_MINUTES, and the longer
+     * block must not run into anything else the teacher has that day.
+     */
+    public static function setBlockDuration(?UserContext $ctx, int $blockId, int $durationMinutes): void {
+        self::assertAdmin($ctx);
+        $block = self::requireBlock($blockId);
+        if ($durationMinutes <= 0 || $durationMinutes > self::MAX_DURATION_MINUTES) {
+            throw new InvalidArgumentException(
+                'Duration must be between 30 minutes and ' . (self::MAX_DURATION_MINUTES / 60) . ' hours.'
+            );
+        }
+        if ($durationMinutes % 30 !== 0) {
+            throw new InvalidArgumentException('Duration must be a multiple of 30 minutes.');
+        }
+        if ($durationMinutes === (int)$block['duration_minutes']) {
+            return;
+        }
+
+        $conflict = ScheduleConflicts::occurrenceConflict(
+            (int)$block['teacher_user_id'], (string)$block['start_datetime'], $durationMinutes,
+            ['hold_block_id' => $blockId]
+        );
+        if ($conflict !== null) {
+            throw new InvalidArgumentException($conflict);
+        }
+
+        self::pdo()->prepare('UPDATE semester_hold_blocks SET duration_minutes=? WHERE id=?')
+            ->execute([$durationMinutes, $blockId]);
+        self::log($ctx, 'hold_block.duration_changed', [
+            'hold_block_id' => $blockId, 'duration_minutes' => $durationMinutes,
+        ]);
+    }
+
+    /**
      * Give one week its own title, or clear the override so it follows the
      * reservation's standing title again. A title matching the standing one
      * is stored as no override at all.

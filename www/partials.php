@@ -71,3 +71,76 @@ function lesson_name_label(array $lesson): string {
     $instrument = trim((string)($lesson['instrument_name'] ?? ''));
     return $instrument !== '' ? $instrument . ' Lesson' : 'Lesson';
 }
+
+// A hold block's length as a form field: the usual lengths plus "Other",
+// which reveals a minutes box. A block can be any multiple of 30 minutes up
+// to HoldBlockManagement::MAX_DURATION_MINUTES (the CSV import derives the
+// length from a start and end time), so a dropdown of only the usual lengths
+// cannot show — or keep — a 2½-hour block.
+//
+// The value lives in a hidden input with id $id (and name $name, when given),
+// so callers read it like any other field. Set it from script with
+// bcmHoldDurationSet(id, minutes): a usual length selects its option, anything
+// else selects "Other" and fills the box.
+function hold_duration_field_html(string $id, string $name = ''): string {
+    static $scriptEmitted = false;
+    $label = static function (int $minutes): string {
+        $hours = intdiv($minutes, 60);
+        $rest = $minutes % 60;
+        $parts = [];
+        if ($hours > 0) $parts[] = $hours . ($hours === 1 ? ' hour' : ' hours');
+        if ($rest > 0 || $hours === 0) $parts[] = $rest . ' minutes';
+        return implode(' ', $parts);
+    };
+    $max = HoldBlockManagement::MAX_DURATION_MINUTES;
+    $first = HoldBlockManagement::DURATION_OPTIONS[0];
+
+    $html = '<label>Duration' . "\n" . '<select id="' . h($id) . 'Choice" data-hold-duration="' . h($id) . '">';
+    foreach (HoldBlockManagement::DURATION_OPTIONS as $minutes) {
+        $html .= '<option value="' . (int)$minutes . '">' . h($label((int)$minutes)) . '</option>';
+    }
+    $html .= '<option value="other">Other…</option></select></label>' . "\n";
+    $html .= '<label id="' . h($id) . 'OtherWrap" class="hidden">Length in minutes'
+        . '<input type="number" id="' . h($id) . 'Other" data-hold-duration="' . h($id) . '" min="30" max="' . $max
+        . '" step="30" inputmode="numeric">'
+        . '<span class="small">For a length not in the list: any multiple of 30, up to ' . $max . ' ('
+        . h($label($max)) . '). For example 150 for 2½ hours.</span></label>' . "\n";
+    $html .= '<input type="hidden" id="' . h($id) . '"' . ($name !== '' ? ' name="' . h($name) . '"' : '')
+        . ' value="' . (int)$first . '">' . "\n";
+
+    if (!$scriptEmitted) {
+        $scriptEmitted = true;
+        $html .= <<<'HTML'
+<script>
+function bcmHoldDurationSync(id) {
+  var choice = document.getElementById(id + 'Choice');
+  var other = document.getElementById(id + 'Other');
+  var isOther = choice.value === 'other';
+  document.getElementById(id + 'OtherWrap').classList.toggle('hidden', !isOther);
+  document.getElementById(id).value = isOther ? other.value : choice.value;
+}
+function bcmHoldDurationSet(id, minutes) {
+  var choice = document.getElementById(id + 'Choice');
+  var value = String(minutes || '');
+  var usual = value !== '' && value !== 'other' && choice.querySelector('option[value="' + value + '"]');
+  choice.value = usual ? value : (value === '' ? choice.options[0].value : 'other');
+  document.getElementById(id + 'Other').value = usual ? '' : value;
+  bcmHoldDurationSync(id);
+}
+document.addEventListener('input', function (e) {
+  var id = e.target && e.target.dataset ? e.target.dataset.holdDuration : '';
+  if (id) bcmHoldDurationSync(id);
+});
+document.addEventListener('change', function (e) {
+  var id = e.target && e.target.dataset ? e.target.dataset.holdDuration : '';
+  if (!id) return;
+  bcmHoldDurationSync(id);
+  if (e.target.tagName === 'SELECT' && e.target.value === 'other') {
+    document.getElementById(id + 'Other').focus();
+  }
+});
+</script>
+HTML;
+    }
+    return $html;
+}

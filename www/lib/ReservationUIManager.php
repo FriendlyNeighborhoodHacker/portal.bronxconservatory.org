@@ -18,20 +18,6 @@ require_once __DIR__ . '/ReservationManagement.php';
  */
 class ReservationUIManager {
 
-    /** 30 -> "30 minutes", 90 -> "1 hour 30 minutes", 120 -> "2 hours". */
-    private static function durationLabel(int $minutes): string {
-        $hours = intdiv($minutes, 60);
-        $rest = $minutes % 60;
-        $parts = [];
-        if ($hours > 0) {
-            $parts[] = $hours . ($hours === 1 ? ' hour' : ' hours');
-        }
-        if ($rest > 0 || $hours === 0) {
-            $parts[] = $rest . ' minutes';
-        }
-        return implode(' ', $parts);
-    }
-
     public static function renderModals(int $semesterId): void {
         $semester = SemesterManagement::find($semesterId) ?: [];
         $dateBounds = ' min="' . h((string)($semester['start_date'] ?? '')) . '" max="' . h((string)($semester['end_date'] ?? '')) . '"';
@@ -115,13 +101,7 @@ class ReservationUIManager {
                     <?php endforeach; ?>
                   </select>
                 </label>
-                <label>Duration
-                  <select name="duration_minutes">
-                    <?php foreach (HoldBlockManagement::DURATION_OPTIONS as $minutes): ?>
-                      <option value="<?=$minutes?>"><?=self::durationLabel($minutes)?></option>
-                    <?php endforeach; ?>
-                  </select>
-                </label>
+                <?=hold_duration_field_html('holdAddDuration', 'duration_minutes')?>
                 <p class="small">The slot is held on every class date this semester, so no student
                 can be booked into it.</p>
                 <div class="actions actions-split">
@@ -215,13 +195,7 @@ class ReservationUIManager {
                   <?php endforeach; ?>
                 </select>
               </label>
-              <label>Duration
-                <select name="duration_minutes" id="holdEditDuration">
-                  <?php foreach (HoldBlockManagement::DURATION_OPTIONS as $minutes): ?>
-                    <option value="<?=$minutes?>"><?=self::durationLabel($minutes)?></option>
-                  <?php endforeach; ?>
-                </select>
-              </label>
+              <?=hold_duration_field_html('holdEditDuration', 'duration_minutes')?>
               <p class="small">Future blocks follow the change; any week that was edited on its own
               is left alone.</p>
               <div class="actions actions-split">
@@ -480,7 +454,7 @@ class ReservationUIManager {
               document.getElementById('holdEditContext').textContent = item.dataset.context || '';
               document.getElementById('holdEditTitle').value = item.dataset.holdTitle || '';
               document.getElementById('holdEditBlockType').value = item.dataset.blockType || 'hold';
-              document.getElementById('holdEditDuration').value = item.dataset.duration || '30';
+              bcmHoldDurationSet('holdEditDuration', item.dataset.duration || '30');
               document.getElementById('holdEditErr').classList.add('hidden');
               openModal(holdEditModal);
               return;

@@ -176,6 +176,7 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $weekStartTs) {
             $items .= schedule_cell_item_html((string)$occupant['effective_title'], 'Held', [
                 'data-hold-block-id' => $occupant['id'],
                 'data-hold-title' => $occupant['effective_title'],
+                'data-duration' => $duration,
                 'data-context' => $context,
             ], $multi ? $holdClass : '');
             continue;

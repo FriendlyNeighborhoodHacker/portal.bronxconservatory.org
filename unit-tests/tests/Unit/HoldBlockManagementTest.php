@@ -412,6 +412,56 @@ final class HoldBlockManagementTest extends TestCase
         HoldBlockManagement::rescheduleBlockWithinDay($this->ctx, (int)$blocks[1]['id'], '14:00');
     }
 
+    public function testOneWeekCanBeLengthenedToAnUnusualLengthAndTheRestStay(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);
+        $holdId = $this->makeHold($setup, '12:00');
+        $blocks = $this->blockRows($holdId);
+        $before = (int)$blocks[0]['duration_minutes'];
+
+        // 150 minutes is not one of the dropdown's usual lengths.
+        HoldBlockManagement::setBlockDuration($this->ctx, (int)$blocks[1]['id'], 150);
+
+        $this->assertSame([$before, 150, $before],
+            array_map('intval', array_column($this->blockRows($holdId), 'duration_minutes')));
+        $this->assertSame($before, (int)HoldBlockManagement::findHoldBlockReservation($holdId)['duration_minutes']);
+    }
+
+    public function testOneWeekLengthMustBeHalfHoursWithinTheLimitAndFree(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);
+        $holdId = $this->makeHold($setup, '12:00');
+        $this->makeLessonReservation($setup, '14:00');
+        $blockId = (int)$this->blockRows($holdId)[1]['id'];
+        $before = (int)$this->blockRows($holdId)[1]['duration_minutes'];
+
+        // 45: not half-hour rows. 270: over four hours. 150: runs into the 2:00 lesson.
+        foreach ([45, 270, 0, 150] as $minutes) {
+            try {
+                HoldBlockManagement::setBlockDuration($this->ctx, $blockId, $minutes);
+                $this->fail("Expected $minutes minutes to be refused.");
+            } catch (InvalidArgumentException $e) {
+                $this->assertNotSame('', $e->getMessage());
+            }
+        }
+        $this->assertSame($before, (int)$this->blockRows($holdId)[1]['duration_minutes']);
+        // Up to the lesson is fine.
+        HoldBlockManagement::setBlockDuration($this->ctx, $blockId, 120);
+        $this->assertSame(120, (int)$this->blockRows($holdId)[1]['duration_minutes']);
+    }
+
+    public function testAStandingHoldBlockCanBeSavedAtAnUnusualLength(): void
+    {
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);
+        $holdId = $this->makeHold($setup, '12:00');
+
+        HoldBlockManagement::updateHoldBlockReservation($this->ctx, $holdId, ['duration_minutes' => 150]);
+
+        $this->assertSame(150, (int)HoldBlockManagement::findHoldBlockReservation($holdId)['duration_minutes']);
+        $this->assertSame([150, 150, 150],
+            array_map('intval', array_column($this->blockRows($holdId), 'duration_minutes')));
+    }
+
     public function testTitleOverrideAppliesToOneWeekAndClears(): void
     {
         $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 3);

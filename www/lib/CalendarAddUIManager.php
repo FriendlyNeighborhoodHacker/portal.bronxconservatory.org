@@ -17,20 +17,6 @@ require_once __DIR__ . '/ReservationManagement.php';
  */
 class CalendarAddUIManager {
 
-    /** 30 -> "30 minutes", 90 -> "1 hour 30 minutes", 120 -> "2 hours". */
-    private static function durationLabel(int $minutes): string {
-        $hours = intdiv($minutes, 60);
-        $rest = $minutes % 60;
-        $parts = [];
-        if ($hours > 0) {
-            $parts[] = $hours . ($hours === 1 ? ' hour' : ' hours');
-        }
-        if ($rest > 0 || $hours === 0) {
-            $parts[] = $rest . ' minutes';
-        }
-        return implode(' ', $parts);
-    }
-
     public static function renderModal(int $semesterId): void {
         ?>
         <div id="calAddModal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true">
@@ -90,13 +76,7 @@ class CalendarAddUIManager {
                     <?php endforeach; ?>
                   </select>
                 </label>
-                <label>Duration
-                  <select id="calAddHoldDuration">
-                    <?php foreach (HoldBlockManagement::DURATION_OPTIONS as $minutes): ?>
-                      <option value="<?=$minutes?>"><?=self::durationLabel($minutes)?></option>
-                    <?php endforeach; ?>
-                  </select>
-                </label>
+                <?=hold_duration_field_html('calAddHoldDuration')?>
                 <p class="small">Held on this date only — the weekly schedule is untouched.</p>
                 <div class="actions actions-split">
                   <span class="actions-right">
