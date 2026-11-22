@@ -105,15 +105,39 @@ function recaptcha_verify_or_null(string $expectedAction): ?string {
     }
     $result = json_decode((string)$body, true);
     if (empty($result['success'])) {
+        // Google says why in error-codes: invalid-input-secret (the secret in
+        // config.local.php is not this site key's legacy secret),
+        // invalid-input-response (the token was minted for a different site
+        // key, or is malformed), timeout-or-duplicate (token older than two
+        // minutes or already used), browser-error / hostname problems (this
+        // domain is not on the key's allowed list).
+        recaptcha_log_refusal($expectedAction, 'not accepted by Google', $result, (string)$body);
         return 'reCAPTCHA verification failed — please try again.';
     }
     // A token minted for one form must not pass on another.
     if (isset($result['action']) && $result['action'] !== $expectedAction) {
+        recaptcha_log_refusal($expectedAction, 'action mismatch', $result, (string)$body);
         return 'reCAPTCHA verification failed — please try again.';
     }
     if (isset($result['score']) && (float)$result['score'] < recaptcha_min_score()) {
+        recaptcha_log_refusal($expectedAction, 'score below ' . recaptcha_min_score(), $result, (string)$body);
         return 'We could not verify this submission — please try again. '
             . 'If this keeps happening, call us and we will take your information by phone.';
     }
     return null;
+}
+
+// One line in the PHP error log (Admin > Maintenance > Server Logs) for every
+// submission reCAPTCHA refuses, with Google's own reason — the visitor only
+// ever sees a generic message. Never logs the token or the secret.
+function recaptcha_log_refusal(string $expectedAction, string $why, $result, string $rawBody): void {
+    $detail = is_array($result)
+        ? json_encode(array_intersect_key($result, array_flip(
+            ['success', 'error-codes', 'action', 'score', 'hostname', 'challenge_ts']
+        )))
+        : 'unparseable response: ' . substr($rawBody, 0, 200);
+    error_log(sprintf(
+        'reCAPTCHA refused (%s): expected action "%s", host %s, Google said %s',
+        $why, $expectedAction, (string)($_SERVER['HTTP_HOST'] ?? '?'), $detail
+    ));
 }
