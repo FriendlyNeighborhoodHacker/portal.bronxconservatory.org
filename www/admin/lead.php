@@ -4,6 +4,7 @@
 require_once __DIR__ . '/lead_ui.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
 require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
+require_once __DIR__ . '/../lib/ReservationManagement.php';
 Application::init();
 require_admin();
 
@@ -52,8 +53,37 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
     <?=!empty($lead['converted_at']) ? '· converted ' . h(date('M j, Y g:i A', strtotime($lead['converted_at']))) : ''?></p>
   <?php foreach ($students as $student): ?>
     <?php if (!empty($student['converted_student_user_id'])): ?>
+      <?php
+        // The slot(s) this student holds now, in the semester the lead was
+        // for — read live, so the status here follows the Schedule.
+        $studentUrl = '/admin/student.php?id=' . (int)$student['converted_student_user_id'];
+        $slots = ReservationManagement::reservationsForStudent(
+            (int)$student['converted_student_user_id'],
+            !empty($lead['semester_id']) ? (int)$lead['semester_id'] : null
+        );
+        $statusLabels = [
+            'pending_reach_out' => 'Pending reach out',
+            'pending_confirmation' => 'Pending confirmation',
+            'confirmed' => 'Confirmed',
+        ];
+      ?>
       <p class="small">Student:
-        <a href="/admin/student.php?id=<?=(int)$student['converted_student_user_id']?>"><?=h($student['first_name'] . ' ' . $student['last_name'])?></a></p>
+        <a href="<?=h($studentUrl)?>"><?=h($student['first_name'] . ' ' . $student['last_name'])?></a>
+        <?php if (!$slots): ?>
+          — no time placed yet
+        <?php endif; ?>
+        <?php foreach ($slots as $i => $slot): ?>
+          <?=$i === 0 ? '—' : ';'?>
+          <a href="<?=h($studentUrl)?>"><?=h(
+              date('l', strtotime('Sunday +' . (int)$slot['day_of_week'] . ' days'))
+              . ' ' . date('g:i a', strtotime((string)$slot['start_time']))
+              . ' · ' . (int)$slot['duration_minutes'] . ' min'
+              . ' · ' . trim($slot['teacher_first_name'] . ' ' . $slot['teacher_last_name'])
+              . ' · ' . $slot['location_name']
+          )?></a>
+          <strong>(<?=h($statusLabels[(string)$slot['status']] ?? (string)$slot['status'])?>)</strong>
+        <?php endforeach; ?>
+      </p>
     <?php endif; ?>
   <?php endforeach; ?>
   <?php if (!empty($convertedParent['email']) && (string)$convertedParent['password_hash'] === ''): ?>
