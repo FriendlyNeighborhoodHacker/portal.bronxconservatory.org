@@ -416,6 +416,33 @@ class ApplicationUI {
         echo self::testSiteBarHtml();
         echo '<div class="minimal-header">' . self::brandWordmarkHtml() . '</div>';
         echo '<div class="minimal-content"><main>';
+        echo self::preLaunchNoticeHtml();
+    }
+
+    /**
+     * Until the portal is launched, the two public forms — registration
+     * (/register/) and the information request (/inquiry/) — open with a
+     * large notice that the site is in development and a link to the
+     * conservatory's current website, so a family who finds the page early
+     * does not register here by mistake.
+     *
+     * It shows unless SITE_LAUNCHED is true in config.local.php: launching is
+     * one line, and forgetting the line leaves the warning up rather than
+     * taking real registrations on a site that is not ready.
+     */
+    public static function preLaunchNoticeHtml(?string $path = null): string {
+        if (defined('SITE_LAUNCHED') && SITE_LAUNCHED) {
+            return '';
+        }
+        $path = $path ?? (string)parse_url((string)($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+        if (!preg_match('#^/(register|inquiry)(/|$)#', $path)) {
+            return '';
+        }
+        return '<div class="prelaunch-notice" role="alert">'
+            . '<strong>This web site is in development.</strong> '
+            . 'Please only use it if you are testing the site. '
+            . '<a href="https://www.bronxconservatory.org/">Here</a> is a link to our current web site.'
+            . '</div>';
     }
 
     /**

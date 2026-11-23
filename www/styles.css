@@ -165,6 +165,26 @@ a:hover {
   padding: 2px 12px;
 }
 
+/* Before launch: the large "in development" notice on the public forms. */
+.prelaunch-notice {
+  max-width: 720px;
+  margin: 0 auto 20px;
+  padding: 16px 20px;
+  border: 2px solid #b91c1c;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #7f1d1d;
+  font-size: 20px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.prelaunch-notice a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
 /* The auth pages centre their card in a grid, so the strip pins to the top edge. */
 body.auth .test-site-bar {
   position: fixed;

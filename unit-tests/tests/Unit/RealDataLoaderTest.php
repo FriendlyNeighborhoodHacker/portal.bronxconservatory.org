@@ -168,6 +168,16 @@ final class RealDataLoaderTest extends TestCase
         // Nothing to say on a live site sending mail normally.
         $this->assertSame([], ApplicationUI::siteBarParts(false, $off, true));
         $this->assertSame(['<strong>DEV MODE</strong>'], ApplicationUI::siteBarParts(true, $off, false));
+
+        // Before launch, the public forms carry the "in development" notice.
+        if (!defined('SITE_LAUNCHED') || !SITE_LAUNCHED) {
+            foreach (['/register/family.php', '/register/', '/inquiry/contact.php', '/inquiry'] as $path) {
+                $this->assertStringContainsString('https://www.bronxconservatory.org/', ApplicationUI::preLaunchNoticeHtml($path), $path);
+            }
+            foreach (['/login.php', '/welcome.php', '/admin/leads.php', '/registered.php'] as $path) {
+                $this->assertSame('', ApplicationUI::preLaunchNoticeHtml($path), $path);
+            }
+        }
         $this->assertSame(
             ['<strong>PAYMENT TEST MODE</strong> &mdash; no real charges'],
             ApplicationUI::siteBarParts(false, $off, false, true)

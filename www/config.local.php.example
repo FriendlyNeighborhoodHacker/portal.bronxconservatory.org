@@ -11,6 +11,13 @@ define('DB_PASS', '');
 // Application branding (used as a fallback; UI will prefer Settings::get('site_title', APP_NAME))
 define('APP_NAME', 'BCM Family Portal');
 
+// ===== Launch =====
+// Until this is true, the public registration (/register/) and information
+// request (/inquiry/) pages open with a large notice: "This web site is in
+// development. Please only use it if you are testing the site," with a link
+// to www.bronxconservatory.org. Set it on the day the portal goes live.
+// define('SITE_LAUNCHED', true);
+
 // ===== Dev instance =====
 // true on a dev/staging copy: every page shows a thin yellow "DEV MODE" strip
 // at the top, and Get Started offers "Load All Sample Data" (see

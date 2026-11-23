@@ -387,6 +387,11 @@ What is deleted and kept is described in `www/lib/RealDataLoader.php`. The
 load is repeatable: it always starts with the reset, so a corrected file is
 one more push and one more click.
 
+**On launch day**, add `define('SITE_LAUNCHED', true);` to `config.local.php`
+and run the deploy script. Until then the public registration and
+information-request pages open with a large "This web site is in development"
+notice linking to www.bronxconservatory.org.
+
 ## Day to day
 
 - **Deploy by hand:** as the site account, run `~/deploy/{site}.sh`. Then, if
