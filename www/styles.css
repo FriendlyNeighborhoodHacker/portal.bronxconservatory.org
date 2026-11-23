@@ -1976,9 +1976,9 @@ a.cal-day:focus {
   white-space: nowrap;
 }
 
-/* The "+" separators between tuition and fee lines on the registration form */
+/* The "+" that starts each fee line under the tuition list on the registration form */
 .tuition-plus {
-  margin: 6px 0;
+  margin-right: 4px;
   font-weight: 700;
   color: var(--color-text-muted);
 }

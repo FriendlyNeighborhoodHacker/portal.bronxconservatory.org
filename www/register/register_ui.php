@@ -167,7 +167,7 @@ function registration_price_breakdown(int $cents, int $lessonsPerSemester, strin
 // The tuition table shown in the step-1 intro — rendered from the semester row so
 // the copy can never drift from the actual quote math.
 function registration_tuition_intro_html(array $semester): string {
-    $plus = '<p class="tuition-plus">+</p>';
+    $plus = '<span class="tuition-plus" aria-hidden="true">+</span> ';
     $lessonsPerSemester = SemesterManagement::lessonsPerSemester($semester);
     return '<div class="card"><p><strong>' . h(registration_semester_label($semester)) . ' Tuition:</strong></p>'
         . '<ul class="stack" style="gap:2px;">'
@@ -178,11 +178,9 @@ function registration_tuition_intro_html(array $semester): string {
         . '<li>30-minute Guitar Ensemble (full semester): <strong>'
         . registration_price_breakdown(SemesterManagement::guitarEnsembleFeeCents($semester), $lessonsPerSemester, 'session') . '</strong></li>'
         . '</ul>'
-        . $plus
-        . '<p>Registration fee: <strong>' . registration_money(SemesterManagement::registrationFeeCents($semester))
+        . '<p>' . $plus . 'Registration fee: <strong>' . registration_money(SemesterManagement::registrationFeeCents($semester))
         . '</strong> (one per family per semester).</p>'
-        . $plus
-        . '<p>Recital &amp; Logistics fee: <strong>' . registration_money(SemesterManagement::recitalFeeCents($semester))
+        . '<p>' . $plus . 'Recital &amp; Logistics fee: <strong>' . registration_money(SemesterManagement::recitalFeeCents($semester))
         . '</strong> per lesson block.</p>'
         . '<p class="small">Registrations done after the start of the semester (space permitting) will be prorated to the remaining weeks of term.</p>'
         . (($notice = SemesterManagement::installmentFeeNotice($semester)) !== null

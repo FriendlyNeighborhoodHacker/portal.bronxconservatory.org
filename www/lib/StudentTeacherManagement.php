@@ -31,14 +31,32 @@ class StudentTeacherManagement {
         return pdo();
     }
 
+    /**
+     * A stand-in date of birth for a student known only by graduating class:
+     * March 1 of the year they turn 18, which is the class year. Whether the
+     * school's cut-off is the calendar year (New York City) or September, a
+     * March birthday in that year lands in the right class. Always stored
+     * with date_of_birth_is_approximate = 1.
+     */
+    public static function approximateBirthdateForClassOf(int $classOf): string {
+        return sprintf('%04d-03-01', $classOf - 18);
+    }
+
     // Create or update a student profile. $ctx may be null (public
-    // registration). $fields: date_of_birth, class_of, experience_level,
-    // school_name, grade — all optional.
+    // registration). $fields: date_of_birth, date_of_birth_is_approximate,
+    // class_of, experience_level, school_name, grade — all optional. The
+    // approximate flag travels with the date: it is only read when a date of
+    // birth is given, and a date given without it is taken as the real one
+    // (so saving a real birthday over a stand-in clears the flag).
     public static function ensureStudentProfile(?UserContext $ctx, int $userId, array $fields = []): void {
+        $dateOfBirth = self::orNull($fields['date_of_birth'] ?? null);
+        $isApproximate = $dateOfBirth !== null && !empty($fields['date_of_birth_is_approximate']) ? 1 : 0;
         $st = self::pdo()->prepare(
-            'INSERT INTO student_profiles (user_id, date_of_birth, class_of, experience_level, school_name, grade)
-             VALUES (?,?,?,?,?,?)
+            'INSERT INTO student_profiles (user_id, date_of_birth, date_of_birth_is_approximate, class_of, experience_level, school_name, grade)
+             VALUES (?,?,?,?,?,?,?)
              ON DUPLICATE KEY UPDATE
+               date_of_birth_is_approximate = IF(VALUES(date_of_birth) IS NULL,
+                   date_of_birth_is_approximate, VALUES(date_of_birth_is_approximate)),
                date_of_birth = COALESCE(VALUES(date_of_birth), date_of_birth),
                class_of = COALESCE(VALUES(class_of), class_of),
                experience_level = COALESCE(VALUES(experience_level), experience_level),
@@ -47,7 +65,8 @@ class StudentTeacherManagement {
         );
         $st->execute([
             $userId,
-            self::orNull($fields['date_of_birth'] ?? null),
+            $dateOfBirth,
+            $isApproximate,
             self::orNull($fields['class_of'] ?? null),
             self::orNull($fields['experience_level'] ?? null),
             self::orNull($fields['school_name'] ?? null),
@@ -152,7 +171,7 @@ class StudentTeacherManagement {
     public static function childrenOfParent(int $parentUserId): array {
         $st = self::pdo()->prepare(
             'SELECT u.id, u.first_name, u.last_name, u.preferred_name, u.photo_public_file_id,
-                    sp.date_of_birth, sp.experience_level, sp.school_name, sp.grade
+                    sp.date_of_birth, sp.date_of_birth_is_approximate, sp.experience_level, sp.school_name, sp.grade
              FROM parenthood ph
              JOIN users u ON u.id = ph.child_user_id
              LEFT JOIN student_profiles sp ON sp.user_id = u.id

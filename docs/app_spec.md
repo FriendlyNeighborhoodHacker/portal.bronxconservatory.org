@@ -481,6 +481,11 @@ blanks only — never overwriting), creates each student with profile, instrumen
 and parent link, optionally places a reservation via the same grid the schedule
 uses, and moves any payment held on the lead onto a chosen student's ledger.
 Reservations are created **pending reach out**, so **conversion charges nothing**.
+The date of birth is optional: left blank for a student who gave a graduating
+class, it is stored as March 1 of the year they turn 18 (class year − 18) with
+`student_profiles.date_of_birth_is_approximate` set. That flag marks any
+stand-in birthday (the people import has a matching `Date of Birth Approximate`
+column) and is cleared when a real date is saved.
 The whole thing is idempotent: already-converted students are skipped, the
 payment is guarded by its Stripe reference, and a re-run continues where it
 stopped.

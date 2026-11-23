@@ -871,8 +871,19 @@ class LeadManagement {
                 'email' => '',
                 'no_login' => true,
             ]);
+            // No birthday entered but the family gave a graduating class:
+            // store a stand-in that puts the student in that class, flagged
+            // approximate, so age-based views have something to work with.
+            $dateOfBirth = trim((string)($opts['date_of_birth'] ?? '')) ?: null;
+            $classOf = (int)($leadStudent['class_of'] ?? 0);
+            $dobIsApproximate = false;
+            if ($dateOfBirth === null && $classOf > 0) {
+                $dateOfBirth = StudentTeacherManagement::approximateBirthdateForClassOf($classOf);
+                $dobIsApproximate = true;
+            }
             StudentTeacherManagement::ensureStudentProfile($ctx, $studentUserId, [
-                'date_of_birth' => $opts['date_of_birth'] ?? null,
+                'date_of_birth' => $dateOfBirth,
+                'date_of_birth_is_approximate' => $dobIsApproximate,
                 'class_of' => $leadStudent['class_of'] ?? null,
             ]);
             if (trim((string)($leadStudent['shirt_size'] ?? '')) !== '') {

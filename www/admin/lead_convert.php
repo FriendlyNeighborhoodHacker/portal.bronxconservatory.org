@@ -11,6 +11,7 @@
 require_once __DIR__ . '/lead_ui.php';
 require_once __DIR__ . '/reservation_picker_modal.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
+require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../lib/InstrumentCatalog.php';
 require_once __DIR__ . '/../lib/SemesterManagement.php';
 require_once __DIR__ . '/../lib/ScheduleGridData.php';
@@ -124,8 +125,13 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
             <?php endforeach; ?>
           </select>
         </label>
-        <label>Date of birth (optional<?=$student['class_of'] ? '; they gave Class of ' . h($student['class_of']) : ''?>)
+        <label>Date of birth (optional)
           <input type="date" name="students[<?=$lsId?>][date_of_birth]" value="<?=h($oldRow['date_of_birth'] ?? '')?>">
+          <?php if ($student['class_of']): ?>
+            <span class="small">They gave Class of <?=h($student['class_of'])?>. If you leave this blank, an
+            approximate birthdate (<?=h(date('F j, Y', strtotime(StudentTeacherManagement::approximateBirthdateForClassOf((int)$student['class_of']))))?>)
+            is stored, marked as approximate, so the student lands in the right class.</span>
+          <?php endif; ?>
         </label>
       </div>
 

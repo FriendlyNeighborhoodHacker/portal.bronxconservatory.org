@@ -214,6 +214,7 @@ function import_columns_help_html(array $flow): string {
                 ['Address State', 'optional', ''],
                 ['Address Zip', 'optional', ''],
                 ['Date of Birth', 'optional', 'students — 2014-03-05 or 3/5/2014'],
+                ['Date of Birth Approximate', 'optional', 'yes when the date is a stand-in worked out from an age or class year, not the real birthday'],
                 ['Class Of', 'optional', 'students — graduation year, e.g. 2031'],
                 ['Grade', 'optional', 'students — e.g. 7'],
                 ['School Name', 'optional', 'students'],

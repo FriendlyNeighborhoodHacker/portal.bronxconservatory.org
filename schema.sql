@@ -194,6 +194,7 @@ ON DUPLICATE KEY UPDATE sort_order=VALUES(sort_order);
 CREATE TABLE student_profiles (
   user_id INT PRIMARY KEY,
   date_of_birth DATE DEFAULT NULL,
+  date_of_birth_is_approximate TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = date_of_birth is a stand-in derived from class_of or an age, not the real birthday',
   class_of YEAR DEFAULT NULL,
   experience_level ENUM('none','beginner','intermediate','advanced') DEFAULT NULL,
   school_name VARCHAR(200) DEFAULT NULL,

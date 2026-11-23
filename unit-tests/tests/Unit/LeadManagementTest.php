@@ -307,6 +307,46 @@ final class LeadManagementTest extends TestCase
         $this->assertSame($parentId, (int)$lead['converted_parent_user_id']);
     }
 
+    public function testConvertStoresAnApproximateBirthdateFromClassOfWhenNoneIsGiven(): void
+    {
+        [$ctx, , $semesterId] = $this->convertSetup();
+        $leadId = LeadManagement::createLead(
+            null, $semesterId, $this->parent(),
+            [
+                $this->student(['first_name' => 'Blank', 'class_of' => '2032']),
+                $this->student(['first_name' => 'Known', 'class_of' => '2032']),
+            ],
+            $this->scheduling(), false
+        );
+        $leadStudents = LeadManagement::studentsForLead($leadId);
+        $blank = (int)$leadStudents[0]['id'];
+        $known = (int)$leadStudents[1]['id'];
+
+        $result = LeadManagement::convertLead($ctx, $leadId, [
+            'students' => [$known => ['date_of_birth' => '2014-10-09']],
+        ]);
+
+        $profile = function (int $userId): array {
+            return pdo()->query('SELECT date_of_birth, date_of_birth_is_approximate, class_of FROM student_profiles WHERE user_id = ' . $userId)->fetch();
+        };
+        // Left blank: March 1 of the year they turn 18 (the class year), flagged.
+        $this->assertSame('2014-03-01', StudentTeacherManagement::approximateBirthdateForClassOf(2032));
+        $row = $profile((int)$result['student_user_ids'][$blank]);
+        $this->assertSame(['2014-03-01', 1, 2032], [$row['date_of_birth'], (int)$row['date_of_birth_is_approximate'], (int)$row['class_of']]);
+        // Entered: stored as given, not flagged.
+        $row = $profile((int)$result['student_user_ids'][$known]);
+        $this->assertSame(['2014-10-09', 0], [$row['date_of_birth'], (int)$row['date_of_birth_is_approximate']]);
+
+        // Saving the real birthday later replaces the stand-in and clears the flag;
+        // a save that carries no date leaves both alone.
+        $userId = (int)$result['student_user_ids'][$blank];
+        StudentTeacherManagement::ensureStudentProfile($ctx, $userId, ['grade' => '7']);
+        $this->assertSame(1, (int)$profile($userId)['date_of_birth_is_approximate']);
+        StudentTeacherManagement::ensureStudentProfile($ctx, $userId, ['date_of_birth' => '2014-06-20']);
+        $row = $profile($userId);
+        $this->assertSame(['2014-06-20', 0], [$row['date_of_birth'], (int)$row['date_of_birth_is_approximate']]);
+    }
+
     public function testConvertAdoptsExistingParentEmailAndInstrumentOverride(): void
     {
         [$ctx] = $this->convertSetup();

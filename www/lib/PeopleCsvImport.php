@@ -51,6 +51,7 @@ class PeopleCsvImport {
             'address_state' => 'Address State',
             'address_zip' => 'Address Zip',
             'date_of_birth' => 'Date of Birth',
+            'date_of_birth_is_approximate' => 'Date of Birth Approximate',
             'class_of' => 'Class Of',
             'grade' => 'Grade',
             'school_name' => 'School Name',
@@ -115,6 +116,14 @@ class PeopleCsvImport {
                     $row['date_of_birth'] = $parsed;
                 }
             }
+            // "yes" marks the date as a stand-in (worked out from an age or a
+            // class year), not the real birthday. Blank or "no" = a real date.
+            $approximate = strtolower(trim((string)($row['date_of_birth_is_approximate'] ?? '')));
+            if (!in_array($approximate, ['', 'yes', 'no', 'y', 'n', '1', '0', 'true', 'false'], true)) {
+                $status = 'error';
+                $messages[] = 'Date of Birth Approximate must be yes or no.';
+            }
+            $row['date_of_birth_is_approximate'] = in_array($approximate, ['yes', 'y', '1', 'true'], true);
 
             $demographic = trim((string)($row['demographic'] ?? ''));
             if ($demographic !== '') {
@@ -266,6 +275,7 @@ class PeopleCsvImport {
                 if (!empty($row['_is_student'])) {
                     StudentTeacherManagement::ensureStudentProfile($ctx, $userId, [
                         'date_of_birth' => (string)($row['date_of_birth'] ?? ''),
+                        'date_of_birth_is_approximate' => !empty($row['date_of_birth_is_approximate']),
                         'class_of' => (string)($row['class_of'] ?? ''),
                         'grade' => (string)($row['grade'] ?? ''),
                         'school_name' => (string)($row['school_name'] ?? ''),
