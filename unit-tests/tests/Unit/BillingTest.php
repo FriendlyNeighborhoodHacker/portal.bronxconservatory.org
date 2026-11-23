@@ -408,6 +408,34 @@ final class BillingTest extends TestCase
         $this->assertFalse(Billing::stripeReferenceRecorded('pi_other'));
     }
 
+    public function testAParentCanApplyTheirCreditToAChildsBalance(): void
+    {
+        $student = fx_student();
+        $parent = fx_parent_of($student);
+        $fall = fx_semester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+        // The child already owes $210; the credit arrives afterwards, so
+        // nothing has drawn on it.
+        Billing::addCustomEntry($this->ctx, $student, 'debit', 21000, $fall, 'Lessons');
+        Billing::addParentCredit($this->ctx, $parent, 22000, 'Registration payment');
+        $this->assertSame(21000, Billing::balanceForStudentCents($student));
+
+        $parentCtx = new UserContext($parent, false);
+        $this->assertSame(21000, Billing::applyParentCreditByChoice($parentCtx, $parent, $student));
+        $this->assertSame(0, Billing::balanceForStudentCents($student));
+        $this->assertSame(1000, Billing::parentCreditBalanceCents($parent));
+
+        // Somebody else's child, or somebody else's credit: refused.
+        $stranger = fx_student('Other', 'Kid');
+        try {
+            Billing::applyParentCreditByChoice($parentCtx, $parent, $stranger);
+            $this->fail('applied credit to a child who is not theirs');
+        } catch (InvalidArgumentException $e) {
+            $this->assertSame(1000, Billing::parentCreditBalanceCents($parent));
+        }
+        $this->expectException(RuntimeException::class);
+        Billing::applyParentCreditByChoice(new UserContext($stranger, false), $parent, $student);
+    }
+
     public function testMovingAStudentsCreditToTheParent(): void
     {
         $student = fx_student();

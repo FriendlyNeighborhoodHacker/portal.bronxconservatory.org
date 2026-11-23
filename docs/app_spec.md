@@ -249,6 +249,13 @@ plan" when the fee is on any of their children's ledgers, or they chose it on a
 paid, converted registration for that semester (the confirm dialog then ticks
 "Include installment fee" by itself).
 
+A parent can also **apply the credit themself**: when they have a credit and a
+child owes, the parent's Billing page shows a "family credit" card with one
+button per child who owes ("Apply $210.00 of my credit"). It applies as much as
+that child owes — including an installment plan's second half, since it is the
+parent's choice — which is how a credit left over when a sibling never enrols
+gets used. The pages say the credit is not yet included in the balances shown.
+
 It shows on the admin's parent page (balance and history), on the admin's
 student page beside the balance, in the confirm-reservation dialog, and as a
 one-line heads-up on the parent's home and billing pages.

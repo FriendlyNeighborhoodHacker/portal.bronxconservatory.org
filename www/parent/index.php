@@ -123,8 +123,9 @@ header_html('My Family');
 
 <h3>Balance &amp; Payments</h3>
 <?php if ($parentCreditCents > 0): ?>
-<p class="flash">You have a credit of <strong><?=h(Billing::formatCents($parentCreditCents))?></strong> on your
-  family account. It will be used automatically toward your children&rsquo;s upcoming charges.</p>
+<p class="flash">You have a family credit of <strong><?=h(Billing::formatCents($parentCreditCents))?></strong>.
+  It is used automatically toward your children&rsquo;s next charges<?php if ($totalDue > 0): ?>, and is not yet included
+  in the balance below &mdash; <a href="/parent/billing.php#family-credit">apply it to a balance</a><?php endif; ?>.</p>
 <?php endif; ?>
 <div class="card">
   <?php if ($totalDue <= 0): ?>

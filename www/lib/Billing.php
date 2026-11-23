@@ -597,35 +597,84 @@ class Billing {
             if ($take <= 0) {
                 continue;
             }
-            $st = self::pdo()->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
-            $st->execute([$parentUserId]);
-            $parent = $st->fetch() ?: [];
-            $parentName = trim(($parent['first_name'] ?? '') . ' ' . ($parent['last_name'] ?? ''));
-            $st->execute([$studentUserId]);
-            $student = $st->fetch() ?: [];
-            $studentName = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name'] ?? ''));
+            self::transferParentCredit($ctx, $parentUserId, $studentUserId, $take, $semesterId);
+            $owed -= $take;
+            $used += $take;
+        }
+        return $used;
+    }
 
+    /**
+     * A parent chooses to put their credit toward one child's balance (the
+     * "Use my credit" step on the parent's Billing page). Unlike the
+     * automatic draw at charge time, this is the parent's own decision, so
+     * it may pay the whole balance — including the half of an installment
+     * plan's tuition that is not due yet. It uses as much of the credit as
+     * the child owes, credited to the oldest term owing. Returns the cents
+     * applied. $ctx is the parent (or an admin).
+     */
+    public static function applyParentCreditByChoice(?UserContext $ctx, int $parentUserId, int $studentUserId): int {
+        if (!$ctx || (!$ctx->admin && $ctx->id !== $parentUserId)) {
+            throw new RuntimeException('Not allowed');
+        }
+        if (!in_array($parentUserId, self::parentIdsOfStudent($studentUserId), true)) {
+            throw new InvalidArgumentException('That student is not on your account.');
+        }
+        $take = min(self::balanceForStudentCents($studentUserId), self::parentCreditBalanceCents($parentUserId));
+        if ($take <= 0) {
+            throw new InvalidArgumentException('There is no credit to apply, or nothing is owed.');
+        }
+        self::transferParentCredit(
+            $ctx, $parentUserId, $studentUserId, $take, self::oldestOwedSemesterIdForStudent($studentUserId)
+        );
+        return $take;
+    }
+
+    /**
+     * Move $cents of a parent's credit onto a child's ledger as a payment:
+     * the two rows that explain each other (see applyParentCreditToStudent).
+     */
+    private static function transferParentCredit(?UserContext $ctx, int $parentUserId, int $studentUserId, int $cents, ?int $semesterId): void {
+        $st = self::pdo()->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
+        $st->execute([$parentUserId]);
+        $parent = $st->fetch() ?: [];
+        $parentName = trim(($parent['first_name'] ?? '') . ' ' . ($parent['last_name'] ?? ''));
+        $st->execute([$studentUserId]);
+        $student = $st->fetch() ?: [];
+        $studentName = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name'] ?? ''));
+
+        $pdo = self::pdo();
+        $ownTransaction = !$pdo->inTransaction();
+        if ($ownTransaction) {
+            $pdo->beginTransaction();
+        }
+        try {
             $ledgerEntryId = self::insertEntry(
-                $ctx, $studentUserId, date('Y-m-d'), 'credit', 'payment', $take, $semesterId,
+                $ctx, $studentUserId, date('Y-m-d'), 'credit', 'payment', $cents, $semesterId,
                 'Paid from parent credit' . ($parentName !== '' ? ' (' . $parentName . ')' : '')
             );
-            self::pdo()->prepare(
+            $pdo->prepare(
                 "INSERT INTO parent_credit_entries
                    (parent_user_id, entry_date, accounting_type, amount_cents, semester_id, description,
                     applied_to_student_user_id, ledger_entry_id, created_by_user_id)
                  VALUES (?,?,'debit',?,?,?,?,?,?)"
             )->execute([
-                $parentUserId, date('Y-m-d'), $take, $semesterId,
+                $parentUserId, date('Y-m-d'), $cents, $semesterId,
                 'Used for ' . ($studentName !== '' ? $studentName . "'s" : 'a child\'s') . ' charges',
                 $studentUserId, $ledgerEntryId, $ctx?->id,
             ]);
-            self::log($ctx, 'billing.parent_credit_applied', [
-                'parent_user_id' => $parentUserId, 'student_user_id' => $studentUserId, 'amount_cents' => $take,
-            ]);
-            $owed -= $take;
-            $used += $take;
+            if ($ownTransaction) {
+                $pdo->commit();
+            }
+        } catch (\Throwable $e) {
+            if ($ownTransaction) {
+                $pdo->rollBack();
+            }
+            throw $e;
         }
-        return $used;
+        self::log($ctx, 'billing.parent_credit_applied', [
+            'parent_user_id' => $parentUserId, 'student_user_id' => $studentUserId, 'amount_cents' => $cents,
+        ]);
     }
 
     /**

@@ -64,8 +64,42 @@ header_html('Billing');
 <?php if ($flashError): ?><p class="error"><?=h($flashError)?></p><?php endif; ?>
 
 <?php if ($parentCreditCents > 0): ?>
-<p class="flash">You have a credit of <strong><?=h(Billing::formatCents($parentCreditCents))?></strong> on your
-  family account. It will be used automatically toward your children&rsquo;s upcoming charges.</p>
+<?php
+  // The credit is the family's, not yet set against any child. It is drawn on
+  // automatically when a child is next charged; here the parent can also put
+  // it toward a balance that is already owed.
+  $creditTargets = [];
+  foreach ($children as $child) {
+      $childDue = $summaries[(int)$child['id']]['due_cents'];
+      if ($childDue > 0) {
+          $creditTargets[] = ['child' => $child, 'due' => $childDue, 'apply' => min($childDue, $parentCreditCents)];
+      }
+  }
+?>
+<div class="card" id="family-credit">
+  <h3>You have a family credit of <?=h(Billing::formatCents($parentCreditCents))?></h3>
+  <?php if (!$creditTargets): ?>
+    <p class="small" style="margin-bottom:0;">Nothing is owed right now. The credit stays on your account and is used
+      automatically toward your children&rsquo;s next charges.</p>
+  <?php else: ?>
+    <p class="small">This credit is <strong>not yet included</strong> in the balance<?=count($creditTargets) > 1 ? 's' : ''?> below.
+      It is used automatically toward your children&rsquo;s next charges &mdash; or you can apply it to a balance now:</p>
+    <?php foreach ($creditTargets as $target): ?>
+      <form method="post" action="/parent/apply_credit_eval.php" class="lesson-row"
+            onsubmit="return confirm(<?=h(json_encode('Apply ' . Billing::formatCents($target['apply']) . ' of your credit to '
+                . $target['child']['first_name'] . "'s balance?"))?>);">
+        <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+        <input type="hidden" name="student_user_id" value="<?=(int)$target['child']['id']?>">
+        <span><strong><?=h($target['child']['first_name'] . ' ' . $target['child']['last_name'])?></strong>
+          <span class="small">&middot; <?=h(Billing::formatCents($target['due']))?> balance<?=$target['apply'] < $target['due']
+              ? ' &middot; ' . h(Billing::formatCents($target['due'] - $target['apply'])) . ' would remain' : ''?></span></span>
+        <button type="submit" class="button primary" style="margin-left:auto;">Apply <?=h(Billing::formatCents($target['apply']))?> of my credit</button>
+      </form>
+    <?php endforeach; ?>
+    <p class="small" style="margin-bottom:0;">With the credit applied you would owe
+      <strong><?=h(Billing::formatCents(max(0, $totalDue - $parentCreditCents)))?></strong> in total.</p>
+  <?php endif; ?>
+</div>
 <?php endif; ?>
 <div class="card">
   <?php if ($totalDue <= 0): ?>
@@ -185,7 +219,9 @@ header_html('Billing');
 <div class="card" id="child-<?=$childId?>">
   <h3><?=h($child['first_name'] . ' ' . $child['last_name'])?>
     <span class="small">
-      <?php if ($summary['due_cents'] > 0): ?>· <?=h(Billing::formatCents($summary['due_cents']))?> balance
+      <?php if ($summary['due_cents'] > 0): ?>· <?=h(Billing::formatCents($summary['due_cents']))?> balance<?php
+        if ($parentCreditCents > 0): ?> · <a href="#family-credit">you have a family credit of
+        <?=h(Billing::formatCents($parentCreditCents))?></a><?php endif; ?>
       <?php elseif ($summary['balance_cents'] < 0): ?>· <?=h(Billing::formatCents(-$summary['balance_cents']))?> credit
       <?php else: ?>· <?=$summary['has_charges'] ? 'paid in full' : 'no balance due'?><?php endif; ?>
     </span>
