@@ -45,6 +45,24 @@ unset($_SESSION['lead_convert_old']);
 
 $paid = (int)$lead['amount_paid_cents'] > 0;
 
+// What the family asked for, shown above each student's reservation so the
+// slot is chosen with their wishes in view. Only the parts they answered.
+$preferenceBits = [];
+if (trim((string)($lead['location_preference'] ?? '')) !== '') {
+    $preferenceBits[] = 'location: ' . trim((string)$lead['location_preference']);
+}
+$preferredDays = json_decode((string)($lead['preferred_days'] ?? '[]'), true) ?: [];
+if ($preferredDays) {
+    $preferenceBits[] = 'days: ' . implode(', ', array_map('strval', $preferredDays));
+}
+$preferredTimes = json_decode((string)($lead['availability_blocks'] ?? '[]'), true) ?: [];
+if ($preferredTimes) {
+    $preferenceBits[] = 'times: ' . implode(', ', array_map(
+        static fn($block) => LeadManagement::AVAILABILITY_BLOCKS[$block] ?? (string)$block, $preferredTimes
+    ));
+}
+$schedulingNotes = trim((string)($lead['scheduling_notes'] ?? ''));
+
 header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['parent_last_name'], ['wide' => true]);
 ?>
 
@@ -158,6 +176,11 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
       <input type="hidden" id="pick<?=$lsId?>_dur" name="students[<?=$lsId?>][res_duration]" value="<?=h($oldRow['res_duration'] ?? '')?>">
 
       <div>
+        <?php if ($preferenceBits || $schedulingNotes !== ''): ?>
+        <p class="small" style="margin-bottom:6px;"><em>Family prefers
+          <?=h($preferenceBits ? implode(' · ', $preferenceBits) : '(see note)')?><?php
+          if ($schedulingNotes !== ''): ?> — &ldquo;<?=h($schedulingNotes)?>&rdquo;<?php endif; ?></em></p>
+        <?php endif; ?>
         <p class="small" style="margin-bottom:6px;">Reservation:
           <strong id="pick<?=$lsId?>_summary"><?=h($pickedSummary !== ''
               ? $pickedSummary
