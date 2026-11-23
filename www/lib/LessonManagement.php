@@ -550,7 +550,9 @@ class LessonManagement {
      * it back to the reservation's own teacher.
      *
      * A substitute who is already busy at that moment is refused: the whole
-     * point of naming a cover is that they can actually be there.
+     * point of naming a cover is that they can actually be there. The lesson's
+     * own teacher is refused too: a teacher cannot cover for themselves, and
+     * "no substitute" is how the lesson goes back to them.
      */
     public static function setSubstituteTeacher(?UserContext $ctx, int $lessonId, ?int $teacherUserId): void {
         self::assertAdmin($ctx);
@@ -560,6 +562,11 @@ class LessonManagement {
             $st->execute([$teacherUserId]);
             if (!$st->fetchColumn()) {
                 throw new InvalidArgumentException('The substitute must be a teacher.');
+            }
+            if ($teacherUserId === (int)$lesson['teacher_user_id']) {
+                throw new InvalidArgumentException(
+                    "That is the lesson's own teacher. Pick \"No substitute\" to give the lesson back to them."
+                );
             }
             $conflict = ScheduleConflicts::occurrenceConflict(
                 $teacherUserId,

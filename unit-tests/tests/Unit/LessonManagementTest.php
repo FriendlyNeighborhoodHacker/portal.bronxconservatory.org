@@ -463,6 +463,25 @@ final class LessonManagementTest extends TestCase
         $this->assertNull(LessonManagement::getLesson($lessonIds[0])['substitute_teacher_user_id']);
     }
 
+    public function testTheLessonsOwnTeacherCannotBeItsSubstitute(): void
+    {
+        // Covering for yourself means nothing, and it would label the lesson
+        // "Substitute teacher: <own name>". The way back to the own teacher is
+        // "No substitute", not naming them.
+        [$teacher, , , , , $lessonIds] = $this->makeConfirmed();
+        $sub = fx_teacher('Sue', 'Substitute');
+        LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], $sub);
+
+        try {
+            LessonManagement::setSubstituteTeacher($this->ctx, $lessonIds[0], $teacher);
+            $this->fail('Expected the own teacher to be refused as a substitute');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString("lesson's own teacher", $e->getMessage());
+        }
+        // Nothing changed: Sue still has the week.
+        $this->assertSame($sub, (int)LessonManagement::getLesson($lessonIds[0])['substitute_teacher_user_id']);
+    }
+
     public function testSubstituteIsAcceptedWhenFreeAndCanBeCleared(): void
     {
         [, , , , , $lessonIds] = $this->makeConfirmed();

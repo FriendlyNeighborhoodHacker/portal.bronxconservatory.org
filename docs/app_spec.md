@@ -522,7 +522,9 @@ future lessons.
 
 Per lesson occurrence, from the calendar modal (or by dragging onto another
 teacher's column). The substitute must actually be free — the point of naming
-cover is that they can be there. See §7 for what changes in everyone's views. No
+cover is that they can be there. The lesson's own teacher cannot be chosen as
+its substitute (the modal leaves them out and the library refuses them);
+"No substitute" is how a lesson goes back to them. See §7 for what changes in everyone's views. No
 email is sent; visibility is entirely through the views.
 
 ### Cancel, mark missed, move a room, book a one-off

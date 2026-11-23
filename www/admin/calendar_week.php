@@ -219,6 +219,9 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $weekStartTs) {
             'data-student-name' => $studentName,
             'data-student-id' => (int)$lesson['student_user_id'],
             'data-attended' => $attendedValue,
+            // The lesson's own teacher, so the modal can leave them out of the
+            // substitute dropdown: nobody covers for themselves.
+            'data-teacher-id' => (int)$lesson['teacher_user_id'],
             'data-substitute-id' => (int)($lesson['substitute_teacher_user_id'] ?? 0) ?: '',
             'data-substitute-name' => $substituteName,
             'data-location-id' => (int)$lesson['effective_location_id'],

@@ -183,6 +183,17 @@ class LessonUIManager {
             subSelect.value = id;
           }
 
+          // Nobody covers for themselves: the lesson's own teacher is left out
+          // of the dropdown (the server refuses them too). The option is only
+          // hidden, since the same dropdown serves every lesson on the page.
+          function hideOwnTeacher(teacherId) {
+            Array.prototype.forEach.call(subSelect.options, function (opt) {
+              var isOwn = !!teacherId && opt.value === String(teacherId);
+              opt.hidden = isOwn;
+              opt.disabled = isOwn;
+            });
+          }
+
           // An older or imported lesson may run a length the dropdown does not
           // offer. Show it as itself rather than silently rewriting it on save.
           function selectCurrentDuration(minutes) {
@@ -223,6 +234,7 @@ class LessonUIManager {
             document.getElementById('lessonModalContext').textContent = cell.dataset.context || '';
             document.getElementById('lessonAttendance').value = cell.dataset.attended || '';
             selectCurrentDuration(cell.dataset.duration || '');
+            hideOwnTeacher(cell.dataset.teacherId || '');
             selectCurrentSubstitute(cell.dataset.substituteId || '', cell.dataset.substituteName || '');
             selectCurrentLocation(cell.dataset.locationId || '', cell.dataset.locationName || '');
             // Way out of the modal: everything else about this student — the
