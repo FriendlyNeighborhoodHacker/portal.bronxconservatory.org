@@ -12,9 +12,9 @@ define('DB_PASS', '');
 define('APP_NAME', 'BCM Family Portal');
 
 // ===== Dev instance =====
-// true on a dev/staging copy: every page shows a thin "Dev site — note this
-// is test data" strip at the top, and Get Started offers "Load All Sample
-// Data" (see SAMPLE_DATA_DIR below). Leave undefined or false in production.
+// true on a dev/staging copy: every page shows a thin yellow "DEV MODE" strip
+// at the top, and Get Started offers "Load All Sample Data" (see
+// SAMPLE_DATA_DIR below). Leave undefined or false in production.
 // define('DEV_SITE', true);
 
 // SMTP configuration (e.g., Gmail with App Password)
@@ -32,8 +32,9 @@ define('SMTP_FROM_NAME', 'Bronx Conservatory of Music'); // From name seen in em
 // tagged "[Redirected — was to <address>]". Addresses on
 // EMAIL_REDIRECT_ALLOWLIST are the exceptions: mail to them is delivered
 // normally (case-insensitive). Leave EMAIL_REDIRECT_TO as '' to send normally.
-// The current state is shown on Admin > Maintenance (Email Log card) and on
-// the Load Real Data card. Stripe's own payment receipts are not covered.
+// While it is on, every page shows a thin yellow strip saying "Emails
+// suppressed" (signed-in admins also see the address and the exceptions),
+// whether or not DEV_SITE is set. Also shown on Admin > Maintenance. Stripe's own payment receipts are not covered.
 // Example for a soft launch where only staff should get mail:
 //   define('EMAIL_REDIRECT_TO', 'you@example.org');
 //   define('EMAIL_REDIRECT_ALLOWLIST', ['director@example.org', 'you@example.org']);

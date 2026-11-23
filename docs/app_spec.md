@@ -567,8 +567,10 @@ scheduling change including substitutes and cancellations.
 outgoing email to that one address instead of its real recipient, tagged
 `[Redirected — was to …]` in the subject; `EMAIL_REDIRECT_ALLOWLIST` lets named
 addresses through. Enforced at the single send function, so no code path can
-bypass it. Stripe's own receipts are not covered. Admin > Maintenance shows
-whether the redirect is on (Email Log card).
+bypass it. Stripe's own receipts are not covered. While the redirect is on, a
+thin yellow strip at the top of every page says "Emails suppressed" — on any
+site, dev or live; signed-in admins also see where mail goes and the
+exceptions. The same strip says "DEV MODE" where `DEV_SITE` is set.
 
 **Loading the real data (launch).** Where `REAL_DATA_DIR` in `config.local.php`
 points at a real-data directory (the layout of `sample_data/` plus

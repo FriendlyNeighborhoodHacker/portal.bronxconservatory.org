@@ -159,4 +159,25 @@ final class RealDataLoaderTest extends TestCase
         // The test config leaves the redirect off.
         $this->assertSame(['on' => false, 'to' => '', 'allowlist' => []], email_redirect_status());
     }
+
+    public function testTheTopStripSaysDevModeAndWhetherEmailIsSuppressed(): void
+    {
+        $off = ['on' => false, 'to' => '', 'allowlist' => []];
+        $on = ['on' => true, 'to' => 'Dev@example.org', 'allowlist' => ['dev@example.org', 'director@example.org']];
+
+        // Nothing to say on a live site sending mail normally.
+        $this->assertSame([], ApplicationUI::siteBarParts(false, $off, true));
+        $this->assertSame(['<strong>DEV MODE</strong>'], ApplicationUI::siteBarParts(true, $off, false));
+
+        // Suppressed email shows on a live site too; addresses only for admins.
+        $this->assertSame(['Emails suppressed'], ApplicationUI::siteBarParts(false, $on, false));
+        $this->assertSame(
+            ['Emails suppressed: all mail goes to Dev@example.org, except to director@example.org'],
+            ApplicationUI::siteBarParts(false, $on, true)
+        );
+        $this->assertSame(
+            ['<strong>DEV MODE</strong>', 'Emails suppressed: all mail goes to a@example.org (no exceptions)'],
+            ApplicationUI::siteBarParts(true, ['on' => true, 'to' => 'a@example.org', 'allowlist' => []], true)
+        );
+    }
 }

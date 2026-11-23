@@ -6,6 +6,7 @@ require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/Files.php';
 require_once __DIR__ . '/Application.php';
 require_once __DIR__ . '/SemesterManagement.php';
+require_once __DIR__ . '/../mailer.php';
 
 class ApplicationUI {
 
@@ -418,18 +419,49 @@ class ApplicationUI {
     }
 
     /**
-     * The thin strip a dev instance (DEV_SITE in config.local.php) shows at
-     * the very top of every page — signed-in shell, minimal shell and the
-     * auth pages alike — so nobody mistakes the sample roster for real
-     * families. Empty everywhere else.
+     * The thin yellow strip at the very top of every page — signed-in shell,
+     * minimal shell and the auth pages alike. It says two things, each only
+     * when true:
+     *
+     *  - "DEV MODE" on a dev instance (DEV_SITE in config.local.php), so
+     *    nobody mistakes it for the live portal;
+     *  - that email is suppressed (EMAIL_REDIRECT_TO), so nobody waits for a
+     *    message that was never going to arrive.
+     *
+     * Either one alone is enough for the strip to appear, so a live site
+     * with email suppressed shows it too. Where the mail goes and who is
+     * exempt are addresses, so only a signed-in admin sees them; anyone else
+     * gets the fact alone.
      */
     public static function testSiteBarHtml(): string {
-        if (!Application::isDevSite()) {
-            return '';
+        $user = function_exists('current_user') ? current_user() : null;
+        $parts = self::siteBarParts(
+            Application::isDevSite(), email_redirect_status(), !empty($user['is_admin'])
+        );
+        return $parts ? '<div class="test-site-bar" role="note">' . implode(' &middot; ', $parts) . '</div>' : '';
+    }
+
+    /** The strip's segments as HTML, in order; [] when there is nothing to say. */
+    public static function siteBarParts(bool $isDevSite, array $emailRedirect, bool $viewerIsAdmin): array {
+        $parts = [];
+        if ($isDevSite) {
+            $parts[] = '<strong>DEV MODE</strong>';
         }
-        return '<div class="test-site-bar" role="note">'
-             . '<strong>Dev site</strong> &mdash; note this is test data'
-             . '</div>';
+        if (!empty($emailRedirect['on'])) {
+            if (!$viewerIsAdmin) {
+                $parts[] = 'Emails suppressed';
+            } else {
+                $text = 'Emails suppressed: all mail goes to ' . h((string)$emailRedirect['to']);
+                $allowlist = (array)($emailRedirect['allowlist'] ?? []);
+                // The redirect address itself is not an exception worth listing.
+                $allowlist = array_values(array_diff($allowlist, [strtolower((string)$emailRedirect['to'])]));
+                $text .= $allowlist
+                    ? ', except to ' . h(implode(', ', $allowlist))
+                    : ' (no exceptions)';
+                $parts[] = $text;
+            }
+        }
+        return $parts;
     }
 
     public static function minimalFooterHtml(): void {

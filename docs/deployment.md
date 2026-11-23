@@ -153,9 +153,9 @@ define('DB_USER', 'bcmportaldev');
 define('DB_PASS', '<strong password>');
 define('APP_NAME', 'BCM Portal (DEV)');
 
-// Marks this install as a dev instance: every page shows a thin "Dev site —
-// note this is test data" strip, and Get Started offers "Load All Sample
-// Data". Never set on production.
+// Marks this install as a dev instance: every page shows a thin yellow
+// "DEV MODE" strip, and Get Started offers "Load All Sample Data". Never set
+// on production.
 define('DEV_SITE', true);
 
 // Leave SUPER_PASSWORD empty on dev.
@@ -323,8 +323,9 @@ sudo certbot --apache -d dev-bronxconservatory.lillyrosenthal.org --redirect
 visit Admin > Maintenance. Migrations should list every file as applied; a
 test email should arrive with the "[Redirected ...]" subject tag. A database
 connection error almost always means the allowable-hosts setting in step 2.
-Every page should show the thin yellow "Dev site — note this is test data"
-strip at the top (`DEV_SITE`). Then Admin > Get Started
+Every page should show the thin yellow strip at the top: "DEV MODE"
+(`DEV_SITE`) and "Emails suppressed" (`EMAIL_REDIRECT_TO`; an admin also sees
+the address and any exceptions). Then Admin > Get Started
 (`/admin/setup/index.php`) > **Reset & Load All Sample Data** clears any
 previous load and fills the database with the `sample_data/` roster, both
 semesters, the fall schedule and a set of leads in one click.

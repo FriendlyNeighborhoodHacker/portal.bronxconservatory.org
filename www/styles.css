@@ -155,7 +155,7 @@ a:hover {
   padding: 0;
 }
 
-/* Dev instances only (DEV_SITE): a thin "this is test data" strip at the very top. */
+/* The thin strip at the very top: "DEV MODE" on a dev instance, and whether email is suppressed. */
 .test-site-bar {
   background: var(--color-cta);
   color: var(--color-cta-text);
