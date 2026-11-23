@@ -67,10 +67,10 @@ ApplicationUI::minimalHeaderHtml('Register — Family');
     </label>
     <div class="grid-3">
       <label>City
-        <input type="text" name="address_city" required value="<?=h($family['address_city'] ?? 'Bronx')?>">
+        <input type="text" name="address_city" required value="<?=h($family['address_city'] ?? '')?>">
       </label>
       <label>State
-        <input type="text" name="address_state" required value="<?=h($family['address_state'] ?? 'NY')?>">
+        <input type="text" name="address_state" required value="<?=h($family['address_state'] ?? '')?>">
       </label>
       <label>Postal / ZIP code
         <input type="text" name="address_zip" required value="<?=h($family['address_zip'] ?? '')?>">

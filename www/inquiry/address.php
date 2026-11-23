@@ -45,7 +45,7 @@ ApplicationUI::minimalHeaderHtml('Request Information — Address');
 
     <div class="grid-2">
       <label>City
-        <input type="text" name="address_city" required value="<?=h($address['address_city'] ?? 'Bronx')?>">
+        <input type="text" name="address_city" required value="<?=h($address['address_city'] ?? '')?>">
       </label>
       <label id="inqStateWrap"<?=$isUs ? '' : ' class="hidden"'?>>State
         <select name="address_state">
