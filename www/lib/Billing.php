@@ -772,9 +772,15 @@ class Billing {
      * card and the Billing page need to explain itself:
      *
      *   semester_id, label, start_date, end_date,
-     *   charged_cents, paid_cents (including credit rolled in from earlier),
+     *   charged_cents — what the term costs: charges LESS every credit that
+     *     is not a payment (reversals, scholarships, adjustments), so a charge
+     *     that was reversed does not show as both a charge and a payment;
+     *   paid_cents — money the family actually paid (entry type 'payment'),
+     *     including credit rolled in from earlier terms;
      *   balance_cents (never negative — a surplus moves on),
-     *   lessons_total, lessons_elapsed, behind
+     *   lessons_total, lessons_elapsed, behind, behind_reason,
+     *   next_due — "Due by Jan 19, 2027" for a balance that is not late yet
+     *     (see semesterNextDueLabel), null when paid or past due
      *
      * The trailing surplus, if any, is the family credit and is not a row.
      */
@@ -782,8 +788,10 @@ class Billing {
         $st = self::pdo()->prepare(
             "SELECT le.semester_id, s.season, s.year, s.start_date, s.end_date,
                     s.second_installment_due_date, s.installment_plan_fee,
-                    COALESCE(SUM(CASE WHEN le.accounting_type='debit' THEN le.amount_cents ELSE 0 END), 0) AS charged_cents,
-                    COALESCE(SUM(CASE WHEN le.accounting_type='credit' THEN le.amount_cents ELSE 0 END), 0) AS paid_cents,
+                    COALESCE(SUM(CASE WHEN le.entry_type <> 'payment'
+                        THEN IF(le.accounting_type='debit', 1, -1) * CAST(le.amount_cents AS SIGNED) ELSE 0 END), 0) AS charged_cents,
+                    COALESCE(SUM(CASE WHEN le.entry_type = 'payment'
+                        THEN IF(le.accounting_type='credit', 1, -1) * CAST(le.amount_cents AS SIGNED) ELSE 0 END), 0) AS paid_cents,
                     COALESCE(SUM(CASE WHEN le.accounting_type='debit' AND le.entry_type='installment_plan_fee' THEN le.amount_cents ELSE 0 END), 0) AS installment_fee_cents
              FROM ledger_entries le
              LEFT JOIN semesters s ON s.id = le.semester_id
@@ -803,6 +811,9 @@ class Billing {
             $balance = $charged - $paid;
             if ($balance < 0) {
                 $surplus = -$balance;
+                // What is shown never goes below zero: a term whose credits
+                // outweigh its charges reads as $0 charged, $0 paid.
+                $charged = max(0, $charged);
                 $paid = $charged;
                 $balance = 0;
             } else {
@@ -841,6 +852,15 @@ class Billing {
                 'lessons_elapsed' => $counts['elapsed'],
                 'behind' => $behindReason !== null,
                 'behind_reason' => $behindReason,
+                'next_due' => $behindReason === null
+                    ? self::semesterNextDueLabel(
+                        $balance, $charged, $paid,
+                        $row['start_date'] !== null ? (string)$row['start_date'] : null,
+                        $counts['total'],
+                        (int)$row['installment_fee_cents'] > 0,
+                        $row['second_installment_due_date'] !== null ? (string)$row['second_installment_due_date'] : null
+                    )
+                    : null,
             ];
         }
         return $rows;
@@ -951,6 +971,51 @@ class Billing {
                 : 'under the installment plan, the full balance was due before lessons began';
         }
         return null;
+    }
+
+    /**
+     * For a balance that is NOT past due: when the next part of it is due, in
+     * words — the forward-looking twin of semesterPaymentBehindReason(), on
+     * the same schedule. Null when nothing is owed.
+     *
+     *   "Half ($232.50) due by Jan 19, 2027"   less than half paid so far
+     *   "Due by Feb 2, 2027"                   the rest, by the first day of
+     *                                          the semester (no installment plan)
+     *   "Due by Apr 15, 2027"                  the rest, on the installment plan
+     *   "Due now"                              a charge that belongs to no term
+     */
+    public static function semesterNextDueLabel(
+        int $balanceCents,
+        int $chargedCents,
+        int $paidCents,
+        ?string $semesterStartDate,
+        int $lessonsTotal,
+        bool $onInstallmentPlan,
+        ?string $secondInstallmentDueDate = null
+    ): ?string {
+        if ($balanceCents <= 0) {
+            return null;
+        }
+        $startTs = $semesterStartDate !== null ? strtotime($semesterStartDate) : false;
+        if ($startTs === false) {
+            return 'Due now';
+        }
+        if ($chargedCents > 0 && $paidCents * 2 < $chargedCents) {
+            $halfOwed = intdiv($chargedCents + 1, 2) - $paidCents;
+            return 'Half (' . self::formatCents($halfOwed) . ') due by ' . date('M j, Y', $startTs - 14 * 86400);
+        }
+        if (!$onInstallmentPlan) {
+            return 'Due by ' . date('M j, Y', $startTs);
+        }
+        $dueTs = ($secondInstallmentDueDate !== null && $secondInstallmentDueDate !== '')
+            ? strtotime($secondInstallmentDueDate) : false;
+        if ($dueTs !== false) {
+            return 'Due by ' . date('M j, Y', $dueTs);
+        }
+        $dueBeforeLesson = (int)ceil(($lessonsTotal / 2) - 1);
+        return $dueBeforeLesson >= 1
+            ? 'Due before the ' . self::ordinal($dueBeforeLesson) . ' lesson'
+            : 'Due before lessons begin';
     }
 
     /**

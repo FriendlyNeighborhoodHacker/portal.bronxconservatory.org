@@ -328,6 +328,36 @@ final class BillingTest extends TestCase
         $this->assertNull($term['behind_reason']);
     }
 
+    public function testReversedChargesAreNotShownAsPayments(): void
+    {
+        $student = fx_student();
+        $fall = fx_semester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+
+        Billing::addCustomEntry($this->ctx, $student, 'debit', 76000, $fall, 'Lessons, charged twice by mistake');
+        Billing::addCustomEntry($this->ctx, $student, 'credit', 38000, $fall, 'Reversal of the duplicate');
+        Billing::applyScholarship($this->ctx, $student, $fall, 5000, 'Scholarship');
+        Billing::recordManualPayment($this->ctx, $student, 10000, '2030-06-01', $fall, 'Check #7');
+
+        $term = Billing::semesterBalancesForStudent($student, '2030-06-02')[0];
+        $this->assertSame(33000, $term['charged_cents'], 'charges net of the reversal and the scholarship');
+        $this->assertSame(10000, $term['paid_cents'], 'only what the family paid');
+        $this->assertSame(23000, $term['balance_cents']);
+    }
+
+    public function testABalanceThatIsNotLateSaysWhenItIsDue(): void
+    {
+        $due = fn(int $balance, int $charged, int $paid, bool $plan, ?string $second = null) =>
+            Billing::semesterNextDueLabel($balance, $charged, $paid, '2027-02-02', 15, $plan, $second);
+
+        $this->assertNull($due(0, 46500, 46500, false));
+        $this->assertSame('Half ($232.50) due by Jan 19, 2027', $due(46500, 46500, 0, false));
+        $this->assertSame('Half ($132.50) due by Jan 19, 2027', $due(36500, 46500, 10000, false));
+        $this->assertSame('Due by Feb 2, 2027', $due(20000, 46500, 26500, false));
+        $this->assertSame('Due by Apr 15, 2027', $due(20000, 46500, 26500, true, '2027-04-15'));
+        $this->assertSame('Due before the 7th lesson', $due(20000, 46500, 26500, true));
+        $this->assertSame('Due now', Billing::semesterNextDueLabel(500, 500, 0, null, 0, false));
+    }
+
     public function testSemesterBalancesRollASurplusCreditForward(): void
     {
         $student = fx_student();

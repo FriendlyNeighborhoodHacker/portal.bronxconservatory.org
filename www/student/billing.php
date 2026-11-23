@@ -153,7 +153,7 @@ header_html('Billing');
 <div class="card">
   <h3><?=h($me['first_name'] . ' ' . $me['last_name'])?>
     <span class="small">
-      <?php if ($summary['due_cents'] > 0): ?>· <?=h(Billing::formatCents($summary['due_cents']))?> due
+      <?php if ($summary['due_cents'] > 0): ?>· <?=h(Billing::formatCents($summary['due_cents']))?> balance
       <?php elseif ($summary['balance_cents'] < 0): ?>· <?=h(Billing::formatCents(-$summary['balance_cents']))?> credit
       <?php else: ?>· paid in full<?php endif; ?>
     </span>
@@ -161,8 +161,8 @@ header_html('Billing');
 
   <?php if ($summary['semesters']): ?>
     <table class="list">
-      <thead><tr><th>Term</th><th style="text-align:right;">Charges</th>
-        <th style="text-align:right;">Paid</th><th style="text-align:right;">Balance</th><th></th></tr></thead>
+      <thead><tr><th>Term</th><th style="text-align:right;" title="Charges, less any that were reversed or covered by a scholarship or adjustment">Charges</th>
+        <th style="text-align:right;" title="Payments received">Paid</th><th style="text-align:right;">Balance</th><th></th></tr></thead>
       <tbody>
         <?php foreach ($summary['semesters'] as $term): ?>
         <tr>
@@ -173,7 +173,7 @@ header_html('Billing');
           <td class="small">
             <?php if ($term['balance_cents'] <= 0): ?>Paid
             <?php elseif ($term['behind']): ?><span class="balance-behind" title="<?=h(ucfirst((string)$term['behind_reason']))?>.">Past due</span>
-            <?php else: ?>Not due yet<?php endif; ?>
+            <?php else: ?><?=h((string)$term['next_due'])?><?php endif; ?>
           </td>
         </tr>
         <?php endforeach; ?>
