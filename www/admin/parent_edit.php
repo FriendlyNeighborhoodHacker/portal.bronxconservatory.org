@@ -69,6 +69,13 @@ header_html('Edit ' . $name);
         <a href="/admin/student.php?id=<?=(int)$child['id']?>">
           <strong><?=h($child['first_name'] . ' ' . $child['last_name'])?></strong></a>
         <div class="small"><?=h(implode(', ', $child['instruments']))?></div>
+        <?php // A child in credit, in a family with siblings: point at where it can be moved up. ?>
+        <?php $childCredit = count($children) > 1 ? -Billing::balanceForStudentCents((int)$child['id']) : 0; ?>
+        <?php if ($childCredit > 0): ?>
+          <div class="small"><?=h(Billing::formatCents($childCredit))?> credit on this child&rsquo;s account &mdash;
+            <a href="/admin/student.php?id=<?=(int)$child['id']?>">open <?=h($child['first_name'])?></a>
+            and use &ldquo;Move Credit to Parent&rdquo; to share it with the family.</div>
+        <?php endif; ?>
       </span>
       <form method="post" action="/admin/parent_unlink_eval.php" style="margin-left:auto;"
             onsubmit="return confirm('Unlink this child from <?=h($name)?>?');">

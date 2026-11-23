@@ -29,6 +29,9 @@ class LedgerUIManager {
             fn($e) => !in_array((int)$e['id'], $semesterIds, true)
         ));
         $showHistory = $semesterNet !== $balance && $historicalEntries;
+        // A student in credit whose parent has another child: the credit can
+        // be moved up to the parent, where a sibling's charges can use it.
+        $moveToParents = $balance < 0 ? Billing::parentsForCreditMove($studentUserId) : [];
         ?>
         <div class="card">
           <div class="page-head">
@@ -37,6 +40,9 @@ class LedgerUIManager {
               <button type="button" class="button" data-modal-open="ledgerPaymentModal">Record Payment</button>
               <button type="button" class="button" data-modal-open="ledgerScholarshipModal">Apply Scholarship</button>
               <button type="button" class="button" data-modal-open="ledgerCustomModal">Custom Ledger Entry</button>
+              <?php if ($moveToParents): ?>
+              <button type="button" class="button" data-modal-open="ledgerMoveCreditModal">Move Credit to Parent</button>
+              <?php endif; ?>
             </span>
           </div>
 
@@ -75,7 +81,7 @@ class LedgerUIManager {
           <?php endif; ?>
         </div>
         <?php
-        self::renderModals($studentUserId, $semesterId, $returnTo);
+        self::renderModals($studentUserId, $semesterId, $returnTo, $moveToParents, max(0, -$balance));
     }
 
     /**
@@ -172,7 +178,7 @@ class LedgerUIManager {
         return !empty($entry['created_by_user_id']) ? 'Unknown user' : 'Automatic';
     }
 
-    private static function renderModals(int $studentUserId, ?int $semesterId, string $returnTo): void {
+    private static function renderModals(int $studentUserId, ?int $semesterId, string $returnTo, array $moveToParents = [], int $creditCents = 0): void {
         $common = function (string $action) use ($studentUserId, $semesterId, $returnTo) {
             return '<input type="hidden" name="csrf" value="' . h(csrf_token()) . '">'
                 . '<input type="hidden" name="student_user_id" value="' . $studentUserId . '">'
@@ -181,6 +187,43 @@ class LedgerUIManager {
                 . '<input type="hidden" name="action" value="' . h($action) . '">';
         };
         ?>
+        <?php if ($moveToParents && $creditCents > 0): ?>
+        <div id="ledgerMoveCreditModal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true">
+          <div class="modal-content">
+            <button class="close" type="button" aria-label="Close">&times;</button>
+            <h3>Move Credit to Parent</h3>
+            <p class="small">This student has <strong><?=h(Billing::formatCents($creditCents))?></strong> of credit.
+              Moved to the parent credit, it is shared by the family and used automatically when any of
+              the parent&rsquo;s children is next charged.</p>
+            <form method="post" action="/admin/ledger_entry_eval.php" class="stack">
+              <?=$common('move_to_parent')?>
+              <?php if (count($moveToParents) === 1): ?>
+                <input type="hidden" name="parent_user_id" value="<?=(int)$moveToParents[0]['id']?>">
+                <p class="small" style="margin:0;">To: <strong><?=h($moveToParents[0]['name'])?></strong></p>
+              <?php else: ?>
+                <label>To
+                  <select name="parent_user_id">
+                    <?php foreach ($moveToParents as $moveParent): ?>
+                    <option value="<?=(int)$moveParent['id']?>"><?=h($moveParent['name'])?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </label>
+              <?php endif; ?>
+              <label>Amount ($)
+                <input type="number" name="amount" step="0.01" min="0.01"
+                       max="<?=h(number_format($creditCents / 100, 2, '.', ''))?>"
+                       value="<?=h(number_format($creditCents / 100, 2, '.', ''))?>" required>
+              </label>
+              <label>Note (optional) <input type="text" name="description" placeholder="So her brother's lessons can use it"></label>
+              <div class="actions">
+                <button type="submit" class="button primary">Move Credit</button>
+                <button type="button" class="button" data-modal-close>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+        <?php endif; ?>
+
         <div id="ledgerPaymentModal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true">
           <div class="modal-content">
             <button class="close" type="button" aria-label="Close">&times;</button>

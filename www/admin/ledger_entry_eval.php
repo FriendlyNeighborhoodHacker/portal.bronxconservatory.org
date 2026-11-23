@@ -1,6 +1,6 @@
 <?php
 // POST: record a manual ledger entry from Edit Student's modals —
-// action=payment | scholarship | custom. PRG back to the edit screen.
+// action=payment | scholarship | custom | move_to_parent. PRG back to the edit screen.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/Billing.php';
 Application::init();
@@ -38,6 +38,11 @@ try {
             Billing::addCustomEntry($ctx, $studentUserId,
                 (string)($_POST['accounting_type'] ?? 'credit'), $amountCents, $semesterId, $description);
             $_SESSION['people_flash'] = 'Ledger entry added.';
+            break;
+        case 'move_to_parent':
+            Billing::moveStudentCreditToParent($ctx, $studentUserId,
+                (int)($_POST['parent_user_id'] ?? 0), $amountCents, $description);
+            $_SESSION['people_flash'] = Billing::formatCents($amountCents) . ' moved to the parent credit.';
             break;
         default:
             throw new InvalidArgumentException('Unknown ledger action.');

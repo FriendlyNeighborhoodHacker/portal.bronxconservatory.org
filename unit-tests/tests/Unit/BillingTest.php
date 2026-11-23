@@ -408,6 +408,37 @@ final class BillingTest extends TestCase
         $this->assertFalse(Billing::stripeReferenceRecorded('pi_other'));
     }
 
+    public function testMovingAStudentsCreditToTheParent(): void
+    {
+        $student = fx_student();
+        $parent = fx_parent_of($student);
+        $fall = fx_semester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+        Billing::recordManualPayment($this->ctx, $student, 46500, '2030-06-01', $fall, 'Check');
+
+        // An only child: there is nobody to share the credit with.
+        $this->assertSame([], Billing::parentsForCreditMove($student));
+
+        $sibling = fx_student('Sib', 'Ling');
+        pdo()->prepare('INSERT INTO parenthood (parent_user_id, child_user_id) VALUES (?,?)')->execute([$parent, $sibling]);
+        $this->assertSame([$parent], array_column(Billing::parentsForCreditMove($student), 'id'));
+
+        Billing::moveStudentCreditToParent($this->ctx, $student, $parent, 40000, 'for Sib');
+        $this->assertSame(-6500, Billing::balanceForStudentCents($student));
+        $this->assertSame(40000, Billing::parentCreditBalanceCents($parent));
+        // The student paid less, rather than being charged something new.
+        $term = Billing::balanceSummaryForStudent($student);
+        $this->assertFalse($term['has_charges']);
+
+        // The sibling's next charge uses it.
+        Billing::addCustomEntry($this->ctx, $sibling, 'debit', 30000, $fall, 'Lessons');
+        $this->assertSame(0, Billing::balanceForStudentCents($sibling));
+        $this->assertSame(10000, Billing::parentCreditBalanceCents($parent));
+
+        // Never more than the student has.
+        $this->expectException(InvalidArgumentException::class);
+        Billing::moveStudentCreditToParent($this->ctx, $student, $parent, 6501);
+    }
+
     public function testNothingOwedIsOnlyPaidInFullIfThereWereCharges(): void
     {
         $student = fx_student();

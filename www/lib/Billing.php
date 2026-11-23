@@ -615,6 +615,94 @@ class Billing {
         return $used;
     }
 
+    /**
+     * The parents a student's credit can be moved to: those with at least
+     * one OTHER child. For an only child the move would achieve nothing —
+     * the credit is already where the family's only charges will land.
+     * Returns [['id' => int, 'name' => string], ...].
+     */
+    public static function parentsForCreditMove(int $studentUserId): array {
+        $st = self::pdo()->prepare(
+            'SELECT p.id, p.first_name, p.last_name
+             FROM parenthood ph
+             JOIN users p ON p.id = ph.parent_user_id AND p.is_deleted = 0
+             WHERE ph.child_user_id = ?
+               AND (SELECT COUNT(*) FROM parenthood sib WHERE sib.parent_user_id = ph.parent_user_id) > 1
+             ORDER BY p.first_name, p.last_name, p.id'
+        );
+        $st->execute([$studentUserId]);
+        return array_map(
+            fn($row) => ['id' => (int)$row['id'], 'name' => trim($row['first_name'] . ' ' . $row['last_name'])],
+            $st->fetchAll()
+        );
+    }
+
+    /**
+     * Move some or all of a student's credit to a parent's credit, so a
+     * sibling's charges can use it. Two rows that explain each other, the
+     * mirror of applyParentCreditToStudent: the student's ledger gets a
+     * payment line going the other way ("Moved to parent credit"), which
+     * lowers what the student has paid rather than inventing a charge; the
+     * parent credit gets the matching addition, pointing at it.
+     */
+    public static function moveStudentCreditToParent(?UserContext $ctx, int $studentUserId, int $parentUserId, int $amountCents, string $note = ''): void {
+        self::assertAdmin($ctx);
+        self::assertPositive($amountCents);
+        $parent = null;
+        foreach (self::parentsForCreditMove($studentUserId) as $candidate) {
+            if ($candidate['id'] === $parentUserId) {
+                $parent = $candidate;
+            }
+        }
+        if ($parent === null) {
+            throw new InvalidArgumentException('Credit can only be moved to a parent of this student who has another child.');
+        }
+        $credit = -self::balanceForStudentCents($studentUserId);
+        if ($amountCents > $credit) {
+            throw new InvalidArgumentException($credit > 0
+                ? 'This student only has ' . self::formatCents($credit) . ' of credit to move.'
+                : 'This student has no credit to move.');
+        }
+        $st = self::pdo()->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
+        $st->execute([$studentUserId]);
+        $student = $st->fetch() ?: [];
+        $studentName = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name'] ?? ''));
+        $note = trim($note) !== '' ? ' — ' . trim($note) : '';
+
+        $pdo = self::pdo();
+        $ownTransaction = !$pdo->inTransaction();
+        if ($ownTransaction) {
+            $pdo->beginTransaction();
+        }
+        try {
+            $ledgerEntryId = self::insertEntry(
+                $ctx, $studentUserId, date('Y-m-d'), 'debit', 'payment', $amountCents, null,
+                'Moved to parent credit (' . $parent['name'] . ')' . $note
+            );
+            $pdo->prepare(
+                "INSERT INTO parent_credit_entries
+                   (parent_user_id, entry_date, accounting_type, amount_cents, description,
+                    applied_to_student_user_id, ledger_entry_id, created_by_user_id)
+                 VALUES (?,?,'credit',?,?,?,?,?)"
+            )->execute([
+                $parentUserId, date('Y-m-d'), $amountCents,
+                'Moved from ' . ($studentName !== '' ? $studentName . "'s" : 'a child\'s') . ' account' . $note,
+                $studentUserId, $ledgerEntryId, $ctx?->id,
+            ]);
+            if ($ownTransaction) {
+                $pdo->commit();
+            }
+        } catch (\Throwable $e) {
+            if ($ownTransaction) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+        self::log($ctx, 'billing.student_credit_moved_to_parent', [
+            'student_user_id' => $studentUserId, 'parent_user_id' => $parentUserId, 'amount_cents' => $amountCents,
+        ]);
+    }
+
     /** Has this Stripe payment already been recorded on any student ledger or parent credit? */
     public static function stripeReferenceRecorded(string $reference): bool {
         if (trim($reference) === '') {

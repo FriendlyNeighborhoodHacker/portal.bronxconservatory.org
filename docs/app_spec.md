@@ -237,8 +237,15 @@ parent holds $300, leaves the student at zero and the parent with $100.
 
 It shows on the admin's parent page (balance and history), on the admin's
 student page beside the balance, in the confirm-reservation dialog, and as a
-one-line heads-up on the parent's home and billing pages. There is no screen
-to add to or adjust it by hand, and reversing a student's charges returns the
+one-line heads-up on the parent's home and billing pages.
+
+An admin can **move a student's credit up to the parent** from the student's
+Charges & Payments card ("Move Credit to Parent"). The button appears only when
+the student is in credit and the parent has another child — for an only child
+it would change nothing. It moves any amount up to the credit, recorded as
+"Moved to parent credit" on the student and "Moved from …'s account" on the
+parent. There is no other way to add to or adjust a parent credit by hand, and
+reversing a student's charges returns the
 money to the student's ledger, not to the parent credit.
 
 ### Reversal
