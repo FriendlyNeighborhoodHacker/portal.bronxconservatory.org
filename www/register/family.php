@@ -56,7 +56,7 @@ ApplicationUI::minimalHeaderHtml('Register — Family');
     <label class="inline">
       <input type="checkbox" name="sms_consent" value="1"<?=!empty($family['sms_consent']) ? ' checked' : ''?>>
       I consent to receive SMS from Bronx Conservatory of Music. Reply STOP to end; Reply HELP
-      for help; Msg&amp;Data rates apply; Messaging frequency may vary.
+      for help; Msg&amp;Data rates apply; Messaging frequency may vary. (limited to three per year)
     </label>
 
     <h3>Address</h3>
