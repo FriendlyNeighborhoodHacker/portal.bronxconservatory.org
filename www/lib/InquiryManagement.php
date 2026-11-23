@@ -430,10 +430,12 @@ class InquiryManagement {
     }
 
     /**
-     * US addresses get real validation (a state we recognize, a ZIP shaped
-     * like a ZIP) because that is where every family actually is. Elsewhere we
-     * ask for street, city and postal code and leave the province free text —
-     * guessing at the world's address formats would only reject real people.
+     * City (and, in the US, a state we recognize) is all an inquiry needs:
+     * enough to know whether the family is in the Bronx. Street and postal
+     * code are optional — asking for a full address up front loses leads — but
+     * a US ZIP that is given must be shaped like one. Outside the US the
+     * province is free text; guessing at the world's address formats would
+     * only reject real people.
      */
     public static function validateAddress(array $address, bool $required = true): ?string {
         $country = trim((string)($address['address_country'] ?? ''));
@@ -454,16 +456,10 @@ class InquiryManagement {
         if ($country === '') {
             return 'Please choose a country.';
         }
-        if (trim((string)($address['address_street_1'] ?? '')) === '') {
-            return 'Please give a street address.';
-        }
         if (trim((string)($address['address_city'] ?? '')) === '') {
             return 'Please give a city.';
         }
         $zip = trim((string)($address['address_zip'] ?? ''));
-        if ($zip === '') {
-            return 'Please give a postal code.';
-        }
 
         if ($country === self::DEFAULT_COUNTRY) {
             $state = trim((string)($address['address_state'] ?? ''));
@@ -473,7 +469,7 @@ class InquiryManagement {
             if (!isset(self::US_STATES[strtoupper($state)])) {
                 return 'Please choose a state from the list.';
             }
-            if (!preg_match('/^\d{5}(-\d{4})?$/', $zip)) {
+            if ($zip !== '' && !preg_match('/^\d{5}(-\d{4})?$/', $zip)) {
                 return 'Please give a five-digit ZIP code.';
             }
         }

@@ -86,14 +86,19 @@ final class InquiryManagementTest extends TestCase
         $this->assertNull(InquiryManagement::validateAddress($this->address(['address_zip' => '10456-1234'])));
     }
 
+    public function testValidateAddressNeedsOnlyCityAndState(): void
+    {
+        $this->assertNull(InquiryManagement::validateAddress($this->address([
+            'address_street_1' => '', 'address_street_2' => '', 'address_zip' => '',
+        ])));
+    }
+
     public function testValidateAddressEnforcesUsRules(): void
     {
         $cases = [
-            'no street' => ['address_street_1' => ''],
             'no city' => ['address_city' => ''],
             'no state' => ['address_state' => ''],
             'state off the list' => ['address_state' => 'ZZ'],
-            'no zip' => ['address_zip' => ''],
             'zip is not a zip' => ['address_zip' => 'abcde'],
         ];
         foreach ($cases as $label => $overrides) {
@@ -111,10 +116,9 @@ final class InquiryManagementTest extends TestCase
         // No province and a postal code that is not a ZIP are both fine.
         $this->assertNull(InquiryManagement::validateAddress($abroad));
 
-        // Street, city and postal code are still asked for everywhere.
-        $this->assertNotNull(InquiryManagement::validateAddress(array_merge($abroad, ['address_street_1' => ''])));
+        // A city is asked for everywhere; street and postal code are optional.
         $this->assertNotNull(InquiryManagement::validateAddress(array_merge($abroad, ['address_city' => ''])));
-        $this->assertNotNull(InquiryManagement::validateAddress(array_merge($abroad, ['address_zip' => ''])));
+        $this->assertNull(InquiryManagement::validateAddress(array_merge($abroad, ['address_street_1' => '', 'address_zip' => ''])));
     }
 
     public function testNormalizeAddressPicksStateOrProvinceByCountry(): void

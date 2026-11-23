@@ -26,21 +26,21 @@ ApplicationUI::minimalHeaderHtml('Request Information — Contact');
 
     <h3>Parent / Guardian</h3>
     <div class="grid-2">
-      <label>First name
+      <label>First name <span class="required">*</span>
         <input type="text" name="first_name" required value="<?=h($contact['first_name'] ?? '')?>">
       </label>
-      <label>Last name
+      <label>Last name <span class="required">*</span>
         <input type="text" name="last_name" required value="<?=h($contact['last_name'] ?? '')?>">
       </label>
     </div>
 
-    <label>Email address
+    <label>Email address <span class="required">*</span>
       <input type="email" name="email" required value="<?=h($contact['email'] ?? '')?>">
     </label>
-    <label>Confirm email address
+    <label>Confirm email address <span class="required">*</span>
       <input type="email" name="confirm_email" required value="<?=h($contact['confirm_email'] ?? '')?>">
     </label>
-    <label>Primary phone
+    <label>Primary phone <span class="required">*</span>
       <input type="tel" name="phone" required value="<?=h($contact['phone'] ?? '')?>" placeholder="718-555-0123">
     </label>
 

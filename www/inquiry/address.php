@@ -36,18 +36,18 @@ ApplicationUI::minimalHeaderHtml('Request Information — Address');
     <p class="small<?=$isUs ? ' hidden' : ''?>" id="inqAbroadNote">We use this address for mailings
       only. Lessons take place in person at our Bronx locations.</p>
 
-    <label>Street address
-      <input type="text" name="address_street_1" required value="<?=h($address['address_street_1'] ?? '')?>">
+    <label>Street address (optional)
+      <input type="text" name="address_street_1" value="<?=h($address['address_street_1'] ?? '')?>">
     </label>
     <label>Address line 2 (enter apartment number/letter here)
       <input type="text" name="address_street_2" value="<?=h($address['address_street_2'] ?? '')?>">
     </label>
 
     <div class="grid-2">
-      <label>City
+      <label>City <span class="required">*</span>
         <input type="text" name="address_city" required value="<?=h($address['address_city'] ?? '')?>">
       </label>
-      <label id="inqStateWrap"<?=$isUs ? '' : ' class="hidden"'?>>State
+      <label id="inqStateWrap"<?=$isUs ? '' : ' class="hidden"'?>>State <span class="required">*</span>
         <select name="address_state">
           <option value="">— choose —</option>
           <?php
@@ -63,8 +63,8 @@ ApplicationUI::minimalHeaderHtml('Request Information — Address');
       </label>
     </div>
 
-    <label>Postal code
-      <input type="text" name="address_zip" required value="<?=h($address['address_zip'] ?? '')?>">
+    <label>Postal code (optional)
+      <input type="text" name="address_zip" value="<?=h($address['address_zip'] ?? '')?>">
     </label>
 
     <div class="actions actions-split">

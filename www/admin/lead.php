@@ -221,30 +221,6 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
   </table>
 </div>
 
-<h3>Add a note</h3>
-<div class="card">
-  <form method="post" action="/admin/lead_note_add_eval.php" class="stack">
-    <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
-    <input type="hidden" name="lead_id" value="<?=$leadId?>">
-    <label>Note (admins only)
-      <textarea name="note_body" rows="4" placeholder="Called 8/3 — wants Saturday morning at BCC…"><?=h($noteOld)?></textarea>
-    </label>
-    <div class="grid-2">
-      <label>Status
-        <select name="status">
-          <?php foreach (LeadManagement::STATUSES as $status): ?>
-          <option value="<?=$status?>"<?=$lead['status'] === $status ? ' selected' : ''?>><?=h(LeadManagement::STATUS_LABELS[$status])?></option>
-          <?php endforeach; ?>
-        </select>
-      </label>
-    </div>
-    <p class="small">Notes are kept, never replaced — leave the status alone if nothing has changed.</p>
-    <div class="actions">
-      <button type="submit" class="button primary">Add Note</button>
-    </div>
-  </form>
-</div>
-
 <h3>History</h3>
 <div class="card stack">
   <?php if (!$notes): ?>
@@ -270,6 +246,30 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
       </div>
     <?php endforeach; ?>
   <?php endif; ?>
+</div>
+
+<h3>Add a note</h3>
+<div class="card">
+  <form method="post" action="/admin/lead_note_add_eval.php" class="stack">
+    <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+    <input type="hidden" name="lead_id" value="<?=$leadId?>">
+    <label>Note (admins only)
+      <textarea name="note_body" rows="4" placeholder="Called 8/3 — wants Saturday morning at BCC…"><?=h($noteOld)?></textarea>
+    </label>
+    <div class="grid-2">
+      <label>Status
+        <select name="status">
+          <?php foreach (LeadManagement::STATUSES as $status): ?>
+          <option value="<?=$status?>"<?=$lead['status'] === $status ? ' selected' : ''?>><?=h(LeadManagement::STATUS_LABELS[$status])?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+    </div>
+    <p class="small">Notes are kept, never replaced — leave the status alone if nothing has changed.</p>
+    <div class="actions">
+      <button type="submit" class="button primary">Add Note</button>
+    </div>
+  </form>
 </div>
 
 <?php footer_html(); ?>

@@ -21,15 +21,15 @@ ApplicationUI::minimalHeaderHtml('Request Information — Student');
     <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
 
     <div class="grid-2">
-      <label>Student first name
+      <label>Student first name <span class="required">*</span>
         <input type="text" name="first_name" required value="<?=h($student['first_name'] ?? '')?>">
       </label>
-      <label>Student last name
+      <label>Student last name <span class="required">*</span>
         <input type="text" name="last_name" required value="<?=h($student['last_name'] ?? '')?>">
       </label>
     </div>
 
-    <label>Student age
+    <label>Student age <span class="required">*</span>
       <input type="number" name="age" min="1" max="120" required value="<?=h($student['age'] ?? '')?>">
     </label>
 
