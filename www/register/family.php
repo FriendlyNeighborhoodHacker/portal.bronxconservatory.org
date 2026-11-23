@@ -15,7 +15,8 @@ ApplicationUI::minimalHeaderHtml('Register — Family');
   <h1>BCM <?=h(registration_semester_label($semester))?> Registration</h1>
   <?=registration_steps_html(1)?>
 
-  <p>Please use this form to register and pay tuition if you are a BRONX RESIDENT studying IN PERSON<?php if (StripeCheckout::isConfigured()): ?> and pay tuition<?php endif; ?>.
+  <p>Please use this form to register<?php if (StripeCheckout::isConfigured()): ?> and pay tuition<?php endif; ?>,
+    whether you live in the Bronx or not, and whether you want to study in person or online.
     It will take only about 5 minutes to complete. If you would like to discuss scheduling,
     have any questions, prefer to pay over the phone, or would like to be considered for
     scholarship, please still fill out this form and we will call you to follow up.</p>
@@ -72,8 +73,9 @@ ApplicationUI::minimalHeaderHtml('Register — Family');
       <label>State
         <input type="text" name="address_state" required value="<?=h($family['address_state'] ?? '')?>">
       </label>
-      <label>Postal / ZIP code
-        <input type="text" name="address_zip" required value="<?=h($family['address_zip'] ?? '')?>">
+      <label>ZIP code
+        <input type="text" name="address_zip" required inputmode="numeric" pattern="\d{5}(-\d{4})?"
+          title="Five-digit ZIP code" value="<?=h($family['address_zip'] ?? '')?>">
       </label>
     </div>
     <p class="small">Country: United States</p>

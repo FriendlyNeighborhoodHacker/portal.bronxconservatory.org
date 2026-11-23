@@ -40,9 +40,10 @@ family), tuition in two schedules (**Bronx residents** and **non-residents /
 online students**: 30- and 60-minute lesson fees and the guitar ensemble fee
 for each), the recital & logistics fee, installment plan fee, the **second
 installment due date**, and lessons-per-semester (default 15, used for
-per-lesson price display and duration-change math). Automatic charge-posting
-currently uses the resident rates; the non-resident schedule is stored for
-quoting and reference.
+per-lesson price display and duration-change math). Registration quotes and
+automatic charge-posting both pick the schedule from the family's address
+(city "Bronx" or a ZIP of 10451–10475 is a resident) and use the
+non-resident / online schedule for lessons at an online location.
 
 The **second installment due date** is when the remaining balance is due for
 families on the installment plan. Left blank, it defaults to the midpoint of

@@ -636,6 +636,7 @@ CREATE TABLE leads (
   inquiry_comments TEXT DEFAULT NULL COMMENT 'Inquiry only: questions or concerns (scheduling_notes is the registration equivalent)',
   policies_agreed_at DATETIME DEFAULT NULL,
   installment_plan TINYINT(1) NOT NULL DEFAULT 0,
+  nonresident_pricing TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = quoted at the non-resident / online rate (not a Bronx resident, or chose Online Lessons)',
   quote_json LONGTEXT DEFAULT NULL COMMENT 'Itemized quote lines as computed at submit',
   amount_quoted_cents INT UNSIGNED NOT NULL DEFAULT 0,
   amount_due_now_cents INT UNSIGNED NOT NULL DEFAULT 0,

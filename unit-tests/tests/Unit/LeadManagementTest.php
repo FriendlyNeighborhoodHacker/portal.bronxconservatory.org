@@ -65,6 +65,101 @@ final class LeadManagementTest extends TestCase
         );
     }
 
+    // ===== Residency and the non-resident / online rate =====
+
+    public function testBronxResidentByCityOrZip(): void
+    {
+        $this->assertTrue(LeadManagement::isBronxResident('Bronx', '99999'));
+        $this->assertTrue(LeadManagement::isBronxResident('  bRoNx ', ''));
+        $this->assertTrue(LeadManagement::isBronxResident('The Bronx', ''));
+        $this->assertTrue(LeadManagement::isBronxResident('New York', '10451'));
+        $this->assertTrue(LeadManagement::isBronxResident('New York', '10475-1234'));
+        $this->assertTrue(LeadManagement::isBronxResident('', '10463'));
+
+        $this->assertFalse(LeadManagement::isBronxResident('New York', '10450'));
+        $this->assertFalse(LeadManagement::isBronxResident('Yonkers', '10701'));
+        $this->assertFalse(LeadManagement::isBronxResident('Mount Vernon', '10476'));
+        $this->assertFalse(LeadManagement::isBronxResident('Bronxville', '10708'));
+        $this->assertFalse(LeadManagement::isBronxResident('', ''));
+    }
+
+    public function testNonresidentPricingAppliesOutsideTheBronxAndOnline(): void
+    {
+        $bronx = $this->parent();
+        $yonkers = $this->parent(['address_city' => 'Yonkers', 'address_zip' => '10701']);
+        $online = ['location_preference' => LeadManagement::ONLINE_LOCATION_PREFERENCE];
+
+        $this->assertFalse(LeadManagement::usesNonresidentPricing($bronx, $this->scheduling()));
+        $this->assertTrue(LeadManagement::usesNonresidentPricing($yonkers, $this->scheduling()));
+        $this->assertTrue(LeadManagement::usesNonresidentPricing($bronx, $online), 'online is the non-resident rate');
+    }
+
+    private function twoRateSemester(): int
+    {
+        return SemesterManagement::createSemester(fx_admin_ctx(), 'spring', 2026, '2026-02-01', '2026-06-30', [
+            'registration_fee' => '35.00',
+            'lesson_fee_30_minutes' => '420.00', 'lesson_fee_60_minutes' => '840.00', 'guitar_ensemble_fee' => '270.00',
+            'lesson_fee_30_minutes_nonresident' => '450.00', 'lesson_fee_60_minutes_nonresident' => '900.00',
+            'guitar_ensemble_fee_nonresident' => '300.00',
+            'recital_fee' => '10.00', 'installment_plan_fee' => '20.00', 'lessons_per_semester' => 15,
+        ]);
+    }
+
+    public function testQuoteAtTheNonresidentRate(): void
+    {
+        $semesterId = $this->twoRateSemester();
+        $students = [$this->student(['guitar_ensemble' => 1])];
+
+        $resident = LeadManagement::priceQuote($semesterId, $students, false);
+        $this->assertSame(74500, $resident['total_cents']); // 35 + 420 + 10 + 270 + 10
+
+        $other = LeadManagement::priceQuote($semesterId, $students, false, true);
+        $this->assertSame(80500, $other['total_cents']); // 35 + 450 + 10 + 300 + 10
+        $this->assertStringContainsString('non-resident / online rate', $other['lines'][1]['label']);
+
+        $sixty = LeadManagement::priceQuote($semesterId, [$this->student(['lesson_length_minutes' => 60])], false, true);
+        $this->assertSame(94500, $sixty['total_cents']); // 35 + 900 + 10
+    }
+
+    public function testNonresidentQuoteFallsBackWhenTheSemesterHasOneRate(): void
+    {
+        // setUp's semester has no non-resident fees: nobody is quoted $0.
+        $quote = LeadManagement::priceQuote($this->semesterId, [$this->student()], false, true);
+        $this->assertSame(46500, $quote['total_cents']);
+        $this->assertStringNotContainsString('non-resident', $quote['lines'][1]['label']);
+    }
+
+    public function testCreateLeadQuotesByAddressAndOnlineChoice(): void
+    {
+        $semesterId = $this->twoRateSemester();
+        $make = fn(array $parent, array $scheduling) => LeadManagement::findLead(
+            LeadManagement::createLead(null, $semesterId, $parent, [$this->student()], $scheduling, false)
+        );
+
+        $bronx = $make($this->parent(), $this->scheduling());
+        $this->assertSame(0, (int)$bronx['nonresident_pricing']);
+        $this->assertSame(46500, (int)$bronx['amount_quoted_cents']);
+
+        $yonkers = $make(
+            $this->parent(['email' => 'y@example.org', 'address_city' => 'Yonkers', 'address_zip' => '10701']),
+            $this->scheduling()
+        );
+        $this->assertSame(1, (int)$yonkers['nonresident_pricing']);
+        $this->assertSame(49500, (int)$yonkers['amount_quoted_cents']); // 35 + 450 + 10
+
+        // A Bronx family studying online: the online rate, and no day or time kept.
+        $online = $make(
+            $this->parent(['email' => 'o@example.org']),
+            ['location_preference' => LeadManagement::ONLINE_LOCATION_PREFERENCE]
+                + $this->scheduling()
+        );
+        $this->assertSame(1, (int)$online['nonresident_pricing']);
+        $this->assertSame(49500, (int)$online['amount_quoted_cents']);
+        $this->assertSame('Online Lessons', $online['location_preference']);
+        $this->assertSame('[]', $online['preferred_days']);
+        $this->assertSame('[]', $online['availability_blocks']);
+    }
+
     // ===== Pricing =====
     // Seeds: registration 35.00, recital 10.00, tuition_30 420.00,
     // tuition_60 840.00, ensemble 270.00, installment fee 20.00.

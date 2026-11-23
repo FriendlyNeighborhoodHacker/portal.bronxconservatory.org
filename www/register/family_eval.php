@@ -41,6 +41,11 @@ if ($family['address_street_1'] === '' || $family['address_city'] === ''
     || $family['address_state'] === '' || $family['address_zip'] === '') {
     registration_fail('Please fill in your address.', '/register/family.php');
 }
+// The ZIP code decides (with the city) whether Bronx-resident tuition applies,
+// so it has to be a real one.
+if (!preg_match('/^\d{5}(-\d{4})?$/', $family['address_zip'])) {
+    registration_fail('Please enter a five-digit ZIP code.', '/register/family.php');
+}
 
 // Save a drop-off draft (the same early save the inquiry flow does), so
 // staff can reach out to a family who starts registering and stops. Best

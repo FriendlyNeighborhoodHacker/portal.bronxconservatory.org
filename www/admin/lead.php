@@ -121,6 +121,7 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
         <?=trim((string)($lead['semester_label'] ?? '')) !== '' ? 'for <strong>' . h($lead['semester_label']) . '</strong>' : ''?>
       <?php else: ?>
         for <strong><?=h(lead_semester_label($lead))?></strong><br>
+        Tuition rate: <strong><?=!empty($lead['nonresident_pricing']) ? 'Non-resident / online' : 'Bronx resident'?></strong><br>
         Policies agreed: <?=!empty($lead['policies_agreed_at']) ? h(date('M j, Y g:i A', strtotime($lead['policies_agreed_at']))) : '✗'?>
       <?php endif; ?>
     </p>

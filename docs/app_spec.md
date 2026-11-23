@@ -288,6 +288,25 @@ defaulted to the term's midpoint and shown wherever fees are presented); the
 daily installment-fee sweep charges the plan fee to anyone still unpaid after
 the semester's first day.
 
+**Resident, non-resident and online tuition.** The same flow serves everyone.
+The address on the family step decides residency — city "Bronx" (any case), or
+a ZIP whose first five digits are 10451–10475 (`LeadManagement::isBronxResident`;
+ZIP is required). Bronx residents studying in person are quoted the semester's
+standard fees; non-residents, and anyone choosing **Online Lessons** as their
+location preference, are quoted the semester's non-resident / online fees
+(falling back to the standard fees when the semester has none). The lead keeps
+which rate it was quoted at (`leads.nonresident_pricing`). Online Lessons hides
+the preferred day and time questions.
+
+The charges posted when a reservation is **confirmed** follow the same rule
+(`Billing::lessonRateFor`, `Residency`), read live from the accounts rather than
+from the lead: a slot at an online location is the online rate; otherwise the
+student is a Bronx resident when their own account or any parent's has a Bronx
+city or ZIP. A family with addresses on file and none in the Bronx pays the
+non-resident rate; a family with **no** address on file is charged the resident
+rate. The ledger line names the rate ("Semester lessons, Non-resident,
+30-minutes"), and a lesson-length change is re-priced at the same rate.
+
 Abandoning checkout still leaves a lead, so the family can be called.
 
 ---

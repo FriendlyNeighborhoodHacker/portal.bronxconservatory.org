@@ -100,7 +100,8 @@ class ReservationManagement {
                 Billing::postSemesterConfirmationCharges(
                     $ctx, $studentUserId, $semesterId, $durationMinutes,
                     (bool)($options['include_installment_fee'] ?? false),
-                    self::lateStartLessonCount($semesterId, $locationId, $dayOfWeek, $firstLessonDate)
+                    self::lateStartLessonCount($semesterId, $locationId, $dayOfWeek, $firstLessonDate),
+                    $locationId
                 );
             }
         }
@@ -227,7 +228,8 @@ class ReservationManagement {
                 self::lateStartLessonCount(
                     (int)$r['semester_id'], (int)$r['location_id'], (int)$r['day_of_week'],
                     $r['first_lesson_date'] !== null ? (string)$r['first_lesson_date'] : null
-                )
+                ),
+                (int)$r['location_id']
             );
         } elseif ($oldStatus === 'confirmed') {
             self::deleteFutureLessons($reservationId);

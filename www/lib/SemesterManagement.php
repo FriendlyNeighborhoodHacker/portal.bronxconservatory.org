@@ -274,9 +274,25 @@ class SemesterManagement {
         return (int)round((float)($semester['registration_fee'] ?? 0) * 100);
     }
 
-    public static function lessonFeeCents(array $semester, int $durationMinutes): int {
+    /**
+     * True when the semester has its own fees for Bronx non-residents and
+     * online students. A semester without them charges everyone the resident
+     * rate (the non-resident fee falls back, it is never $0).
+     */
+    public static function hasNonresidentPricing(array $semester): bool {
+        return (float)($semester['lesson_fee_30_minutes_nonresident'] ?? 0) > 0;
+    }
+
+    /** $nonresident: the non-resident / online rate, where the semester sets one. */
+    public static function lessonFeeCents(array $semester, int $durationMinutes, bool $nonresident = false): int {
         $fee30 = (float)($semester['lesson_fee_30_minutes'] ?? 0);
         $fee60 = (float)($semester['lesson_fee_60_minutes'] ?? 0);
+        if ($nonresident) {
+            $nr30 = (float)($semester['lesson_fee_30_minutes_nonresident'] ?? 0);
+            $nr60 = (float)($semester['lesson_fee_60_minutes_nonresident'] ?? 0);
+            $fee30 = $nr30 > 0 ? $nr30 : $fee30;
+            $fee60 = $nr60 > 0 ? $nr60 : $fee60;
+        }
         if ($durationMinutes === 30) {
             return (int)round($fee30 * 100);
         }
@@ -288,7 +304,11 @@ class SemesterManagement {
         return (int)round($perMinute * $durationMinutes * 100);
     }
 
-    public static function guitarEnsembleFeeCents(array $semester): int {
+    public static function guitarEnsembleFeeCents(array $semester, bool $nonresident = false): int {
+        $nonresidentFee = (float)($semester['guitar_ensemble_fee_nonresident'] ?? 0);
+        if ($nonresident && $nonresidentFee > 0) {
+            return (int)round($nonresidentFee * 100);
+        }
         return (int)round((float)($semester['guitar_ensemble_fee'] ?? 0) * 100);
     }
 

@@ -40,6 +40,14 @@ $scheduling = [
     'notes' => trim((string)($_POST['scheduling_notes'] ?? '')),
 ];
 
+// Online lessons have no day or time to prefer; drop whatever the hidden
+// checkboxes still carried.
+$online = LeadManagement::wantsOnlineLessons($scheduling);
+if ($online) {
+    $scheduling['preferred_days'] = [];
+    $scheduling['availability_blocks'] = [];
+}
+
 $state = registration_state();
 $state['students'] = $students;
 $state['scheduling'] = $scheduling;
@@ -97,7 +105,7 @@ if ($complete === 0) {
 if ($scheduling['location_preference'] === '') {
     registration_fail('Please choose a location preference.', '/register/students.php');
 }
-if (!$scheduling['availability_blocks']) {
+if (!$online && !$scheduling['availability_blocks']) {
     registration_fail('Please check at least one time block you can attend.', '/register/students.php');
 }
 

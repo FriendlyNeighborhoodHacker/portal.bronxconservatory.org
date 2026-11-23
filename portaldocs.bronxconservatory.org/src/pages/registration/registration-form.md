@@ -21,7 +21,7 @@ told registration is closed.
    choices include a combined "Cello/Bass" that an admin resolves to a real
    instrument at convert time), lesson length (30 or 60 minutes), optional
    Guitar Ensemble, shirt size. Plus scheduling preferences: preferred
-   location, preferred days, availability blocks (9–11, 11–1, 1–3, 3–5, 5–7),
+   location (either site, or Online Lessons), preferred days, availability blocks (9–11, 11–1, 1–3, 3–5, 5–7),
    and free-text scheduling notes ("siblings need back-to-back").
 3. **Policies** (`policies.php`) — the conservatory's policies, agreed to with
    a timestamp (`policies_agreed_at`).
@@ -42,6 +42,28 @@ told registration is closed.
    webhook records the payment independently, and unique keys make sure only
    one of the two records it.
 7. **Done** (`done.php`).
+
+### Who pays which tuition
+
+One flow serves Bronx residents, families outside the Bronx, and online
+students. The family step's city and ZIP code (ZIP is required and must be a
+real five-digit one) decide residency: the family is a **Bronx resident** when
+the city is "Bronx" (any case) or the ZIP's first five digits are
+10451–10475 (`LeadManagement::isBronxResident`). Residents studying in person
+are quoted the semester's standard fees; everyone else — and anyone who picks
+**Online Lessons** as their location preference — is quoted the semester's
+"non-residents and/or online students" fees
+(`LeadManagement::usesNonresidentPricing`). The family page shows both rates,
+later pages show the one that applies, and the lead records it as
+`leads.nonresident_pricing`. A semester with no non-resident fees charges
+everyone the standard rate. Choosing Online Lessons hides the preferred-day and
+time questions (nothing is stored for them).
+
+The charges posted when a reservation is confirmed follow the same rule, read
+from the accounts at that moment (`Billing::lessonRateFor`): an online
+location is the online rate; otherwise the student is a Bronx resident when
+their own account or any parent's has a Bronx city or ZIP. No address on file
+at all is treated as resident.
 
 The wizard **saves as the family goes**, the same drop-off capture the
 inquiry flow pioneered — starting the moment a plausible **email or phone

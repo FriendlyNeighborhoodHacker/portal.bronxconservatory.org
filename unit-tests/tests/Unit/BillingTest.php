@@ -57,6 +57,77 @@ final class BillingTest extends TestCase
         $this->assertCount(3, Billing::ledgerForStudent($student, $semesterId));
     }
 
+    // ===== Resident, non-resident and online rates =====
+    // Fixture semester: 30-minute lessons 300.00; the tests below add a
+    // non-resident / online fee of 345.00.
+
+    private function addNonresidentFees(int $semesterId): void
+    {
+        pdo()->prepare(
+            'UPDATE semesters SET lesson_fee_30_minutes_nonresident = 345, lesson_fee_60_minutes_nonresident = 690 WHERE id = ?'
+        )->execute([$semesterId]);
+    }
+
+    private function setAddress(int $userId, string $city, string $zip): void
+    {
+        pdo()->prepare('UPDATE users SET address_city = ?, address_zip = ? WHERE id = ?')->execute([$city, $zip, $userId]);
+    }
+
+    public function testLessonRateFollowsTheFamilyAddress(): void
+    {
+        $student = fx_student();
+        [$semesterId, , $setup] = $this->confirmReservationFor($student);
+        $semester = SemesterManagement::find($semesterId);
+        $this->assertSame('resident', Billing::lessonRateFor($semester, $student), 'one-rate semester');
+
+        $this->addNonresidentFees($semesterId);
+        $semester = SemesterManagement::find($semesterId);
+        $this->assertSame('resident', Billing::lessonRateFor($semester, $student), 'no address on file');
+
+        $parent = fx_parent_of($student);
+        $this->setAddress($parent, 'Yonkers', '10701');
+        $this->assertSame('nonresident', Billing::lessonRateFor($semester, $student));
+
+        // City or ZIP: either one makes the family Bronx residents.
+        $this->setAddress($parent, 'New York', '10463');
+        $this->assertSame('resident', Billing::lessonRateFor($semester, $student));
+        $this->setAddress($parent, 'bronx', '');
+        $this->assertSame('resident', Billing::lessonRateFor($semester, $student));
+
+        // One Bronx address in the family is enough.
+        $this->setAddress($parent, 'Yonkers', '10701');
+        $this->setAddress($student, 'Bronx', '10454');
+        $this->assertSame('resident', Billing::lessonRateFor($semester, $student));
+
+        // An online location is the online rate whatever the address.
+        // (Locations outlive a test reset, so the flag is put back.)
+        pdo()->prepare('UPDATE locations SET is_online = 1 WHERE id = ?')->execute([$setup[1]]);
+        try {
+            $this->assertSame('online', Billing::lessonRateFor($semester, $student, $setup[1]));
+        } finally {
+            pdo()->prepare('UPDATE locations SET is_online = 0 WHERE id = ?')->execute([$setup[1]]);
+        }
+    }
+
+    public function testConfirmationChargesANonresidentTheNonresidentRate(): void
+    {
+        $student = fx_student();
+        $this->setAddress(fx_parent_of($student), 'Yonkers', '10701');
+        $setup = fx_semester_with_dates($this->ctx, fx_teacher(), '2030-09-07', 4);
+        $this->addNonresidentFees($setup[0]);
+
+        $preview = Billing::confirmationChargesPreview($student, $setup[0], 30, null, $setup[1]);
+        $this->assertSame(42000, $preview['total_cents']); // 50 + 345 + 25
+        $this->assertSame('Semester lessons, Non-resident, 30-minutes', $preview['lines'][1]['description']);
+
+        ReservationManagement::createReservation($this->ctx, [
+            'semester_id' => $setup[0], 'teacher_user_id' => $setup[2], 'location_id' => $setup[1],
+            'student_user_id' => $student, 'day_of_week' => $setup[3], 'start_time' => '10:00',
+            'status' => 'confirmed',
+        ]);
+        $this->assertSame(42000, Billing::balanceForStudentCents($student));
+    }
+
     public function testConfirmationWithInstallmentOptInAddsTheFee(): void
     {
         $student = fx_student();

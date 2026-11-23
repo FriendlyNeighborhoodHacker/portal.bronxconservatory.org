@@ -13,7 +13,10 @@ $family = (array)$state['family'];
 $students = registration_clean_students($state);
 $scheduling = (array)$state['scheduling'];
 $installment = (int)$state['installment'] === 1;
-$quote = LeadManagement::priceQuote((int)$semester['id'], $students, $installment);
+$online = LeadManagement::wantsOnlineLessons($scheduling);
+$nonresident = registration_uses_nonresident_pricing($state);
+$quote = LeadManagement::priceQuote((int)$semester['id'], $students, $installment, $nonresident);
+$twoRates = SemesterManagement::hasNonresidentPricing($semester);
 $stripeReady = StripeCheckout::isConfigured();
 
 ApplicationUI::minimalHeaderHtml('Register — Review');
@@ -26,6 +29,17 @@ ApplicationUI::minimalHeaderHtml('Register — Review');
 
   <div class="card">
     <h3 style="margin-top:0;">Tuition &amp; fees</h3>
+    <?php if ($twoRates): ?>
+    <p class="small"><?php if ($online): ?>
+        Online lessons are at the non-resident / online tuition.
+      <?php elseif ($nonresident): ?>
+        Non-resident tuition applies, based on your address
+        (<?=h(trim(($family['address_city'] ?? '') . ' ' . ($family['address_zip'] ?? '')))?>).
+      <?php else: ?>
+        Bronx-resident tuition applies, based on your address
+        (<?=h(trim(($family['address_city'] ?? '') . ' ' . ($family['address_zip'] ?? '')))?>).
+      <?php endif; ?></p>
+    <?php endif; ?>
     <table class="list">
       <thead><tr><th>Description</th><th style="text-align:right;">Item Price</th></tr></thead>
       <tbody>
@@ -73,9 +87,11 @@ ApplicationUI::minimalHeaderHtml('Register — Review');
     </p>
     <?php endforeach; ?>
     <p class="small">
-      Location: <?=h($scheduling['location_preference'] ?? '—')?><br>
+      Location: <?=h($scheduling['location_preference'] ?? '—')?>
+      <?php if (!$online): ?><br>
       Days: <?=h(implode(', ', (array)($scheduling['preferred_days'] ?? [])) ?: '—')?> ·
       Times: <?=h(implode(', ', (array)($scheduling['availability_blocks'] ?? [])) ?: '—')?>
+      <?php endif; ?>
       <?php if (trim((string)($scheduling['notes'] ?? '')) !== ''): ?><br>Notes: <?=h($scheduling['notes'])?><?php endif; ?>
     </p>
     <p class="small">Payment: <?=$installment ? 'installment plan' : 'pay in full'?> ·

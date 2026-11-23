@@ -37,13 +37,14 @@ class Billing {
      * $lessonCount is set only for a late start: the lesson fee is then
      * charged per lesson for that many lessons instead of the full package.
      */
-    public static function postSemesterConfirmationCharges(?UserContext $ctx, int $studentUserId, int $semesterId, int $durationMinutes = 30, bool $includeInstallmentFee = false, ?int $lessonCount = null): void {
+    public static function postSemesterConfirmationCharges(?UserContext $ctx, int $studentUserId, int $semesterId, int $durationMinutes = 30, bool $includeInstallmentFee = false, ?int $lessonCount = null, ?int $locationId = null): void {
         self::assertAdmin($ctx);
         $semester = SemesterManagement::find($semesterId);
         if (!$semester) {
             throw new InvalidArgumentException('Semester not found.');
         }
-        $charges = self::confirmationChargeAmounts($semester, $durationMinutes, $lessonCount);
+        $rate = self::lessonRateFor($semester, $studentUserId, $locationId);
+        $charges = self::confirmationChargeAmounts($semester, $durationMinutes, $lessonCount, $rate);
         if ($includeInstallmentFee) {
             $charges['installment_plan_fee'] = [SemesterManagement::installmentPlanFeeCents($semester), 'Installment plan fee'];
         }
@@ -64,14 +65,41 @@ class Billing {
         ]);
     }
 
+    /** The names of the lesson rates, as they appear on a ledger line. */
+    public const RATE_LABELS = [
+        'resident' => 'Bronx Resident',
+        'nonresident' => 'Non-resident',
+        'online' => 'Online',
+    ];
+
+    /**
+     * Which lesson rate this student pays for a slot at this location:
+     * 'online' at an online location, 'nonresident' when the family's
+     * addresses are known and none is in the Bronx (Residency), otherwise
+     * 'resident' — including when no address is on file, so a missing
+     * address never raises a bill. Online and non-resident are the same
+     * fees; a semester that sets none charges everyone 'resident'.
+     */
+    public static function lessonRateFor(array $semester, int $studentUserId, ?int $locationId = null): string {
+        if (!SemesterManagement::hasNonresidentPricing($semester)) {
+            return 'resident';
+        }
+        if ($locationId) {
+            $st = self::pdo()->prepare('SELECT is_online FROM locations WHERE id = ?');
+            $st->execute([$locationId]);
+            if ((int)$st->fetchColumn() === 1) {
+                return 'online';
+            }
+        }
+        require_once __DIR__ . '/Residency.php';
+        return Residency::studentIsBronxResident($studentUserId) === false ? 'nonresident' : 'resident';
+    }
+
     /** The base confirmation charges (installment fee handled separately). */
-    private static function confirmationChargeAmounts(array $semester, int $durationMinutes, ?int $lessonCount = null): array {
-        $lessonFee = SemesterManagement::lessonFeeCents($semester, $durationMinutes);
-        // Say which price this is: the rate and the lesson length. Only the
-        // Bronx-resident rate is ever charged here — the non-resident/online
-        // fees are stored on the semester but no flow applies them yet; when
-        // one does, this label must follow the rate actually used.
-        $lessonLabel = 'Semester lessons, Bronx Resident, ' . $durationMinutes . '-minutes';
+    private static function confirmationChargeAmounts(array $semester, int $durationMinutes, ?int $lessonCount = null, string $rate = 'resident'): array {
+        $lessonFee = SemesterManagement::lessonFeeCents($semester, $durationMinutes, $rate !== 'resident');
+        // Say which price this is: the rate and the lesson length.
+        $lessonLabel = 'Semester lessons, ' . self::RATE_LABELS[$rate] . ', ' . $durationMinutes . '-minutes';
         // Late start: the package price divided by the semester's lesson
         // count, times the lessons that remain. Registration and recital
         // fees are not prorated.
@@ -92,14 +120,15 @@ class Billing {
      * The line items that WOULD post if this student's reservation were
      * confirmed now — what the admin's confirmation dialog shows. Read-only.
      */
-    public static function confirmationChargesPreview(int $studentUserId, int $semesterId, int $durationMinutes, ?int $lessonCount = null): array {
+    public static function confirmationChargesPreview(int $studentUserId, int $semesterId, int $durationMinutes, ?int $lessonCount = null, ?int $locationId = null): array {
         $semester = SemesterManagement::find($semesterId);
         if (!$semester) {
             throw new InvalidArgumentException('Semester not found.');
         }
         $lines = [];
         $total = 0;
-        foreach (self::confirmationChargeAmounts($semester, $durationMinutes, $lessonCount) as $entryType => [$amountCents, $description]) {
+        $rate = self::lessonRateFor($semester, $studentUserId, $locationId);
+        foreach (self::confirmationChargeAmounts($semester, $durationMinutes, $lessonCount, $rate) as $entryType => [$amountCents, $description]) {
             if ($amountCents <= 0) {
                 continue;
             }
@@ -360,8 +389,16 @@ class Billing {
         $lessonsRemaining = $lessons['lessons_remaining'];
         $lessonsPerSemester = SemesterManagement::lessonsPerSemester($semester);
 
+        // The same rate the confirmation charge used: this student, this slot's location.
+        $st = self::pdo()->prepare('SELECT student_user_id, location_id FROM semester_lesson_reservations WHERE id = ?');
+        $st->execute([$reservationId]);
+        $reservation = $st->fetch() ?: [];
+        $nonresident = $reservation && self::lessonRateFor(
+            $semester, (int)$reservation['student_user_id'], (int)$reservation['location_id']
+        ) !== 'resident';
+
         // Original fee for the full semester at original duration
-        $originalFeeCents = SemesterManagement::lessonFeeCents($semester, $originalDurationMinutes);
+        $originalFeeCents = SemesterManagement::lessonFeeCents($semester, $originalDurationMinutes, $nonresident);
 
         // Fee per lesson based on the semester's lessons_per_semester (for consistent accounting)
         $feePerLesson = $lessonsPerSemester > 0 ? intdiv($originalFeeCents, $lessonsPerSemester) : 0;
@@ -371,7 +408,7 @@ class Billing {
         $refundCents = max(0, $originalFeeCents - $amountSpentCents);
 
         // New fee for the full semester at new duration
-        $newFeeCents = SemesterManagement::lessonFeeCents($semester, $newDurationMinutes);
+        $newFeeCents = SemesterManagement::lessonFeeCents($semester, $newDurationMinutes, $nonresident);
 
         // New charge = fee per lesson (at new rate) × lessons remaining
         $newFeePerLesson = $lessonsPerSemester > 0 ? intdiv($newFeeCents, $lessonsPerSemester) : 0;

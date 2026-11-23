@@ -61,7 +61,7 @@ try {
         $lessonCount = ReservationManagement::lateStartLessonCount(
             $semesterId, $locationId, $dayOfWeek, $firstLessonDate !== '' ? $firstLessonDate : null
         );
-        $preview = Billing::confirmationChargesPreview($studentUserId, $semesterId, $durationMinutes, $lessonCount);
+        $preview = Billing::confirmationChargesPreview($studentUserId, $semesterId, $durationMinutes, $lessonCount, $locationId ?: null);
         $lines = [];
         foreach ($preview['lines'] as $line) {
             $lines[] = [

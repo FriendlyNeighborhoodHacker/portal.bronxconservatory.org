@@ -164,20 +164,45 @@ function registration_price_breakdown(int $cents, int $lessonsPerSemester, strin
         . registration_money($perLesson) . ' per ' . $unit . ')';
 }
 
+// Is this family a Bronx resident, going by the address from step 1?
+function registration_is_bronx_resident(array $state): bool {
+    $family = (array)($state['family'] ?? []);
+    return LeadManagement::isBronxResident((string)($family['address_city'] ?? ''), (string)($family['address_zip'] ?? ''));
+}
+
+// Does this registration pay the non-resident / online rate? Same rule the
+// lead is created with, so the pages and the final quote cannot disagree.
+function registration_uses_nonresident_pricing(array $state): bool {
+    return LeadManagement::usesNonresidentPricing((array)($state['family'] ?? []), (array)($state['scheduling'] ?? []));
+}
+
+// One rate's three tuition lines, as <li>s.
+function registration_tuition_lines_html(array $semester, bool $nonresident): string {
+    $lessonsPerSemester = SemesterManagement::lessonsPerSemester($semester);
+    return '<ul class="stack" style="gap:2px;">'
+        . '<li>30-minute private lessons (full semester): <strong>'
+        . registration_price_breakdown(SemesterManagement::lessonFeeCents($semester, 30, $nonresident), $lessonsPerSemester) . '</strong></li>'
+        . '<li>60-minute private lessons (full semester): <strong>'
+        . registration_price_breakdown(SemesterManagement::lessonFeeCents($semester, 60, $nonresident), $lessonsPerSemester) . '</strong></li>'
+        . '<li>30-minute Guitar Ensemble (full semester): <strong>'
+        . registration_price_breakdown(SemesterManagement::guitarEnsembleFeeCents($semester, $nonresident), $lessonsPerSemester, 'session') . '</strong></li>'
+        . '</ul>';
+}
+
 // The tuition table shown in the step-1 intro — rendered from the semester row so
-// the copy can never drift from the actual quote math.
+// the copy can never drift from the actual quote math. Step 1 does not know
+// yet where the family lives, so both rates are shown when the semester has two.
 function registration_tuition_intro_html(array $semester): string {
     $plus = '<span class="tuition-plus" aria-hidden="true">+</span> ';
-    $lessonsPerSemester = SemesterManagement::lessonsPerSemester($semester);
-    return '<div class="card"><p><strong>' . h(registration_semester_label($semester)) . ' Tuition:</strong></p>'
-        . '<ul class="stack" style="gap:2px;">'
-        . '<li>30-minute private lessons (full semester): <strong>'
-        . registration_price_breakdown(SemesterManagement::lessonFeeCents($semester, 30), $lessonsPerSemester) . '</strong></li>'
-        . '<li>60-minute private lessons (full semester): <strong>'
-        . registration_price_breakdown(SemesterManagement::lessonFeeCents($semester, 60), $lessonsPerSemester) . '</strong></li>'
-        . '<li>30-minute Guitar Ensemble (full semester): <strong>'
-        . registration_price_breakdown(SemesterManagement::guitarEnsembleFeeCents($semester), $lessonsPerSemester, 'session') . '</strong></li>'
-        . '</ul>'
+    $twoRates = SemesterManagement::hasNonresidentPricing($semester);
+    return '<div class="card"><p><strong>' . h(registration_semester_label($semester)) . ' Tuition'
+        . ($twoRates ? ' — Bronx residents studying in person' : '') . ':</strong></p>'
+        . registration_tuition_lines_html($semester, false)
+        . ($twoRates
+            ? '<p><strong>Tuition for students who live outside the Bronx, and for online lessons:</strong></p>'
+                . registration_tuition_lines_html($semester, true)
+                . '<p class="small">We use the city and ZIP code you enter below to tell which tuition applies.</p>'
+            : '')
         . '<p>' . $plus . 'Registration fee: <strong>' . registration_money(SemesterManagement::registrationFeeCents($semester))
         . '</strong> (one per family per semester).</p>'
         . '<p>' . $plus . 'Recital &amp; Logistics fee: <strong>' . registration_money(SemesterManagement::recitalFeeCents($semester))

@@ -102,6 +102,33 @@ class LeadManagement {
 
     // ===== Pricing =====
 
+    /** The Location preference a family picks to study online (no day or time asked). */
+    public const ONLINE_LOCATION_PREFERENCE = 'Online Lessons';
+
+    /**
+     * Bronx resident, as far as an address can tell: the city is "Bronx"
+     * (any case, "The Bronx" too), or the ZIP's first five digits are
+     * 10451-10475 — the Bronx's ZIP codes.
+     */
+    public static function isBronxResident(string $city, string $zip): bool {
+        require_once __DIR__ . '/Residency.php';
+        return Residency::isBronxAddress($city, $zip);
+    }
+
+    public static function wantsOnlineLessons(array $scheduling): bool {
+        return (string)($scheduling['location_preference'] ?? '') === self::ONLINE_LOCATION_PREFERENCE;
+    }
+
+    /**
+     * Which rate a registration is quoted at: the non-resident / online fees
+     * for a family outside the Bronx, and for anyone studying online (the
+     * semester has ONE fee set for "non-residents and/or online students").
+     */
+    public static function usesNonresidentPricing(array $family, array $scheduling = []): bool {
+        return self::wantsOnlineLessons($scheduling)
+            || !self::isBronxResident((string)($family['address_city'] ?? ''), (string)($family['address_zip'] ?? ''));
+    }
+
     /**
      * The itemized quote for a set of students, from the semester's pricing.
      * $students: [['first_name','instrument','lesson_length_minutes','guitar_ensemble'], ...]
@@ -111,8 +138,11 @@ class LeadManagement {
      * recital fee per lesson block (private lesson = one block, ensemble = a
      * second block); installment plan adds its fee. Due now = everything for
      * full pay; for installment, all fees plus half of each tuition line.
+     * $nonresident prices tuition at the non-resident / online rate (see
+     * usesNonresidentPricing) and says so on each tuition line; the
+     * registration, recital and installment fees are the same for everyone.
      */
-    public static function priceQuote(int $semesterId, array $students, bool $installmentPlan): array {
+    public static function priceQuote(int $semesterId, array $students, bool $installmentPlan, bool $nonresident = false): array {
         $semester = SemesterManagement::find($semesterId);
         if (!$semester) {
             throw new InvalidArgumentException('Semester not found.');
@@ -128,12 +158,14 @@ class LeadManagement {
         }
 
         $recital = SemesterManagement::recitalFeeCents($semester);
+        $nonresident = $nonresident && SemesterManagement::hasNonresidentPricing($semester);
+        $rateNote = $nonresident ? ', non-resident / online rate' : '';
         foreach ($students as $student) {
             $name = trim((string)($student['first_name'] ?? '')) ?: 'Student';
             $length = (int)($student['lesson_length_minutes'] ?? 30);
-            $tuition = SemesterManagement::lessonFeeCents($semester, $length);
+            $tuition = SemesterManagement::lessonFeeCents($semester, $length, $nonresident);
             $lines[] = [
-                'label' => $name . ' — ' . $length . '-minute private lessons (full semester)',
+                'label' => $name . ' — ' . $length . '-minute private lessons (full semester' . $rateNote . ')',
                 'amount_cents' => $tuition,
             ];
             $tuitionCents += $tuition;
@@ -143,9 +175,9 @@ class LeadManagement {
             }
 
             if (!empty($student['guitar_ensemble'])) {
-                $ensemble = SemesterManagement::guitarEnsembleFeeCents($semester);
+                $ensemble = SemesterManagement::guitarEnsembleFeeCents($semester, $nonresident);
                 $lines[] = [
-                    'label' => $name . ' — Guitar Ensemble (full semester)',
+                    'label' => $name . ' — Guitar Ensemble (full semester' . $rateNote . ')',
                     'amount_cents' => $ensemble,
                 ];
                 $tuitionCents += $ensemble;
@@ -229,7 +261,14 @@ class LeadManagement {
             throw new InvalidArgumentException('At least one student is required.');
         }
 
-        $quote = self::priceQuote($semesterId, $cleanStudents, $installmentPlan);
+        // Online students give no day or time; anything left over from an
+        // earlier in-person answer is dropped.
+        if (self::wantsOnlineLessons($scheduling)) {
+            $scheduling['preferred_days'] = [];
+            $scheduling['availability_blocks'] = [];
+        }
+        $nonresident = self::usesNonresidentPricing($parent, $scheduling);
+        $quote = self::priceQuote($semesterId, $cleanStudents, $installmentPlan, $nonresident);
 
         $pdo = self::pdo();
         $pdo->beginTransaction();
@@ -239,9 +278,9 @@ class LeadManagement {
                    (semester_id, status, source, parent_first_name, parent_last_name, email, phone, sms_consent,
                     address_country, address_street_1, address_street_2, address_city, address_state, address_zip,
                     location_preference, preferred_days, availability_blocks, scheduling_notes,
-                    policies_agreed_at, installment_plan, quote_json,
+                    policies_agreed_at, installment_plan, nonresident_pricing, quote_json,
                     amount_quoted_cents, amount_due_now_cents)
-                 VALUES (?,\'new\',\'registration\',?,?,?,?,?,\'United States\',?,?,?,?,?,?,?,?,?,NOW(),?,?,?,?)'
+                 VALUES (?,\'new\',\'registration\',?,?,?,?,?,\'United States\',?,?,?,?,?,?,?,?,?,NOW(),?,?,?,?,?)'
             )->execute([
                 $semesterId,
                 $first,
@@ -259,6 +298,7 @@ class LeadManagement {
                 json_encode(array_values((array)($scheduling['availability_blocks'] ?? []))),
                 self::orNull($scheduling['notes'] ?? null),
                 $installmentPlan ? 1 : 0,
+                $nonresident ? 1 : 0,
                 json_encode($quote['lines']),
                 $quote['total_cents'],
                 $quote['due_now_cents'],

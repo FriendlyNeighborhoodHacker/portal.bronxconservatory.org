@@ -13,6 +13,23 @@ $scheduling = (array)$state['scheduling'];
 
 $dollars = fn(int $c) => registration_money($c);
 
+// Tuition follows the address from step 1 — and online lessons are always
+// at the non-resident / online rate, so a Bronx family's prices on this page
+// change when they pick Online Lessons (the script at the bottom).
+$twoRates = SemesterManagement::hasNonresidentPricing($semester);
+$isResident = registration_is_bronx_resident($state);
+$isOnline = LeadManagement::wantsOnlineLessons($scheduling);
+$nonresident = $twoRates && registration_uses_nonresident_pricing($state);
+$family = (array)$state['family'];
+$addressLabel = trim(($family['address_city'] ?? '') . ' ' . ($family['address_zip'] ?? ''));
+// The element's text in both rates, for the script to swap between. On an
+// <option> the whole label goes in (markup inside an option is dropped).
+$priceAttrs = fn(int $resident, int $other, string $before = '', string $after = '') =>
+    ' data-rate-price data-price-resident="' . h($before . $dollars($resident) . $after)
+    . '" data-price-nonresident="' . h($before . $dollars($other) . $after) . '"';
+$fee = fn(int $minutes, bool $other) => SemesterManagement::lessonFeeCents($semester, $minutes, $other);
+$ensembleFee = fn(bool $other) => SemesterManagement::guitarEnsembleFeeCents($semester, $other);
+
 ApplicationUI::minimalHeaderHtml('Register — Students');
 ?>
 <div style="max-width:720px;margin:0 auto;">
@@ -23,6 +40,17 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
 
   <form method="post" action="/register/students_eval.php" class="stack">
     <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+
+    <?php if ($twoRates): ?>
+    <p class="flash">Based on your address (<?=h($addressLabel)?>),
+      <?php if ($isResident): ?>
+        <strong>Bronx-resident tuition</strong> applies for in-person lessons. Online lessons are at the
+        non-resident / online tuition.
+      <?php else: ?>
+        <strong>non-resident tuition</strong> applies.
+      <?php endif; ?>
+      <a href="/register/family.php">Change address</a></p>
+    <?php endif; ?>
 
     <h3>Student Information</h3>
     <p class="small">Please tell us about the student(s) who will be studying.</p>
@@ -63,14 +91,14 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
         </label>
         <label>Lesson length
           <select name="students[<?=$i?>][lesson_length_minutes]">
-            <option value="30"<?=(int)($student['lesson_length_minutes'] ?? 30) === 30 ? ' selected' : ''?>>30 minutes (<?=$dollars(SemesterManagement::lessonFeeCents($semester, 30))?>/semester)</option>
-            <option value="60"<?=(int)($student['lesson_length_minutes'] ?? 0) === 60 ? ' selected' : ''?>>60 minutes (<?=$dollars(SemesterManagement::lessonFeeCents($semester, 60))?>/semester)</option>
+            <option value="30"<?=(int)($student['lesson_length_minutes'] ?? 30) === 30 ? ' selected' : ''?><?=$priceAttrs($fee(30, false), $fee(30, true), '30 minutes (', '/semester)')?>>30 minutes (<?=$dollars($fee(30, $nonresident))?>/semester)</option>
+            <option value="60"<?=(int)($student['lesson_length_minutes'] ?? 0) === 60 ? ' selected' : ''?><?=$priceAttrs($fee(60, false), $fee(60, true), '60 minutes (', '/semester)')?>>60 minutes (<?=$dollars($fee(60, $nonresident))?>/semester)</option>
           </select>
         </label>
       </div>
       <label class="inline">
         <input type="checkbox" name="students[<?=$i?>][guitar_ensemble]" value="1"<?=!empty($student['guitar_ensemble']) ? ' checked' : ''?>>
-        Also interested in the 30-minute Guitar Ensemble (<?=$dollars(SemesterManagement::guitarEnsembleFeeCents($semester))?>/semester)
+        Also interested in the 30-minute Guitar Ensemble (<span<?=$priceAttrs($ensembleFee(false), $ensembleFee(true))?>><?=$dollars($ensembleFee($nonresident))?></span>/semester)
       </label>
     </fieldset>
     <?php endforeach; ?>
@@ -80,8 +108,8 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
     </div>
 
     <h3>Location Preference</h3>
-    <p class="form-question" id="q-location">Bronx Conservatory of Music has two locations.
-      Please indicate your preference here.
+    <p class="form-question" id="q-location">Bronx Conservatory of Music has two locations,
+      and also teaches online. Please indicate your preference here.
       <span class="small">PLEASE NOTE: if you want a weekday evening, select
       Bronx Community College.</span></p>
     <div class="choice-list choice-indent" role="radiogroup" aria-labelledby="q-location">
@@ -95,8 +123,15 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
         <span><strong>Access Bronx Charter Elementary School</strong>, 388 Willis Ave —
           Saturdays 9:00am–2:00pm <em>(Saturdays only)</em></span>
       </label>
+      <label class="inline">
+        <input type="radio" name="location_preference" value="<?=h(LeadManagement::ONLINE_LOCATION_PREFERENCE)?>"<?=$isOnline ? ' checked' : ''?>>
+        <span><strong>Online Lessons</strong> — we will contact you to arrange a day and time<?php
+          if ($twoRates && $isResident): ?> <em>(non-resident / online tuition applies)</em><?php endif; ?></span>
+      </label>
     </div>
 
+    <?php // Day and time are not asked for online lessons; the script hides this block. ?>
+    <div id="inPersonScheduling" class="stack<?=$isOnline ? ' hidden' : ''?>">
     <h3>Preferred Day(s)</h3>
     <div class="choice-grid">
       <?php foreach (['Saturday', 'Tuesday'] as $day): ?>
@@ -120,6 +155,7 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
         <?=h($label)?>
       </label>
       <?php endforeach; ?>
+    </div>
     </div>
 
     <h3>Additional Information</h3>
@@ -150,4 +186,27 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
     </div>
   </form>
 </div>
+<script>
+// Online Lessons: hide the day and time questions, and show the non-resident /
+// online prices (a family outside the Bronx is already on them).
+(function () {
+  var online = <?=json_encode(LeadManagement::ONLINE_LOCATION_PREFERENCE)?>;
+  var alwaysNonresident = <?=json_encode($twoRates && !$isResident)?>;
+  var twoRates = <?=json_encode($twoRates)?>;
+  var block = document.getElementById('inPersonScheduling');
+  var radios = document.querySelectorAll('input[name="location_preference"]');
+  function refresh() {
+    var checked = document.querySelector('input[name="location_preference"]:checked');
+    var isOnline = !!checked && checked.value === online;
+    block.classList.toggle('hidden', isOnline);
+    if (!twoRates) return;
+    var key = (isOnline || alwaysNonresident) ? 'priceNonresident' : 'priceResident';
+    document.querySelectorAll('[data-rate-price]').forEach(function (el) {
+      el.textContent = el.dataset[key];
+    });
+  }
+  radios.forEach(function (radio) { radio.addEventListener('change', refresh); });
+  refresh();
+})();
+</script>
 <?php ApplicationUI::minimalFooterHtml(); ?>
