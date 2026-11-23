@@ -71,7 +71,7 @@ class LedgerUIManager {
         }
         ?>
         <table class="list">
-          <thead><tr><th>Date</th><th>Type</th><th>Description</th>
+          <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Entered by</th>
             <th style="text-align:right;">Charge</th><th style="text-align:right;">Credit</th></tr></thead>
           <tbody>
             <?php foreach ($entries as $entry): ?>
@@ -83,6 +83,11 @@ class LedgerUIManager {
                 <?php endif; ?>
               </td>
               <td><?=h((string)($entry['description'] ?? ''))?></td>
+              <td class="small"><?=h(self::enteredByLabel($entry))?>
+                <?php if (!empty($entry['created_at'])): ?>
+                  <div class="small"><?=h(date('M j, Y g:i a', strtotime((string)$entry['created_at'])))?></div>
+                <?php endif; ?>
+              </td>
               <td style="text-align:right;"><?=$entry['accounting_type'] === 'debit' ? h(Billing::formatCents((int)$entry['amount_cents'])) : ''?></td>
               <td style="text-align:right;"><?=$entry['accounting_type'] === 'credit' ? h(Billing::formatCents((int)$entry['amount_cents'])) : ''?></td>
             </tr>
@@ -90,6 +95,22 @@ class LedgerUIManager {
           </tbody>
         </table>
         <?php
+    }
+
+    /**
+     * Who put this line on the ledger, so a mistake can be traced: the
+     * admin's name, or what made it when no person did.
+     */
+    public static function enteredByLabel(array $entry): string {
+        $name = trim((string)($entry['created_by_first_name'] ?? '') . ' ' . (string)($entry['created_by_last_name'] ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
+        if (!empty($entry['stripe_checkout_session_id']) || !empty($entry['stripe_payment_intent_id'])) {
+            return 'Online card payment';
+        }
+        // No recorded person: an automatic job, or an account since removed.
+        return !empty($entry['created_by_user_id']) ? 'Unknown user' : 'Automatic';
     }
 
     private static function renderModals(int $studentUserId, ?int $semesterId, string $returnTo): void {

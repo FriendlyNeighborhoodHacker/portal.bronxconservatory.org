@@ -1031,9 +1031,13 @@ class Billing {
 
     /** The student's ledger line items (optionally one semester), oldest first. */
     public static function ledgerForStudent(int $studentUserId, ?int $semesterId = null): array {
-        $sql = 'SELECT le.*, s.season, s.year
+        // created_by_*: who entered the line, for the admin's ledger view
+        // (NULL for entries no person made, such as a Stripe webhook payment).
+        $sql = 'SELECT le.*, s.season, s.year,
+                       cu.first_name AS created_by_first_name, cu.last_name AS created_by_last_name
                 FROM ledger_entries le
                 LEFT JOIN semesters s ON s.id = le.semester_id
+                LEFT JOIN users cu ON cu.id = le.created_by_user_id
                 WHERE le.for_student_user_id = ?';
         $params = [$studentUserId];
         if ($semesterId !== null) {
