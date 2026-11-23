@@ -495,6 +495,35 @@ body.auth .test-site-bar {
   font-weight: 600;
 }
 
+/* Tabs across the top of one page (the admin's student page): each tab is a
+   link to the same page, so it can be bookmarked and survives a form post. */
+.page-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 18px;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.page-tabs a {
+  padding: 10px 16px;
+  margin-bottom: -2px;
+  border-bottom: 3px solid transparent;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.page-tabs a:hover,
+.page-tabs a:focus {
+  color: var(--color-navy);
+}
+
+.page-tabs a.active {
+  color: var(--color-navy);
+  border-bottom-color: var(--color-primary);
+}
+
 /* ===== Main content column ===== */
 
 main {

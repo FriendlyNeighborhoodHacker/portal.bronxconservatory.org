@@ -84,7 +84,7 @@ header_html('Edit ' . $name);
         <?php $childCredit = count($children) > 1 ? -Billing::balanceForStudentCents((int)$child['id']) : 0; ?>
         <?php if ($childCredit > 0): ?>
           <div class="small"><?=h(Billing::formatCents($childCredit))?> credit on this child&rsquo;s account &mdash;
-            <a href="/admin/student.php?id=<?=(int)$child['id']?>">open <?=h($child['first_name'])?></a>
+            <a href="/admin/student.php?id=<?=(int)$child['id']?>&amp;tab=billing">open <?=h($child['first_name'])?>&rsquo;s Payments / Billing</a>
             and use &ldquo;Move Credit to Parent&rdquo; to share it with the family.</div>
         <?php endif; ?>
       </span>

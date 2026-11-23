@@ -30,7 +30,15 @@ if (!$user) {
     exit;
 }
 
-$returnTo = '/admin/student.php?id=' . $userId;
+// The page is three tabs. Each is its own request (?tab=…), so a tab can be
+// linked to, and a form that posts from one comes back to the same one.
+$tabs = ['summary' => 'Summary', 'lessons' => 'Lessons', 'billing' => 'Payments / Billing'];
+$tab = (string)($_GET['tab'] ?? 'summary');
+if (!isset($tabs[$tab])) {
+    $tab = 'summary';
+}
+$tabUrl = fn(string $key) => '/admin/student.php?id=' . $userId . ($key === 'summary' ? '' : '&tab=' . $key);
+$returnTo = $tabUrl($tab);
 $parents = StudentTeacherManagement::parentsOfStudent($userId);
 $demographic = StudentTeacherManagement::demographicForStudent(UserContext::getLoggedInUserContext(), $userId);
 $allInstruments = InstrumentCatalog::all();
@@ -76,9 +84,16 @@ header_html($name);
   </span>
 </div>
 
+<nav class="page-tabs" aria-label="Student sections">
+  <?php foreach ($tabs as $tabKey => $tabLabel): ?>
+    <a href="<?=h($tabUrl($tabKey))?>"<?=$tabKey === $tab ? ' class="active" aria-current="page"' : ''?>><?=h($tabLabel)?></a>
+  <?php endforeach; ?>
+</nav>
+
 <?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
 <?php if ($flashError): ?><p class="error"><?=h($flashError)?></p><?php endif; ?>
 
+<?php if ($tab === 'summary'): ?>
 <div class="card">
   <div class="page-head">
     <h3>Parents</h3>
@@ -109,7 +124,10 @@ header_html($name);
     </div>
   <?php endforeach; ?>
 </div>
+<?php endif; ?>
 
+<?php // The standing weekly booking(s): on Summary and again on Lessons. ?>
+<?php if ($tab === 'summary' || $tab === 'lessons'): ?>
 <div class="card">
   <h3>Lesson Reservation<?=count($reservations) === 1 ? '' : 's'?></h3>
   <?php if (!$reservations): ?>
@@ -134,7 +152,9 @@ header_html($name);
     <a href="/admin/student_notes.php?id=<?=$userId?>">More</a>
   </p>
 </div>
+<?php endif; ?>
 
+<?php if ($tab === 'lessons'): ?>
 <?php
   // This student's lessons in the semester being viewed, with their notes
   // inline: the upcoming ones by default, or the whole semester.
@@ -153,8 +173,8 @@ header_html($name);
     <h3><?=$showAllLessons ? 'All lessons for ' . h(SemesterManagement::label($lessonsSemester)) : 'Upcoming lessons'?>
       <span class="small">(<?=count($shownLessons)?>)</span></h3>
     <span class="actions">
-      <a class="button<?=$showAllLessons ? '' : ' primary'?>" href="/admin/student.php?id=<?=$userId?>#lessons">Upcoming lessons</a>
-      <a class="button<?=$showAllLessons ? ' primary' : ''?>" href="/admin/student.php?id=<?=$userId?>&amp;lessons=all#lessons">All lessons for <?=h(SemesterManagement::label($lessonsSemester))?></a>
+      <a class="button<?=$showAllLessons ? '' : ' primary'?>" href="<?=h($tabUrl('lessons'))?>#lessons">Upcoming lessons</a>
+      <a class="button<?=$showAllLessons ? ' primary' : ''?>" href="<?=h($tabUrl('lessons'))?>&amp;lessons=all#lessons">All lessons for <?=h(SemesterManagement::label($lessonsSemester))?></a>
     </span>
   </div>
   <?php if (!$shownLessons): ?>
@@ -166,7 +186,9 @@ header_html($name);
   <?php endif; ?>
 </div>
 <?php endif; ?>
+<?php endif; ?>
 
+<?php if ($tab === 'billing'): ?>
 <?php
   // Make-up credits: lessons still owed after cancellations. Shown only when
   // something was cancelled this semester — no cancellations, no credits.
@@ -197,7 +219,9 @@ header_html($name);
   </div>
 </div>
 <?php endif; ?>
+<?php endif; ?>
 
+<?php if ($tab === 'lessons'): ?>
 <?php $oneOffLessons = $semesterId ? LessonManagement::adHocLessonsForStudent($userId, (int)$semesterId) : []; ?>
 <?php if ($oneOffLessons): ?>
 <div class="card" id="one-off-lessons">
@@ -222,9 +246,13 @@ header_html($name);
   </div>
 </div>
 <?php endif; ?>
+<?php endif; ?>
 
+<?php if ($tab === 'billing'): ?>
 <?php LedgerUIManager::renderSection($userId, $semesterId, $returnTo); ?>
+<?php endif; ?>
 
+<?php if ($tab === 'summary'): ?>
 <div class="card">
   <h3>Student Details</h3>
   <?=person_details_html($user)?>
@@ -235,6 +263,8 @@ header_html($name);
   <p>Instruments: <strong><?=$studentInstruments ? h(implode(', ', $studentInstruments)) : 'None'?></strong>
     — <a href="#" data-modal-open="instrumentsModal">edit</a></p>
 </div>
+
+<?php endif; ?>
 
 <?php render_parent_modal($userId); ?>
 <?php render_photo_modal($user, $returnTo); ?>
