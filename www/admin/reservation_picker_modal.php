@@ -130,11 +130,54 @@ function render_reservation_picker_modal(int $semesterId, array $grid, ?array $d
         errEl.classList.remove('hidden');
       }
       function clearError() { errEl.classList.add('hidden'); }
+      // Reopening the picker shows what this student already has: the length
+      // they were given, the chosen time in words, and the chosen cells
+      // highlighted in the grid (scrolled into view).
+      function showCurrentPick() {
+        modal.querySelectorAll('.grid-cell.picked').forEach(function (c) {
+          c.classList.remove('picked');
+          if (c.dataset.pickedLabel) { c.textContent = ''; delete c.dataset.pickedLabel; }
+        });
+        var p = 'pick' + activeStudentId + '_';
+        var field = function (name) {
+          var el = document.getElementById(p + name);
+          return el ? el.value : '';
+        };
+        if (!field('loc') || !field('teacher') || !field('time')) {
+          choiceEl.textContent = 'No time chosen yet.';
+          return;
+        }
+        var duration = parseInt(field('dur'), 10) || parseInt(durationSelect.value, 10) || 30;
+        if (durationSelect.querySelector('option[value="' + duration + '"]')) {
+          durationSelect.value = String(duration);
+        }
+        var summary = document.getElementById(p + 'summary');
+        choiceEl.textContent = 'Currently chosen: ' + (summary ? summary.textContent.trim() : '')
+          + '. Click another cell to change it.';
+
+        var time = field('time').split(':');
+        var start = parseInt(time[0], 10) * 60 + parseInt(time[1], 10);
+        var prefix = field('loc') + ':' + field('teacher') + ':' + field('day') + ':';
+        var first = null;
+        for (var i = 0; i < Math.ceil(duration / 30); i++) {
+          var cell = modal.querySelector('[data-slot-key="' + prefix + (start + i * 30) + '"]');
+          if (!cell) continue;
+          cell.classList.add('picked');
+          if (!first) {
+            first = cell;
+            if (!cell.textContent.trim()) { cell.textContent = 'Chosen'; cell.dataset.pickedLabel = '1'; }
+          }
+        }
+        if (first && first.scrollIntoView) {
+          first.scrollIntoView({ block: 'center', inline: 'center' });
+        }
+      }
+
       function openModal() {
         clearError();
-        choiceEl.textContent = 'No time chosen yet.';
         modal.classList.remove('hidden');
         modal.setAttribute('aria-hidden', 'false');
+        showCurrentPick(); // after it is visible, so scrolling to the cell works
       }
       function closeModal() {
         modal.classList.add('hidden');
@@ -200,6 +243,8 @@ function render_reservation_picker_modal(int $semesterId, array $grid, ?array $d
         if (open) {
           activeStudentId = open.dataset.leadStudentId;
           document.getElementById('slotPickWho').textContent = open.dataset.studentName || '';
+          // The student's default length; showCurrentPick() replaces it with
+          // the length already chosen, when there is one.
           durationSelect.value = open.dataset.defaultDuration || '30';
           openModal();
           return;
