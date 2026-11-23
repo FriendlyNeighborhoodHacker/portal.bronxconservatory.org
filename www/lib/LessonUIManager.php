@@ -6,6 +6,7 @@ require_once __DIR__ . '/SemesterManagement.php';
 require_once __DIR__ . '/StudentTeacherManagement.php';
 require_once __DIR__ . '/LocationManagement.php';
 require_once __DIR__ . '/ReservationManagement.php';
+require_once __DIR__ . '/LessonManagement.php';
 
 /**
  * The admin lesson modal (weekly calendar): change the length, mark
@@ -134,6 +135,30 @@ class LessonUIManager {
               <p class="small">To move this lesson to another time or teacher, press
               <strong>Edit</strong> above and drag it.</p>
 
+              <?php // Cancelling asks why: the reason decides whether a make-up is owed. ?>
+              <fieldset id="lessonCancelPanel" class="card stack hidden" style="margin-top:8px;">
+                <legend style="font-weight:700;">Why is this lesson being cancelled?</legend>
+                <?php foreach (LessonManagement::CANCEL_REASONS as $reasonKey => $reasonInfo): ?>
+                <label class="inline">
+                  <input type="radio" name="lessonCancelReason" value="<?=h($reasonKey)?>"
+                         data-rebookable="<?=$reasonInfo['rebookable'] === null ? 'ask' : ($reasonInfo['rebookable'] ? 'yes' : 'no')?>">
+                  <span><?=h($reasonInfo['label'])?>
+                    <span class="small">(<?=$reasonInfo['rebookable'] === null ? 'you decide whether it can be rebooked'
+                        : ($reasonInfo['rebookable'] ? 'rebookable' : 'not rebookable')?>)</span></span>
+                </label>
+                <?php endforeach; ?>
+                <label class="inline hidden" id="lessonCancelRebookRow" style="margin-left:26px;">
+                  <input type="checkbox" id="lessonCancelRebookable">
+                  <span>This lesson can be rebooked (the student gets a make-up credit)</span>
+                </label>
+                <p class="small" style="margin:0;">The lesson disappears from this calendar and frees the slot.
+                  The family and the teacher still see it, marked cancelled.</p>
+                <div class="actions">
+                  <button type="button" class="button danger" id="lessonCancelConfirm">Cancel this lesson</button>
+                  <button type="button" class="button" id="lessonCancelBack">Keep the lesson</button>
+                </div>
+              </fieldset>
+
               <div class="actions actions-split">
                 <button type="button" class="button danger" id="lessonCancelLesson">Cancel lesson</button>
                 <span class="actions-right">
@@ -246,17 +271,47 @@ class LessonUIManager {
             studentLink.href = '/admin/student.php?id=' + encodeURIComponent(cell.dataset.studentId || '');
             studentLink.classList.toggle('hidden', !cell.dataset.studentId);
 
+            resetCancelPanel();
             modal.classList.remove('hidden');
             modal.setAttribute('aria-hidden', 'false');
           });
 
           // Cancelling is its own action, not part of Save: it is the one
-          // thing here that cannot be undone from this screen.
+          // thing here that cannot be undone from this screen. The first
+          // press opens the reasons; the lesson is only cancelled once one is
+          // chosen and confirmed.
+          var cancelPanel = document.getElementById('lessonCancelPanel');
+          var rebookRow = document.getElementById('lessonCancelRebookRow');
+          var rebookBox = document.getElementById('lessonCancelRebookable');
+          function chosenCancelReason() {
+            return cancelPanel.querySelector('input[name="lessonCancelReason"]:checked');
+          }
+          function resetCancelPanel() {
+            cancelPanel.classList.add('hidden');
+            cancelPanel.querySelectorAll('input[name="lessonCancelReason"]').forEach(function (r) { r.checked = false; });
+            rebookBox.checked = false;
+            rebookRow.classList.add('hidden');
+            document.getElementById('lessonCancelLesson').classList.remove('hidden');
+          }
+          cancelPanel.addEventListener('change', function () {
+            var chosen = chosenCancelReason();
+            // Only "parent, with 24 hours notice" leaves rebooking to the admin.
+            rebookRow.classList.toggle('hidden', !chosen || chosen.dataset.rebookable !== 'ask');
+          });
           document.getElementById('lessonCancelLesson').addEventListener('click', function () {
-            if (!confirm('Cancel this lesson? It disappears from this calendar and frees the slot. '
-                       + 'The family and the teacher still see it, marked cancelled.')) return;
             errEl.classList.add('hidden');
-            postJson('/admin/lesson_cancel.php', {})
+            cancelPanel.classList.remove('hidden');
+            this.classList.add('hidden');
+            if (cancelPanel.scrollIntoView) cancelPanel.scrollIntoView({ block: 'nearest' });
+          });
+          document.getElementById('lessonCancelBack').addEventListener('click', resetCancelPanel);
+          document.getElementById('lessonCancelConfirm').addEventListener('click', function () {
+            var chosen = chosenCancelReason();
+            if (!chosen) { showError('Please choose why the lesson is being cancelled.'); return; }
+            errEl.classList.add('hidden');
+            var fields = { cancel_reason: chosen.value };
+            if (chosen.dataset.rebookable === 'ask') { fields.rebookable = rebookBox.checked ? '1' : '0'; }
+            postJson('/admin/lesson_cancel.php', fields)
               .then(function (json) {
                 if (json && json.ok) { window.location.reload(); }
                 else { showError((json && json.error) || 'Could not cancel this lesson.'); }

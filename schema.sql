@@ -410,6 +410,8 @@ CREATE TABLE lessons (
   attended TINYINT(1) DEFAULT NULL COMMENT 'NULL=unmarked, 1=attended, 0=missed',
   cancelled_at DATETIME DEFAULT NULL COMMENT 'Called off: hidden from the admin calendar, still shown to the family and teacher, and no longer holds the slot',
   cancelled_by_user_id INT DEFAULT NULL,
+  cancel_reason ENUM('teacher','rebook_planned','parent_24h','parent_late') DEFAULT NULL COMMENT 'Why it was cancelled: the teacher had to; we plan to rebook; the parent with / without 24 hours notice',
+  cancel_rebookable TINYINT(1) DEFAULT NULL COMMENT '1 = the student is owed a make-up lesson for this cancellation; 0 = not; NULL = not recorded',
   created_by_user_id INT DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

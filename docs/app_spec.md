@@ -611,6 +611,21 @@ email is sent; visibility is entirely through the views.
 
 ### Cancel, mark missed, move a room, book a one-off
 
+**A cancellation always records why**, and the reason decides whether the
+student is owed a make-up ("rebookable"): the teacher had to cancel
+(rebookable), we are planning to rebook (rebookable), the parent cancelled with
+24 hours' notice (the admin ticks whether it is rebookable), the parent
+cancelled without 24 hours' notice (not rebookable). Stored on the lesson as
+`cancel_reason` and `cancel_rebookable`.
+
+**Make-up credits** (`LessonManagement::makeupCreditsForStudent`, shown on the
+admin's student page whenever the student has a cancelled lesson that
+semester): the lessons the weekly booking generated from the first lesson date,
+minus every lesson still on the calendar (held, missed or upcoming, one-offs
+included), minus cancellations that are not rebookable. A rebookable
+cancellation is therefore one credit, and booking a one-off make-up lesson uses
+it. A cancellation from before reasons were recorded gives no credit.
+
 All per-occurrence, from the weekly calendar. **Cancelling** stamps the row
 (never deletes), frees the slot, keeps it visible to family and teacher, and has
 **no un-cancel** — if the week is back on, book a one-off in its place. A

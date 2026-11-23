@@ -14,6 +14,7 @@ require_once __DIR__ . '/../lib/UserManagement.php';
 require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../lib/InstrumentCatalog.php';
 require_once __DIR__ . '/../lib/ReservationManagement.php';
+require_once __DIR__ . '/../lib/LessonManagement.php';
 require_once __DIR__ . '/../lib/LedgerUIManager.php';
 require_once __DIR__ . '/../lib/NotesManagement.php';
 require_once __DIR__ . '/../lib/Files.php';
@@ -131,6 +132,37 @@ header_html($name);
     <a href="/admin/student_notes.php?id=<?=$userId?>">More</a>
   </p>
 </div>
+
+<?php
+  // Make-up credits: lessons still owed after cancellations. Shown only when
+  // something was cancelled this semester — no cancellations, no credits.
+  $makeup = $semesterId ? LessonManagement::makeupCreditsForStudent($userId, (int)$semesterId) : null;
+?>
+<?php if ($makeup && $makeup['cancelled']): ?>
+<div class="card" id="makeup-credits">
+  <h3>Make-up credits: <?=(int)$makeup['credits']?></h3>
+  <p class="small"><?=(int)$makeup['entitled']?> lesson<?=$makeup['entitled'] === 1 ? '' : 's'?> in this semester&rsquo;s booking
+    &minus; <?=(int)$makeup['on_calendar']?> held or still on the calendar
+    &minus; <?=(int)$makeup['not_rebookable']?> cancelled and not rebookable
+    = <strong><?=(int)$makeup['credits']?> to make up</strong>.
+    Booking a one-off make-up lesson on the calendar uses a credit.</p>
+  <div style="overflow-x:auto;">
+  <table class="list">
+    <thead><tr><th>Cancelled lesson</th><th>Reason</th><th>Rebookable</th></tr></thead>
+    <tbody>
+      <?php foreach ($makeup['cancelled'] as $cancelledLesson): ?>
+      <tr>
+        <td><?=h(date('D, M j, Y g:i a', strtotime((string)$cancelledLesson['start_datetime'])))?></td>
+        <td><?=h(LessonManagement::cancelReasonLabel($cancelledLesson['cancel_reason']))?></td>
+        <td><?=$cancelledLesson['cancel_rebookable'] === null ? '<span class="small">not recorded</span>'
+            : ((int)$cancelledLesson['cancel_rebookable'] === 1 ? 'Yes' : 'No')?></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+  </div>
+</div>
+<?php endif; ?>
 
 <?php LedgerUIManager::renderSection($userId, $semesterId, $returnTo); ?>
 

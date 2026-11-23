@@ -218,6 +218,91 @@ final class LessonManagementTest extends TestCase
         $this->assertSame($this->ctx->id, (int)$lesson['cancelled_by_user_id']);
     }
 
+    // ===== Cancellation reasons and make-up credits =====
+
+    public function testCancelRecordsTheReasonAndWhetherItIsRebookable(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed('2030-09-07', 4);
+        $rebookable = fn(int $id) => LessonManagement::getLesson($id)['cancel_rebookable'];
+
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[0], 'teacher');
+        $this->assertSame('teacher', LessonManagement::getLesson($lessonIds[0])['cancel_reason']);
+        $this->assertSame(1, (int)$rebookable($lessonIds[0]));
+
+        // The reason settles it, whatever is passed.
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[1], 'parent_late', true);
+        $this->assertSame(0, (int)$rebookable($lessonIds[1]));
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[2], 'rebook_planned', false);
+        $this->assertSame(1, (int)$rebookable($lessonIds[2]));
+
+        // With 24 hours' notice the admin decides — and has to.
+        try {
+            LessonManagement::cancelLesson($this->ctx, $lessonIds[3], 'parent_24h');
+            $this->fail('cancelled without saying whether it is rebookable');
+        } catch (InvalidArgumentException $e) {
+            $this->assertFalse(LessonManagement::isCancelled(LessonManagement::getLesson($lessonIds[3])));
+        }
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[3], 'parent_24h', false);
+        $this->assertSame(0, (int)$rebookable($lessonIds[3]));
+
+        $this->assertSame('The teacher had to cancel', LessonManagement::cancelReasonLabel('teacher'));
+        $this->assertSame('No reason recorded', LessonManagement::cancelReasonLabel(null));
+    }
+
+    public function testAnUnknownCancelReasonIsRefused(): void
+    {
+        [, , , , , $lessonIds] = $this->makeConfirmed();
+        $this->expectException(InvalidArgumentException::class);
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[0], 'felt like it');
+    }
+
+    public function testMakeupCreditsComeOnlyFromRebookableCancellations(): void
+    {
+        [$teacher, $student, $semesterId, $locationId, , $lessonIds] = $this->makeConfirmed('2030-09-07', 4);
+        $credits = fn() => LessonManagement::makeupCreditsForStudent($student, $semesterId);
+
+        // Nothing cancelled: no credits, however many lessons are still to come.
+        $this->assertSame(0, $credits()['credits']);
+        $this->assertSame(4, $credits()['entitled']);
+        $this->assertSame([], $credits()['cancelled']);
+
+        // The teacher cancels one: the student is owed it.
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[0], 'teacher');
+        $this->assertSame(1, $credits()['credits']);
+
+        // A late cancellation by the parent is not made up.
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[1], 'parent_late');
+        $this->assertSame(1, $credits()['credits']);
+        $this->assertSame(1, $credits()['not_rebookable']);
+
+        // With notice, it is whatever the admin said.
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[2], 'parent_24h', true);
+        $this->assertSame(2, $credits()['credits']);
+        $this->assertCount(3, $credits()['cancelled']);
+
+        // Booking a one-off make-up lesson uses a credit…
+        $makeupId = LessonManagement::createAdHocLesson($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'student_user_id' => $student, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-10 15:00', 'duration_minutes' => 30,
+        ]);
+        $this->assertSame(1, $credits()['credits']);
+
+        // …which comes back if the make-up itself is cancelled by the teacher,
+        // and does not if the family cancels it late.
+        LessonManagement::cancelLesson($this->ctx, $makeupId, 'teacher');
+        $this->assertSame(2, $credits()['credits']);
+    }
+
+    public function testACancellationWithNoReasonRecordedIsNotAMakeupCredit(): void
+    {
+        [, $student, $semesterId, , , $lessonIds] = $this->makeConfirmed();
+        LessonManagement::cancelLesson($this->ctx, $lessonIds[0]); // as before reasons existed
+        $result = LessonManagement::makeupCreditsForStudent($student, $semesterId);
+        $this->assertSame(0, $result['credits']);
+        $this->assertNull($result['cancelled'][0]['cancel_reason']);
+    }
+
     public function testCancelIsIdempotent(): void
     {
         [, , , , , $lessonIds] = $this->makeConfirmed();

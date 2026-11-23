@@ -516,15 +516,114 @@ class LessonManagement {
      * admin calendar and stops holding the teacher's slot, so the time can be
      * used for something else.
      */
-    public static function cancelLesson(?UserContext $ctx, int $lessonId): void {
+    /**
+     * $reason is one of CANCEL_REASONS and decides whether the student is
+     * owed a make-up ("rebookable"); for 'parent_24h' the admin decides and
+     * passes $rebookable. A null reason records neither (how lessons were
+     * cancelled before reasons existed) — the admin screens always give one.
+     */
+    public static function cancelLesson(?UserContext $ctx, int $lessonId, ?string $reason = null, ?bool $rebookable = null): void {
         self::assertAdmin($ctx);
         $lesson = self::requireLesson($lessonId);
         if (!empty($lesson['cancelled_at'])) {
             return; // Already cancelled; saying so twice helps nobody.
         }
-        self::pdo()->prepare('UPDATE lessons SET cancelled_at=NOW(), cancelled_by_user_id=? WHERE id=?')
-            ->execute([$ctx->id, $lessonId]);
-        self::log($ctx, 'lesson.cancelled', ['lesson_id' => $lessonId]);
+        if ($reason !== null) {
+            if (!isset(self::CANCEL_REASONS[$reason])) {
+                throw new InvalidArgumentException('Please say why the lesson is being cancelled.');
+            }
+            $fixed = self::CANCEL_REASONS[$reason]['rebookable'];
+            if ($fixed !== null) {
+                $rebookable = $fixed;
+            } elseif ($rebookable === null) {
+                throw new InvalidArgumentException('Please say whether this lesson can be rebooked.');
+            }
+        } else {
+            $rebookable = null;
+        }
+        self::pdo()->prepare(
+            'UPDATE lessons SET cancelled_at=NOW(), cancelled_by_user_id=?, cancel_reason=?, cancel_rebookable=? WHERE id=?'
+        )->execute([$ctx->id, $reason, $rebookable === null ? null : (int)$rebookable, $lessonId]);
+        self::log($ctx, 'lesson.cancelled', [
+            'lesson_id' => $lessonId, 'reason' => $reason, 'rebookable' => $rebookable,
+        ]);
+    }
+
+    /**
+     * Why a lesson is cancelled. 'rebookable': true/false when the reason
+     * settles whether the student is owed a make-up, null when the admin
+     * decides case by case.
+     */
+    public const CANCEL_REASONS = [
+        'teacher' => ['label' => 'The teacher had to cancel', 'rebookable' => true],
+        'rebook_planned' => ['label' => 'We are planning to rebook', 'rebookable' => true],
+        'parent_24h' => ['label' => 'The parent cancelled with 24 hours notice', 'rebookable' => null],
+        'parent_late' => ['label' => 'The parent cancelled without 24 hours notice', 'rebookable' => false],
+    ];
+
+    /** "The teacher had to cancel" — or "No reason recorded" for an older cancellation. */
+    public static function cancelReasonLabel(?string $reason): string {
+        return self::CANCEL_REASONS[(string)$reason]['label'] ?? 'No reason recorded';
+    }
+
+    /**
+     * A student's make-up credits for a semester: lessons they are still owed
+     * that no longer have a place on the calendar.
+     *
+     *   credits = entitled − on the calendar − cancelled and not rebookable
+     *
+     *   entitled        the lessons their weekly booking(s) generated, from
+     *                   their first lesson date to the end of the semester;
+     *   on the calendar every lesson of theirs this semester that is not
+     *                   cancelled — held, missed, or still to come — including
+     *                   one-off lessons, which is how a make-up is booked;
+     *   not rebookable  cancelled lessons the student is not owed a make-up
+     *                   for (a cancellation with no reason recorded counts
+     *                   here: nothing says a make-up was promised).
+     *
+     * So a rebookable cancellation is one credit, and booking a one-off
+     * make-up lesson uses it. With no cancelled lessons there are none.
+     *
+     * Returns ['credits', 'entitled', 'on_calendar', 'not_rebookable',
+     * 'rebookable', 'cancelled' => [lesson rows, newest first]].
+     */
+    public static function makeupCreditsForStudent(int $studentUserId, int $semesterId): array {
+        $st = self::pdo()->prepare(
+            "SELECT l.id, l.start_datetime, l.lesson_number, l.cancelled_at, l.cancel_reason, l.cancel_rebookable,
+                    l.semester_lesson_reservation_id
+             FROM lessons l
+             LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
+             WHERE COALESCE(r.student_user_id, l.student_user_id) = ?
+               AND COALESCE(r.semester_id, l.semester_id) = ?
+               AND (r.id IS NULL OR r.status <> 'deleted')
+             ORDER BY l.start_datetime DESC"
+        );
+        $st->execute([$studentUserId, $semesterId]);
+        $entitled = $onCalendar = $notRebookable = $rebookable = 0;
+        $cancelled = [];
+        foreach ($st->fetchAll() as $lesson) {
+            if ($lesson['semester_lesson_reservation_id'] !== null && (int)$lesson['lesson_number'] > 0) {
+                $entitled++;
+            }
+            if ($lesson['cancelled_at'] === null) {
+                $onCalendar++;
+                continue;
+            }
+            $cancelled[] = $lesson;
+            if ($lesson['cancel_rebookable'] !== null && (int)$lesson['cancel_rebookable'] === 1) {
+                $rebookable++;
+            } else {
+                $notRebookable++;
+            }
+        }
+        return [
+            'credits' => $cancelled ? max(0, $entitled - $onCalendar - $notRebookable) : 0,
+            'entitled' => $entitled,
+            'on_calendar' => $onCalendar,
+            'not_rebookable' => $notRebookable,
+            'rebookable' => $rebookable,
+            'cancelled' => $cancelled,
+        ];
     }
 
     /** Is this lesson called off? */
