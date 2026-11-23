@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/NotesManagement.php';
 require_once __DIR__ . '/ResourceManagement.php';
+require_once __DIR__ . '/LessonManagement.php';
+require_once __DIR__ . '/LessonDetailUIManager.php';
 
 class LessonUIHelper {
     /**
@@ -82,13 +84,18 @@ class LessonUIHelper {
      * @param bool $showStudentName Whether to show the student's name (for parent views)
      * @param int $maxLessons Maximum number of lessons to display
      * @param bool $includeWrapper Whether to include the card wrapper and heading
+     * @param bool $inlineNotes Show each lesson's notes and materials right
+     *        in the row (the student's own home page) instead of behind the
+     *        "Notes & Materials" button; a small link still opens the modal
+     *        to add to them.
      * @return string HTML for the lesson rows
      */
     public static function renderOtherUpcomingLessons(
         array $lessons,
         bool $showStudentName = false,
         int $maxLessons = 5,
-        bool $includeWrapper = true
+        bool $includeWrapper = true,
+        bool $inlineNotes = false
     ): string {
         if (!$lessons) {
             return '';
@@ -129,7 +136,10 @@ class LessonUIHelper {
             $html .= '        <div style="font-size:14px;color:var(--color-text-secondary);margin-bottom:4px;">' . $locationDisplay . '</div>' . "\n";
             $html .= '        <div style="font-size:14px;">' . h($studentDisplay . $teacherDisplay) . '</div>' . "\n";
             $html .= '      </div>' . "\n";
-            if ($countLabel !== '') {
+            if ($inlineNotes) {
+                $html .= '      <a href="#" data-lesson-detail="' . (int)$lesson['id'] . '" class="small" style="white-space:nowrap;margin-top:8px;">'
+                    . ($countLabel !== '' ? 'Add to these notes' : 'Add Note') . '</a>' . "\n";
+            } elseif ($countLabel !== '') {
                 $html .= '      <div style="text-align:right;flex-shrink:0;margin-top:4px;">' . "\n";
                 $html .= '        <a href="#" data-lesson-detail="' . (int)$lesson['id'] . '" class="button notes" style="white-space:nowrap;">Notes &amp; Materials</a>' . "\n";
                 $html .= '        <div class="small" style="margin-top:4px;">' . h($countLabel) . '</div>' . "\n";
@@ -138,11 +148,72 @@ class LessonUIHelper {
                 $html .= '      <a href="#" data-lesson-detail="' . (int)$lesson['id'] . '" class="small" style="white-space:nowrap;margin-top:8px;">Add Note</a>' . "\n";
             }
             $html .= '    </div>' . "\n";
+            if ($inlineNotes && $countLabel !== '') {
+                $html .= '    <div class="lesson-notes" style="margin-top:8px;">'
+                    . LessonDetailUIManager::threadHtml((int)$lesson['id']) . '</div>' . "\n";
+            }
             $html .= '  </div>' . "\n";
         }
 
         if ($includeWrapper) {
             $html .= '</div>' . "\n";
+        }
+        return $html;
+    }
+
+    /**
+     * A student's lessons as the admin sees them on the student page: one row
+     * per lesson with when, who and where, what became of it (attended,
+     * missed, cancelled and why, a one-off and why), and its notes and
+     * materials inline — read-only. $lessons are LessonManagement rows, in
+     * the order to show.
+     */
+    public static function renderAdminLessonList(array $lessons): string {
+        if (!$lessons) {
+            return '<p class="small">No lessons to show.</p>';
+        }
+        $counts = self::countsForLessons($lessons);
+        $now = time();
+        $html = '';
+        foreach ($lessons as $lesson) {
+            $start = strtotime((string)$lesson['start_datetime']);
+            $end = $start + ((int)$lesson['duration_minutes'] * 60);
+            $cancelled = LessonManagement::isCancelled($lesson);
+            $teacher = trim(
+                ($lesson['substitute_first_name'] ?? null ?: $lesson['teacher_first_name']) . ' ' .
+                ($lesson['substitute_last_name'] ?? null ?: $lesson['teacher_last_name'])
+            );
+
+            $tags = [];
+            if ($cancelled) {
+                $tags[] = 'Cancelled — ' . LessonManagement::cancelReasonLabel($lesson['cancel_reason'] ?? null)
+                    . (($lesson['cancel_rebookable'] ?? null) === null ? ''
+                        : ((int)$lesson['cancel_rebookable'] === 1 ? ' (rebookable)' : ' (not rebookable)'));
+            } elseif (($lesson['attended'] ?? null) !== null) {
+                $tags[] = (int)$lesson['attended'] === 1 ? 'Attended' : 'Missed';
+            } elseif ($start > $now) {
+                $tags[] = 'Upcoming';
+            } else {
+                $tags[] = 'Attendance not marked';
+            }
+            if (!empty($lesson['substitute_teacher_user_id'])) {
+                $tags[] = 'Substitute';
+            }
+            if (($lesson['semester_lesson_reservation_id'] ?? null) === null) {
+                $tags[] = 'One-off — ' . LessonManagement::adhocReasonLabel($lesson['adhoc_reason'] ?? null)
+                    . (trim((string)($lesson['adhoc_note'] ?? '')) !== '' ? ': ' . trim((string)$lesson['adhoc_note']) : '');
+            }
+
+            $lessonCounts = $counts[(int)$lesson['id']] ?? ['notes' => 0, 'materials' => 0];
+            $html .= '<div style="padding:12px 0;border-bottom:1px solid var(--color-border);' . ($cancelled ? 'opacity:0.6;' : '') . '">'
+                . '<div style="font-weight:500;">' . h(date('D, M j, Y · g:i', $start) . '–' . date('g:i A', $end)) . '</div>'
+                . '<div class="small">' . h($teacher) . ' · ' . lesson_place_html($lesson) . '</div>'
+                . '<div class="small">' . h(implode(' · ', $tags)) . '</div>';
+            if ($lessonCounts['notes'] > 0 || $lessonCounts['materials'] > 0) {
+                $html .= '<div class="lesson-notes" style="margin-top:8px;">'
+                    . LessonDetailUIManager::threadHtml((int)$lesson['id']) . '</div>';
+            }
+            $html .= '</div>';
         }
         return $html;
     }

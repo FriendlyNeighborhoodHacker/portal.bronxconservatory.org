@@ -94,7 +94,7 @@ header_html('My Schedule');
 <?php if (count($upcomingLessons) > 1): ?>
 <div class="card">
   <h3 style="margin-top:0;">Other Upcoming Lessons</h3>
-  <?php echo LessonUIHelper::renderOtherUpcomingLessons(array_slice($upcomingLessons, 1), showStudentName: false, includeWrapper: false); ?>
+  <?php echo LessonUIHelper::renderOtherUpcomingLessons(array_slice($upcomingLessons, 1), showStudentName: false, includeWrapper: false, inlineNotes: true); ?>
   <p class="small" style="margin-top:12px;margin-bottom:0;"><a href="/student/calendar.php">View full calendar</a></p>
 </div>
 <?php endif; ?>

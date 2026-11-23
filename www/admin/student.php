@@ -15,6 +15,8 @@ require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../lib/InstrumentCatalog.php';
 require_once __DIR__ . '/../lib/ReservationManagement.php';
 require_once __DIR__ . '/../lib/LessonManagement.php';
+require_once __DIR__ . '/../lib/LessonUIHelper.php';
+require_once __DIR__ . '/../lib/SemesterManagement.php';
 require_once __DIR__ . '/../lib/LedgerUIManager.php';
 require_once __DIR__ . '/../lib/NotesManagement.php';
 require_once __DIR__ . '/../lib/Files.php';
@@ -132,6 +134,38 @@ header_html($name);
     <a href="/admin/student_notes.php?id=<?=$userId?>">More</a>
   </p>
 </div>
+
+<?php
+  // This student's lessons in the semester being viewed, with their notes
+  // inline: the upcoming ones by default, or the whole semester.
+  $lessonsSemester = $semesterId ? SemesterManagement::find((int)$semesterId) : null;
+  $showAllLessons = ($_GET['lessons'] ?? '') === 'all';
+  $semesterLessons = $lessonsSemester
+      ? LessonManagement::lessonsForStudentsInSemesters([$userId], [(int)$semesterId]) : [];
+  $today = strtotime(date('Y-m-d'));
+  $shownLessons = $showAllLessons
+      ? $semesterLessons
+      : array_values(array_filter($semesterLessons, fn($l) => strtotime((string)$l['start_datetime']) >= $today));
+?>
+<?php if ($lessonsSemester): ?>
+<div class="card" id="lessons">
+  <div class="page-head">
+    <h3><?=$showAllLessons ? 'All lessons for ' . h(SemesterManagement::label($lessonsSemester)) : 'Upcoming lessons'?>
+      <span class="small">(<?=count($shownLessons)?>)</span></h3>
+    <span class="actions">
+      <a class="button<?=$showAllLessons ? '' : ' primary'?>" href="/admin/student.php?id=<?=$userId?>#lessons">Upcoming lessons</a>
+      <a class="button<?=$showAllLessons ? ' primary' : ''?>" href="/admin/student.php?id=<?=$userId?>&amp;lessons=all#lessons">All lessons for <?=h(SemesterManagement::label($lessonsSemester))?></a>
+    </span>
+  </div>
+  <?php if (!$shownLessons): ?>
+    <p class="small"><?=$showAllLessons
+        ? 'No lessons in ' . h(SemesterManagement::label($lessonsSemester)) . '.'
+        : 'No upcoming lessons in ' . h(SemesterManagement::label($lessonsSemester)) . '.'?></p>
+  <?php else: ?>
+    <?=LessonUIHelper::renderAdminLessonList($shownLessons)?>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <?php
   // Make-up credits: lessons still owed after cancellations. Shown only when
