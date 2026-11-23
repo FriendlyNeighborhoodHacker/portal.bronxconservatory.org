@@ -209,8 +209,19 @@ class LeadManagement {
      * Persist a completed wizard submission as a lead + its students, with
      * the quote frozen as computed right now. Throws InvalidArgumentException
      * on bad input (callers flash the message back to the form).
+     *
+     * $replaceLeadId: the family went Back from checkout and changed an
+     * answer — rewrite that lead (same id, so staff notes stay) instead of
+     * making a second one. Only an unpaid, unconverted registration lead can
+     * be rewritten.
      */
-    public static function createLead(?UserContext $ctx, ?int $semesterId, array $parent, array $students, array $scheduling, bool $installmentPlan): int {
+    public static function createLead(?UserContext $ctx, ?int $semesterId, array $parent, array $students, array $scheduling, bool $installmentPlan, ?int $replaceLeadId = null): int {
+        if ($replaceLeadId !== null) {
+            $old = self::findLead($replaceLeadId);
+            if (!$old || !self::canFamilyStillEdit($old)) {
+                throw new InvalidArgumentException('This registration can no longer be changed online. Please call us.');
+            }
+        }
         $first = trim((string)($parent['first_name'] ?? ''));
         $last = trim((string)($parent['last_name'] ?? ''));
         $email = strtolower(trim((string)($parent['email'] ?? '')));
@@ -273,8 +284,20 @@ class LeadManagement {
         $pdo = self::pdo();
         $pdo->beginTransaction();
         try {
-            $pdo->prepare(
-                'INSERT INTO leads
+            if ($replaceLeadId !== null) {
+                // Clear the row down to what the INSERT below would have
+                // written, then let the shared UPDATE fill it in.
+                $pdo->prepare('DELETE FROM lead_students WHERE lead_id = ?')->execute([$replaceLeadId]);
+            }
+            $pdo->prepare($replaceLeadId !== null
+                ? 'UPDATE leads SET
+                     semester_id = ?, parent_first_name = ?, parent_last_name = ?, email = ?, phone = ?, sms_consent = ?,
+                     address_street_1 = ?, address_street_2 = ?, address_city = ?, address_state = ?, address_zip = ?,
+                     location_preference = ?, preferred_days = ?, availability_blocks = ?, scheduling_notes = ?,
+                     installment_plan = ?, nonresident_pricing = ?, quote_json = ?,
+                     amount_quoted_cents = ?, amount_due_now_cents = ?
+                   WHERE id = ' . (int)$replaceLeadId
+                : 'INSERT INTO leads
                    (semester_id, status, source, parent_first_name, parent_last_name, email, phone, sms_consent,
                     address_country, address_street_1, address_street_2, address_city, address_state, address_zip,
                     location_preference, preferred_days, availability_blocks, scheduling_notes,
@@ -303,7 +326,7 @@ class LeadManagement {
                 $quote['total_cents'],
                 $quote['due_now_cents'],
             ]);
-            $leadId = (int)$pdo->lastInsertId();
+            $leadId = $replaceLeadId ?? (int)$pdo->lastInsertId();
 
             $insert = $pdo->prepare(
                 'INSERT INTO lead_students (lead_id, first_name, last_name, class_of, instrument, lesson_length_minutes, guitar_ensemble, shirt_size)
@@ -322,13 +345,30 @@ class LeadManagement {
             throw $e;
         }
 
-        self::log($ctx, 'lead.created', [
+        self::log($ctx, $replaceLeadId !== null ? 'lead.resubmitted' : 'lead.created', [
             'lead_id' => $leadId,
             'semester_id' => $semesterId,
             'student_count' => count($cleanStudents),
             'amount_quoted_cents' => $quote['total_cents'],
         ]);
         return $leadId;
+    }
+
+    /**
+     * Can the family still change this registration from the wizard (Back
+     * from checkout)? Not once money has been taken or staff have converted it.
+     */
+    public static function canFamilyStillEdit(array $lead): bool {
+        if ((string)($lead['source'] ?? '') !== 'registration'
+            || (int)($lead['amount_paid_cents'] ?? 0) > 0
+            || !empty($lead['converted_at'])) {
+            return false;
+        }
+        $st = self::pdo()->prepare(
+            'SELECT COUNT(*) FROM lead_students WHERE lead_id = ? AND converted_student_user_id IS NOT NULL'
+        );
+        $st->execute([(int)$lead['id']]);
+        return (int)$st->fetchColumn() === 0;
     }
 
     // ===== Reads =====

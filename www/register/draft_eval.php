@@ -27,7 +27,7 @@ $email = trim((string)($_POST['email'] ?? ''));
 $phone = trim((string)($_POST['phone'] ?? ''));
 $emailOk = (bool)filter_var($email, FILTER_VALIDATE_EMAIL);
 $phoneOk = strlen(preg_replace('/\D/', '', $phone)) >= 10; // the family-step rule
-if ((!$emailOk && !$phoneOk) || !empty($_SESSION['registration_lead_id'])) {
+if ((!$emailOk && !$phoneOk) || !empty(registration_state()['lead_id'])) {
     echo json_encode(['ok' => false]);
     exit;
 }

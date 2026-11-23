@@ -51,7 +51,7 @@ if (!preg_match('/^\d{5}(-\d{4})?$/', $family['address_zip'])) {
 // staff can reach out to a family who starts registering and stops. Best
 // effort: a draft hiccup must never block a registration. Skipped once a
 // lead exists — the lead is the record then.
-if (empty($_SESSION['registration_lead_id'])) {
+if (empty($state['lead_id'])) {
     try {
         $_SESSION['registration_draft_id'] =
             InquiryManagement::recordRegistrationDraft(null, registration_draft_id(), $family);

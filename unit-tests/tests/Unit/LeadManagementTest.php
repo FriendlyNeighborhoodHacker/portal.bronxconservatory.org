@@ -160,6 +160,42 @@ final class LeadManagementTest extends TestCase
         $this->assertSame('[]', $online['availability_blocks']);
     }
 
+    // ===== Back from checkout: the same lead is rewritten =====
+
+    public function testResubmittingRewritesTheSameLead(): void
+    {
+        $leadId = $this->makeLead();
+        $this->assertSame(46500, (int)LeadManagement::findLead($leadId)['amount_quoted_cents']);
+
+        $again = LeadManagement::createLead(
+            null, $this->semesterId, $this->parent(['phone' => '718-555-0199']),
+            [$this->student(['lesson_length_minutes' => 60]), $this->student(['first_name' => 'Mateo'])],
+            $this->scheduling(), false, $leadId
+        );
+        $this->assertSame($leadId, $again);
+
+        $lead = LeadManagement::findLead($leadId);
+        $this->assertSame('718-555-0199', $lead['phone']);
+        $this->assertSame(131500, (int)$lead['amount_quoted_cents']); // 35 + 840 + 10 + 420 + 10
+        $this->assertSame('new', $lead['status']);
+        $names = array_column(LeadManagement::studentsForLead($leadId), 'first_name');
+        sort($names);
+        $this->assertSame(['Lucia', 'Mateo'], $names);
+        $this->assertSame(1, (int)pdo()->query('SELECT COUNT(*) FROM leads')->fetchColumn());
+    }
+
+    public function testAPaidLeadCannotBeRewritten(): void
+    {
+        $leadId = $this->makeLead();
+        pdo()->prepare('UPDATE leads SET amount_paid_cents = 46500 WHERE id = ?')->execute([$leadId]);
+        $this->assertFalse(LeadManagement::canFamilyStillEdit(LeadManagement::findLead($leadId)));
+
+        $this->expectException(InvalidArgumentException::class);
+        LeadManagement::createLead(
+            null, $this->semesterId, $this->parent(), [$this->student()], $this->scheduling(), false, $leadId
+        );
+    }
+
     // ===== Pricing =====
     // Seeds: registration 35.00, recital 10.00, tuition_30 420.00,
     // tuition_60 840.00, ensemble 270.00, installment fee 20.00.

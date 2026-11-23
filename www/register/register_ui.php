@@ -105,13 +105,20 @@ function registration_mark_completed(array $state, int $step): array {
     return $state;
 }
 
-// The step-indicator bar (same CSS the admin wizards use).
+// The step-indicator bar (same CSS the admin wizards use). Every step the
+// family has already been through — and the one they are up to — is a link,
+// so they can jump back to fix something and forward again. Checkout is
+// never a link: it is only reached by submitting the review.
 function registration_steps_html(int $current): string {
+    $reachable = min(5, (int)(registration_state()['max_step'] ?? 0) + 1);
     $html = '<div class="wizard-steps">';
     foreach (REGISTRATION_STEPS as $i => $label) {
         $n = $i + 1;
-        $class = 'wizard-step' . ($n === $current ? ' active' : ($n < $current ? ' done' : ''));
-        $html .= '<span class="' . $class . '"><span class="wizard-step-num">' . $n . '</span> ' . h($label) . '</span>';
+        $class = 'wizard-step' . ($n === $current ? ' active' : ($n < $current || $n <= $reachable ? ' done' : ''));
+        $inner = '<span class="wizard-step-num">' . $n . '</span> ' . h($label);
+        $html .= ($n !== $current && $n <= $reachable)
+            ? '<a class="' . $class . '" href="' . h(registration_step_url($n)) . '">' . $inner . '</a>'
+            : '<span class="' . $class . '">' . $inner . '</span>';
     }
     return $html . '</div>';
 }

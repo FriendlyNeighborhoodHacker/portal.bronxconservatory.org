@@ -64,7 +64,11 @@ $publishableKey = defined('STRIPE_PUBLISHABLE_KEY') ? STRIPE_PUBLISHABLE_KEY : '
 ApplicationUI::minimalHeaderHtml('Register — Checkout');
 ?>
 <div style="max-width:720px;margin:0 auto;">
-  <h1>Checkout</h1>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+    <h1 style="margin:0;">Checkout</h1>
+    <?php // Back to the review: answers can still be changed until the payment goes through. ?>
+    <a class="btn-outline" href="/register/review.php">Back</a>
+  </div>
   <?=registration_steps_html(6)?>
 
   <?php if ($error): ?><p class="error"><?=h($error)?></p><?php endif; ?>

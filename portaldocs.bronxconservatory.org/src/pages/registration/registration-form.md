@@ -43,6 +43,19 @@ told registration is closed.
    one of the two records it.
 7. **Done** (`done.php`).
 
+### Moving between steps
+
+The numbered step bar links every step the family has already been through
+(and the one they are up to), so they can jump back to fix an answer and
+forward again. Checkout has a **Back** button to the review. The lead is
+created when the review is submitted, so a family who goes back from checkout
+and changes something **rewrites that same lead** on the next submit
+(`LeadManagement::createLead` with `$replaceLeadId`): the quote and the amount
+to pay are recomputed, a fresh Stripe payment is started, and the confirmation
+email is sent again if it changed. A paid or converted lead can no longer be
+changed this way. The wizard's answers are cleared on the thank-you page, so
+the next registration started in the same browser is a separate lead.
+
 ### Who pays which tuition
 
 One flow serves Bronx residents, families outside the Bronx, and online

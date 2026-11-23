@@ -8,6 +8,11 @@ Application::init();
 
 $leadId = (int)($_SESSION['registration_lead_id'] ?? 0);
 $lead = $leadId ? LeadManagement::findLead($leadId) : null;
+// Reaching this page ends the wizard (paid, or paying later): clear its
+// answers, so the next registration started in this browser begins blank and
+// becomes its own lead. The session still remembers this lead, for the
+// summary below and for "Pay now".
+registration_reset();
 if (!$lead) {
     // No lead in this browser session (link revisited later, session gone).
     header('Location: /welcome.php');

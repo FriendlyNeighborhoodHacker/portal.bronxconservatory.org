@@ -1493,6 +1493,17 @@ body.auth .brand-logo {
   font-size: 12px;
 }
 
+a.wizard-step {
+  color: inherit;
+  text-decoration: none;
+}
+
+a.wizard-step:hover,
+a.wizard-step:focus {
+  color: var(--color-navy);
+  text-decoration: underline;
+}
+
 .wizard-step.active {
   color: var(--color-navy);
   font-weight: 600;
