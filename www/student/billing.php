@@ -44,7 +44,7 @@ header_html('Billing');
 
 <div class="card">
   <?php if ($totalDue <= 0): ?>
-    <h3>You are paid in full. Thank you!</h3>
+    <h3><?=$summary['has_charges'] ? 'You are paid in full. Thank you!' : 'No balance due.'?></h3>
   <?php else: ?>
     <h3>You have a balance of <?=h(Billing::formatCents($totalDue))?>.</h3>
     <?php if ($summary['behind']): ?>
@@ -155,7 +155,7 @@ header_html('Billing');
     <span class="small">
       <?php if ($summary['due_cents'] > 0): ?>· <?=h(Billing::formatCents($summary['due_cents']))?> balance
       <?php elseif ($summary['balance_cents'] < 0): ?>· <?=h(Billing::formatCents(-$summary['balance_cents']))?> credit
-      <?php else: ?>· paid in full<?php endif; ?>
+      <?php else: ?>· <?=$summary['has_charges'] ? 'paid in full' : 'no balance due'?><?php endif; ?>
     </span>
   </h3>
 

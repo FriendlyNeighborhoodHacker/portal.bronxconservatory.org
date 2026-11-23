@@ -344,6 +344,25 @@ final class BillingTest extends TestCase
         $this->assertSame(23000, $term['balance_cents']);
     }
 
+    public function testNothingOwedIsOnlyPaidInFullIfThereWereCharges(): void
+    {
+        $student = fx_student();
+        $this->assertFalse(Billing::balanceSummaryForStudent($student)['has_charges'], 'no ledger at all');
+
+        $fall = fx_semester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+        Billing::addCustomEntry($this->ctx, $student, 'debit', 30000, $fall, 'Lessons');
+        Billing::addCustomEntry($this->ctx, $student, 'credit', 30000, $fall, 'Reversed');
+        $summary = Billing::balanceSummaryForStudent($student);
+        $this->assertSame(0, $summary['due_cents']);
+        $this->assertFalse($summary['has_charges'], 'every charge reversed');
+
+        Billing::addCustomEntry($this->ctx, $student, 'debit', 30000, $fall, 'Lessons');
+        Billing::recordManualPayment($this->ctx, $student, 30000, '2030-06-01', $fall, 'Check');
+        $summary = Billing::balanceSummaryForStudent($student);
+        $this->assertSame(0, $summary['due_cents']);
+        $this->assertTrue($summary['has_charges']);
+    }
+
     public function testABalanceThatIsNotLateSaysWhenItIsDue(): void
     {
         $due = fn(int $balance, int $charged, int $paid, bool $plan, ?string $second = null) =>

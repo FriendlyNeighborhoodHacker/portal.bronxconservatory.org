@@ -25,12 +25,14 @@ $totalDue = 0;
 $behind = false;
 $currentSemester = SemesterManagement::resolveDefaultSemester();
 $hasPaidCurrentSemester = false;
+$familyHasCharges = false; // nothing owed AND never charged is "no balance due", not "paid in full"
 
 $behindReasons = []; // "Term (child) — which deadline was missed", one per past-due term
 foreach ($children as $child) {
     $summary = Billing::balanceSummaryForStudent((int)$child['id']);
     $summaries[(int)$child['id']] = $summary;
     $totalDue += $summary['due_cents'];
+    $familyHasCharges = $familyHasCharges || $summary['has_charges'];
     $behind = $behind || $summary['behind'];
     foreach ($summary['behind_reasons'] as $behindReason) {
         $behindReasons[] = [
@@ -60,7 +62,7 @@ header_html('Billing');
 
 <div class="card">
   <?php if ($totalDue <= 0): ?>
-    <h3>You are paid in full. Thank you!</h3>
+    <h3><?=$familyHasCharges ? 'You are paid in full. Thank you!' : 'No balance due.'?></h3>
   <?php else: ?>
     <h3>You have a balance of <?=h(Billing::formatCents($totalDue))?>.</h3>
     <?php if ($behind): ?>
@@ -178,7 +180,7 @@ header_html('Billing');
     <span class="small">
       <?php if ($summary['due_cents'] > 0): ?>· <?=h(Billing::formatCents($summary['due_cents']))?> balance
       <?php elseif ($summary['balance_cents'] < 0): ?>· <?=h(Billing::formatCents(-$summary['balance_cents']))?> credit
-      <?php else: ?>· paid in full<?php endif; ?>
+      <?php else: ?>· <?=$summary['has_charges'] ? 'paid in full' : 'no balance due'?><?php endif; ?>
     </span>
   </h3>
 

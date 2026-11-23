@@ -46,7 +46,8 @@ class LedgerUIManager {
             <?php elseif ($balance < 0): ?>
               Current balance: <strong><?=h(Billing::formatCents(-$balance))?></strong> credit.
             <?php else: ?>
-              <strong>Paid in full.</strong>
+              <?php // Never charged (or every charge reversed) is not "paid". ?>
+              <strong><?=Billing::balanceSummaryForStudent($studentUserId)['has_charges'] ? 'Paid in full.' : 'No balance due.'?></strong>
             <?php endif; ?>
           </p>
 

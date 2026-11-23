@@ -121,7 +121,8 @@ header_html('My Family');
 <h3>Balance &amp; Payments</h3>
 <div class="card">
   <?php if ($totalDue <= 0): ?>
-    <p style="margin:0;"><strong>You are paid in full. Thank you!</strong></p>
+    <p style="margin:0;"><strong><?=array_filter(array_column($summaries, 'has_charges'))
+        ? 'You are paid in full. Thank you!' : 'No balance due.'?></strong></p>
   <?php else: ?>
     <p>You have a balance of <strong><?=h(Billing::formatCents($totalDue))?></strong>.</p>
     <a class="btn-outline" style="padding:6px 14px;font-size:14px;" href="/parent/billing.php">Pay the balance</a>

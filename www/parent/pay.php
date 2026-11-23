@@ -27,7 +27,7 @@ foreach ($outstanding as $row) {
     $totalDue += $row['due_cents'];
 }
 if ($totalDue <= 0) {
-    $_SESSION['billing_flash'] = 'You are paid in full — there is nothing to pay.';
+    $_SESSION['billing_flash'] = 'There is no balance due — nothing to pay.';
     header('Location: /parent/billing.php');
     exit;
 }

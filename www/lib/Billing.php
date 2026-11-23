@@ -869,7 +869,7 @@ class Billing {
     /**
      * What a child's card shows: the balance, and whether any part of it has
      * fallen behind the schedule families are asked to keep.
-     *   ['balance_cents', 'due_cents', 'behind', 'behind_labels',
+     *   ['balance_cents', 'due_cents', 'has_charges', 'behind', 'behind_labels',
      *    'behind_reasons', 'semesters']
      * balance_cents is the all-time balance (negative = credit); due_cents is
      * what is actually owed once credits have been applied forward.
@@ -879,10 +879,12 @@ class Billing {
     public static function balanceSummaryForStudent(int $studentUserId, ?string $today = null): array {
         $semesters = self::semesterBalancesForStudent($studentUserId, $today);
         $due = 0;
+        $charged = 0;
         $behindLabels = [];
         $behindReasons = [];
         foreach ($semesters as $row) {
             $due += $row['balance_cents'];
+            $charged += $row['charged_cents'];
             if ($row['behind']) {
                 $behindLabels[] = $row['label'];
                 $behindReasons[] = ['label' => $row['label'], 'reason' => (string)$row['behind_reason']];
@@ -891,6 +893,10 @@ class Billing {
         return [
             'balance_cents' => self::balanceForStudentCents($studentUserId),
             'due_cents' => $due,
+            // Has this student ever been charged anything (net of reversals)?
+            // With nothing owed, that is the difference between "paid in
+            // full" and simply "no balance due".
+            'has_charges' => $charged > 0,
             'behind' => (bool)$behindLabels,
             'behind_labels' => $behindLabels,
             'behind_reasons' => $behindReasons,

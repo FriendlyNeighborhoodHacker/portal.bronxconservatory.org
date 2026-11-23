@@ -331,7 +331,10 @@ the child's lesson weekday. Cancelled lessons stay on the list, badged — famil
 should be told, not left to notice something quietly gone.
 
 **Billing (`parent/billing.php`)** — the family total, a per-term table per child
-with "Paid / Past due / Not due yet", and a full line-by-line history. Payment
+with "Paid / Past due / Due by {date}", and a full line-by-line history. In
+that table **Charges** is net of reversals, scholarships and adjustments, and
+**Paid** is only money the family paid. A family with nothing owed is "paid in
+full" only if it was ever charged; otherwise the pages say "no balance due". Payment
 offers full, half, or a custom amount, and shows how it will be split across
 children before the card form.
 
