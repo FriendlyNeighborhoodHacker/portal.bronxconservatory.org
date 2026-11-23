@@ -291,10 +291,10 @@ final class LeadManagementTest extends TestCase
         $this->assertSame('rosa@example.org', $parentRow['email']);
         $this->assertSame('100 Willis Ave', $parentRow['address_street_1']);
 
-        // Reservation is pending_reach_out with ZERO debits.
+        // Reservation is pending_confirmation with ZERO debits.
         $this->assertCount(1, $result['reservation_ids']);
         $reservation = ReservationManagement::findReservation($result['reservation_ids'][0]);
-        $this->assertSame('pending_reach_out', $reservation['status']);
+        $this->assertSame('pending_confirmation', $reservation['status']);
         $debits = (int)pdo()->query("SELECT COUNT(*) FROM ledger_entries WHERE accounting_type='debit'")->fetchColumn();
         $this->assertSame(0, $debits);
 

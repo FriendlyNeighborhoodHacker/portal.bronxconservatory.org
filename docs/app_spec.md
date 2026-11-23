@@ -480,7 +480,8 @@ on a second tab as a call list; an admin can finish one on the family's behalf.
 blanks only — never overwriting), creates each student with profile, instrument,
 and parent link, optionally places a reservation via the same grid the schedule
 uses, and moves any payment held on the lead onto a chosen student's ledger.
-Reservations are created **pending reach out**, so **conversion charges nothing**.
+Reservations are created **pending confirmation** (the family has already been in
+touch; what remains is their yes to the slot), so **conversion charges nothing**.
 The date of birth is optional: left blank for a student who gave a graduating
 class, it is stored as March 1 of the year they turn 18 (class year − 18) with
 `student_profiles.date_of_birth_is_approximate` set. That flag marks any

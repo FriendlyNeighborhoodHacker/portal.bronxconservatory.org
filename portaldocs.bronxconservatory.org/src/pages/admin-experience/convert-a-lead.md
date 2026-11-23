@@ -65,7 +65,7 @@ Then `LeadManagement::convertLead` runs, step by step:
    email and no login, a student profile (DOB, class-of), instruments, shirt
    size, and the `parenthood` link. Each student's
    `converted_student_user_id` is written immediately, so progress is durable.
-3. **Reservations** — created as **`pending_reach_out`**, with the slot
+3. **Reservations** — created as **`pending_confirmation`**, with the slot
    re-checked at booking time. No lessons are generated and nothing is
    charged; that happens when the reservation is later
    [confirmed on the schedule](/admin-experience/view-semester-schedule).
@@ -79,7 +79,7 @@ Then `LeadManagement::convertLead` runs, step by step:
    `converted_parent_user_id`, and `converted_at` (preserved on re-entry).
 
 The success flash summarizes it: "Converted! Created the parent account · 2
-students · 1 reservation placed (pending reach out) · payment recorded on
+students · 1 reservation placed (pending confirmation) · payment recorded on
 the ledger."
 
 ## Re-entry and failure behavior

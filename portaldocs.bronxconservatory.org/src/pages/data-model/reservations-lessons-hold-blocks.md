@@ -28,6 +28,7 @@ The `status` ENUM is the reservation's lifecycle, and it has side effects:
 - **`pending_reach_out`** — the default; the org still needs to call the
   family. Rows carried forward from a previous semester also start here.
 - **`pending_confirmation`** — the family has been reached; awaiting a yes.
+  A slot placed while converting a lead starts here.
 - **`confirmed`** — the slot is real. Moving to confirmed **generates the
   `lessons` rows** from the location's active dates *and posts the semester's
   charges* (registration, lessons, recital fee) to the student's ledger.

@@ -193,7 +193,7 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
                 data-student-name="<?=h($student['first_name'] . ' ' . $student['last_name'])?>"
                 data-default-duration="<?=$defaultDuration?>">Choose a time…</button>
       </div>
-      <p class="small">Placed reservations start as <strong>pending reach out</strong> —
+      <p class="small">Placed reservations start as <strong>pending confirmation</strong> —
         no lessons are generated and nothing is charged until you confirm them on the
         Schedule.</p>
       <?php else: ?>

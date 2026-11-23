@@ -903,8 +903,11 @@ class LeadManagement {
             $studentUserIds[$leadStudentId] = $studentUserId;
         }
 
-        // 3. Optional reservation placements (pending_reach_out, no charges —
-        //    charges post when the reservation is later confirmed).
+        // 3. Optional reservation placements. They start as
+        //    pending_confirmation, not pending_reach_out: the family has
+        //    already been in touch (that is what a lead is), so what is left
+        //    is their yes to this slot. No charges — those post when the
+        //    reservation is later confirmed.
         require_once __DIR__ . '/ReservationManagement.php';
         $reservationIds = [];
         $semesterId = !empty($lead['semester_id']) ? (int)$lead['semester_id'] : null;
@@ -928,7 +931,7 @@ class LeadManagement {
                 'day_of_week' => (int)($reservation['day_of_week'] ?? -1),
                 'start_time' => (string)($reservation['start_time'] ?? ''),
                 'duration_minutes' => $duration,
-                'status' => 'pending_reach_out',
+                'status' => 'pending_confirmation',
             ], ['post_charges' => false]);
         }
 

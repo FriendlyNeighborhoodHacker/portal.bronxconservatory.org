@@ -108,7 +108,7 @@ try {
     $bits[] = $result['parent_existed'] ? 'Adopted the existing parent account' : 'Created the parent account';
     $bits[] = count($result['student_user_ids']) . ' student' . (count($result['student_user_ids']) === 1 ? '' : 's');
     if ($result['reservation_ids']) {
-        $bits[] = count($result['reservation_ids']) . ' reservation' . (count($result['reservation_ids']) === 1 ? '' : 's') . ' placed (pending reach out)';
+        $bits[] = count($result['reservation_ids']) . ' reservation' . (count($result['reservation_ids']) === 1 ? '' : 's') . ' placed (pending confirmation)';
     }
     if ($result['payment_recorded']) {
         $bits[] = 'payment recorded on the ledger';
