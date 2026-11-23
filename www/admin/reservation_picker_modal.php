@@ -232,6 +232,8 @@ function render_reservation_picker_modal(int $semesterId, array $grid, ?array $d
             document.getElementById(p + 'time').value = cell.dataset.time;
             document.getElementById(p + 'dur').value = duration;
             document.getElementById(p + 'summary').textContent = json.summary;
+            var button = document.getElementById(p + 'button');
+            if (button) button.textContent = json.summary + ' (CHANGE)';
             document.getElementById(p + 'clear').classList.remove('hidden');
             var note = document.getElementById(p + 'note');
             if (note) note.classList.remove('hidden');
@@ -264,6 +266,8 @@ function render_reservation_picker_modal(int $semesterId, array $grid, ?array $d
           document.getElementById(p + 'summary').textContent =
             'not placed — convert now and place them from the Schedule later';
           clear.classList.add('hidden');
+          var button = document.getElementById(p + 'button');
+          if (button) button.textContent = 'Choose a time…';
           var note = document.getElementById(p + 'note');
           if (note) note.classList.add('hidden');
           return;

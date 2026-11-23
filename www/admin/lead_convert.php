@@ -218,10 +218,12 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
           <a href="#" data-pick-clear data-lead-student-id="<?=$lsId?>" id="pick<?=$lsId?>_clear"
              class="small<?=$pickedSummary !== '' ? '' : ' hidden'?>">Clear</a>
         </p>
-        <button type="button" class="button" data-pick-slot
+        <?php // The button names the chosen slot, so a pick is obvious at a glance. ?>
+        <button type="button" class="button" data-pick-slot id="pick<?=$lsId?>_button"
                 data-lead-student-id="<?=$lsId?>"
                 data-student-name="<?=h($student['first_name'] . ' ' . $student['last_name'])?>"
-                data-default-duration="<?=$defaultDuration?>">Choose a time…</button>
+                data-default-duration="<?=$defaultDuration?>"><?=$pickedSummary !== ''
+                    ? h($pickedSummary) . ' (CHANGE)' : 'Choose a time…'?></button>
       </div>
       <?php // Shown only while a time is chosen; the picker toggles it. ?>
       <p id="pick<?=$lsId?>_note" class="flash<?=$pickedSummary !== '' ? '' : ' hidden'?>" style="margin-top:8px;">
