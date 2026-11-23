@@ -168,6 +168,10 @@ final class RealDataLoaderTest extends TestCase
         // Nothing to say on a live site sending mail normally.
         $this->assertSame([], ApplicationUI::siteBarParts(false, $off, true));
         $this->assertSame(['<strong>DEV MODE</strong>'], ApplicationUI::siteBarParts(true, $off, false));
+        $this->assertSame(
+            ['<strong>PAYMENT TEST MODE</strong> &mdash; no real charges'],
+            ApplicationUI::siteBarParts(false, $off, false, true)
+        );
 
         // Suppressed email shows on a live site too; addresses only for admins.
         $this->assertSame(['Emails suppressed'], ApplicationUI::siteBarParts(false, $on, false));

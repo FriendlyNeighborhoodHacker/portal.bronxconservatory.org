@@ -120,6 +120,11 @@ Set the three lines:
     define('STRIPE_PUBLISHABLE_KEY', 'pk_test_…');
     define('STRIPE_WEBHOOK_SECRET', 'whsec_…');
 
+Add `define('PAYMENT_TEST_MODE', true);` as well: every page then shows
+"PAYMENT TEST MODE — no real charges" in the yellow strip at the top. (The
+strip also appears by itself while the keys are test keys.) Remove the line
+when the live keys go in.
+
 Then run the deploy script so the file is copied into the live web root:
 
     ~/deploy/dev-bronxconservatory.lillyrosenthal.org.sh

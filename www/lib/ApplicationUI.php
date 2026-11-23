@@ -436,16 +436,38 @@ class ApplicationUI {
     public static function testSiteBarHtml(): string {
         $user = function_exists('current_user') ? current_user() : null;
         $parts = self::siteBarParts(
-            Application::isDevSite(), email_redirect_status(), !empty($user['is_admin'])
+            Application::isDevSite(), email_redirect_status(), !empty($user['is_admin']),
+            self::paymentTestMode()
         );
         return $parts ? '<div class="test-site-bar" role="note">' . implode(' &middot; ', $parts) . '</div>' : '';
     }
 
+    /**
+     * Are card payments on this site pretend? True when PAYMENT_TEST_MODE is
+     * set in config.local.php — and also whenever the Stripe keys themselves
+     * are test keys (they start sk_test_ / pk_test_), so the strip cannot be
+     * forgotten while test keys are in place.
+     */
+    public static function paymentTestMode(): bool {
+        if (defined('PAYMENT_TEST_MODE') && PAYMENT_TEST_MODE) {
+            return true;
+        }
+        foreach (['STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY'] as $name) {
+            if (defined($name) && preg_match('/^(sk|pk|rk)_test_/', (string)constant($name))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** The strip's segments as HTML, in order; [] when there is nothing to say. */
-    public static function siteBarParts(bool $isDevSite, array $emailRedirect, bool $viewerIsAdmin): array {
+    public static function siteBarParts(bool $isDevSite, array $emailRedirect, bool $viewerIsAdmin, bool $paymentTestMode = false): array {
         $parts = [];
         if ($isDevSite) {
             $parts[] = '<strong>DEV MODE</strong>';
+        }
+        if ($paymentTestMode) {
+            $parts[] = '<strong>PAYMENT TEST MODE</strong> &mdash; no real charges';
         }
         if (!empty($emailRedirect['on'])) {
             if (!$viewerIsAdmin) {

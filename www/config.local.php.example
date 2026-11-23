@@ -46,7 +46,14 @@ define('EMAIL_REDIRECT_ALLOWLIST', []);
 define('REMEMBER_TOKEN_KEY', '');
 
 // Stripe (https://dashboard.stripe.com/apikeys; use test-mode keys in dev).
-// Empty values disable online checkout.
+// Empty values disable online checkout. Full walkthrough: docs/stripe-setup.md.
+//
+// PAYMENT_TEST_MODE true: every page shows "PAYMENT TEST MODE — no real
+// charges" in the thin yellow strip at the top, for everyone. Set it while
+// the keys below are Stripe TEST keys. (The strip also appears by itself
+// whenever the keys start with sk_test_ / pk_test_; the flag does not change
+// which keys are used.) Remove it when the live keys go back in.
+// define('PAYMENT_TEST_MODE', true);
 define('STRIPE_SECRET_KEY', '');
 define('STRIPE_PUBLISHABLE_KEY', '');
 define('STRIPE_WEBHOOK_SECRET', '');
