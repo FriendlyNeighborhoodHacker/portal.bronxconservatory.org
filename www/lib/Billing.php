@@ -63,6 +63,7 @@ class Billing {
             }
             self::insertEntry($ctx, $studentUserId, date('Y-m-d'), 'debit', $entryType, $amountCents, $semesterId, $description);
         }
+        self::applyParentCreditToStudent($ctx, $studentUserId, $semesterId);
         self::log($ctx, 'billing.confirmation_charges_posted', [
             'student_user_id' => $studentUserId, 'semester_id' => $semesterId,
             'include_installment_fee' => $includeInstallmentFee,
@@ -263,6 +264,7 @@ class Billing {
                         $ctx, $studentUserId, $today, 'debit', 'installment_plan_fee',
                         $feeCents, $semesterId, 'Installment plan fee'
                     );
+                    self::applyParentCreditToStudent($ctx, $studentUserId, $semesterId);
                     self::log($ctx, 'billing.installment_fee_auto_applied', [
                         'student_user_id' => $studentUserId, 'semester_id' => $semesterId,
                         'amount_cents' => $feeCents,
@@ -472,6 +474,9 @@ class Billing {
             );
         }
 
+        if ($chargeId) {
+            self::applyParentCreditToStudent($ctx, $studentUserId, $semesterId);
+        }
         if ($refundId || $chargeId) {
             self::log($ctx, 'billing.duration_change_posted', [
                 'student_user_id' => $studentUserId,
@@ -484,6 +489,155 @@ class Billing {
         }
 
         return [$refundId, $chargeId];
+    }
+
+    // ── Parent credit ──────────────────────────────────────────────────────
+    //
+    // Money a parent has paid that is not set against any one child's
+    // charges (parent_credit_entries: credits add to it, debits are credit
+    // used). It exists so a family payment made before every child has a
+    // confirmed slot is not parked on one child's ledger, where a sibling
+    // could never use it. Whenever a child is charged, what they then owe is
+    // drawn from their parents' credit — after the child's own credit, which
+    // is already in their balance.
+
+    /** A parent's unused credit, in cents (never negative in practice). */
+    public static function parentCreditBalanceCents(int $parentUserId): int {
+        $st = self::pdo()->prepare(
+            "SELECT COALESCE(SUM(IF(accounting_type='credit', 1, -1) * CAST(amount_cents AS SIGNED)), 0)
+             FROM parent_credit_entries WHERE parent_user_id = ?"
+        );
+        $st->execute([$parentUserId]);
+        return (int)$st->fetchColumn();
+    }
+
+    /** The parent credit's own history, oldest first, with the child each use paid for. */
+    public static function parentCreditEntries(int $parentUserId): array {
+        $st = self::pdo()->prepare(
+            'SELECT pce.*, su.first_name AS student_first_name, su.last_name AS student_last_name,
+                    cu.first_name AS created_by_first_name, cu.last_name AS created_by_last_name,
+                    s.season, s.year
+             FROM parent_credit_entries pce
+             LEFT JOIN users su ON su.id = pce.applied_to_student_user_id
+             LEFT JOIN users cu ON cu.id = pce.created_by_user_id
+             LEFT JOIN semesters s ON s.id = pce.semester_id
+             WHERE pce.parent_user_id = ?
+             ORDER BY pce.entry_date, pce.id'
+        );
+        $st->execute([$parentUserId]);
+        return $st->fetchAll();
+    }
+
+    /**
+     * Add to a parent's credit. With a Stripe reference it is idempotent
+     * (one row per payment per parent); returns false when that payment was
+     * already recorded. $ctx may be null (webhook).
+     */
+    public static function addParentCredit(
+        ?UserContext $ctx, int $parentUserId, int $amountCents, string $description,
+        ?int $semesterId = null, ?string $stripeReference = null, ?string $paymentIntentId = null
+    ): bool {
+        self::assertPositive($amountCents);
+        $st = self::pdo()->prepare(
+            "INSERT IGNORE INTO parent_credit_entries
+               (parent_user_id, entry_date, accounting_type, amount_cents, semester_id, description,
+                stripe_checkout_session_id, stripe_payment_intent_id, created_by_user_id)
+             VALUES (?,?,'credit',?,?,?,?,?,?)"
+        );
+        $st->execute([
+            $parentUserId, date('Y-m-d'), $amountCents, $semesterId, $description,
+            $stripeReference !== null && trim($stripeReference) !== '' ? $stripeReference : null,
+            $paymentIntentId, $ctx?->id,
+        ]);
+        $recorded = $st->rowCount() > 0;
+        if ($recorded) {
+            self::log($ctx, 'billing.parent_credit_added', [
+                'parent_user_id' => $parentUserId, 'amount_cents' => $amountCents,
+            ]);
+        }
+        return $recorded;
+    }
+
+    /** The credit this student's parents hold between them, in cents. */
+    public static function parentCreditAvailableForStudent(int $studentUserId): int {
+        $total = 0;
+        foreach (self::parentIdsOfStudent($studentUserId) as $parentUserId) {
+            $total += max(0, self::parentCreditBalanceCents($parentUserId));
+        }
+        return $total;
+    }
+
+    /**
+     * Pay what this student now owes out of their parents' credit. Called
+     * after charges post. Each use is two rows that explain each other: a
+     * payment line on the student's ledger ("Paid from parent credit"), and
+     * a debit on the parent's credit pointing at it. Returns the cents used.
+     */
+    public static function applyParentCreditToStudent(?UserContext $ctx, int $studentUserId, ?int $semesterId = null): int {
+        $owed = self::balanceForStudentCents($studentUserId);
+        $used = 0;
+        foreach (self::parentIdsOfStudent($studentUserId) as $parentUserId) {
+            if ($owed <= 0) {
+                break;
+            }
+            $take = min($owed, self::parentCreditBalanceCents($parentUserId));
+            if ($take <= 0) {
+                continue;
+            }
+            $st = self::pdo()->prepare('SELECT first_name, last_name FROM users WHERE id = ?');
+            $st->execute([$parentUserId]);
+            $parent = $st->fetch() ?: [];
+            $parentName = trim(($parent['first_name'] ?? '') . ' ' . ($parent['last_name'] ?? ''));
+            $st->execute([$studentUserId]);
+            $student = $st->fetch() ?: [];
+            $studentName = trim(($student['first_name'] ?? '') . ' ' . ($student['last_name'] ?? ''));
+
+            $ledgerEntryId = self::insertEntry(
+                $ctx, $studentUserId, date('Y-m-d'), 'credit', 'payment', $take, $semesterId,
+                'Paid from parent credit' . ($parentName !== '' ? ' (' . $parentName . ')' : '')
+            );
+            self::pdo()->prepare(
+                "INSERT INTO parent_credit_entries
+                   (parent_user_id, entry_date, accounting_type, amount_cents, semester_id, description,
+                    applied_to_student_user_id, ledger_entry_id, created_by_user_id)
+                 VALUES (?,?,'debit',?,?,?,?,?,?)"
+            )->execute([
+                $parentUserId, date('Y-m-d'), $take, $semesterId,
+                'Used for ' . ($studentName !== '' ? $studentName . "'s" : 'a child\'s') . ' charges',
+                $studentUserId, $ledgerEntryId, $ctx?->id,
+            ]);
+            self::log($ctx, 'billing.parent_credit_applied', [
+                'parent_user_id' => $parentUserId, 'student_user_id' => $studentUserId, 'amount_cents' => $take,
+            ]);
+            $owed -= $take;
+            $used += $take;
+        }
+        return $used;
+    }
+
+    /** Has this Stripe payment already been recorded on any student ledger or parent credit? */
+    public static function stripeReferenceRecorded(string $reference): bool {
+        if (trim($reference) === '') {
+            return false;
+        }
+        foreach (['ledger_entries', 'parent_credit_entries'] as $table) {
+            $st = self::pdo()->prepare("SELECT COUNT(*) FROM $table WHERE stripe_checkout_session_id = ?");
+            $st->execute([$reference]);
+            if ((int)$st->fetchColumn() > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static function parentIdsOfStudent(int $studentUserId): array {
+        $st = self::pdo()->prepare(
+            'SELECT ph.parent_user_id FROM parenthood ph
+             JOIN users u ON u.id = ph.parent_user_id
+             WHERE ph.child_user_id = ? ORDER BY ph.parent_user_id'
+        );
+        $st->execute([$studentUserId]);
+        return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
     }
 
     // ── Manual entries ─────────────────────────────────────────────────────
@@ -519,6 +673,9 @@ class Billing {
             throw new InvalidArgumentException('A description is required for custom ledger entries.');
         }
         $id = self::insertEntry($ctx, $studentUserId, date('Y-m-d'), $accountingType, $entryType, $amountCents, $semesterId, $description);
+        if ($accountingType === 'debit') {
+            self::applyParentCreditToStudent($ctx, $studentUserId, $semesterId);
+        }
         self::log($ctx, 'billing.custom_entry', [
             'student_user_id' => $studentUserId, 'accounting_type' => $accountingType, 'amount_cents' => $amountCents,
         ]);

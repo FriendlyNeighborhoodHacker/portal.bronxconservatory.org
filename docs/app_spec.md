@@ -222,6 +222,25 @@ Stripe payments (parent portal, student portal, and payments taken during public
 registration once the lead is converted), payments recorded by hand for
 checks/cash/Zelle, scholarships, and custom adjustments.
 
+### Parent credit
+
+Money a parent has paid that no child's charges have used yet
+(`parent_credit_entries`, the parent's own small ledger: credits add, debits
+are uses). It exists so a family payment made before every child has a
+confirmed slot is not parked on one child where a sibling could never use it.
+Whenever a student is charged (confirmation, a lesson-length change, a custom
+charge, the installment-fee sweep), what they then owe is paid from their
+parents' credit, **after the student's own credit**: the student's ledger gets
+a payment line "Paid from parent credit (Name)" and the parent credit a
+matching "Used for …" line. A $400 charge to a student holding $200, whose
+parent holds $300, leaves the student at zero and the parent with $100.
+
+It shows on the admin's parent page (balance and history), on the admin's
+student page beside the balance, in the confirm-reservation dialog, and as a
+one-line heads-up on the parent's home and billing pages. There is no screen
+to add to or adjust it by hand, and reversing a student's charges returns the
+money to the student's ledger, not to the parent credit.
+
 ### Reversal
 
 Un-confirming or deleting a reservation posts **offsetting credits**, never
@@ -313,8 +332,10 @@ Abandoning checkout still leaves a lead, so the family can be called.
 first installment) is converted straight onto the schedule: each student given
 a time gets a **confirmed** reservation, the semester charges post (with the
 installment fee when the family chose the plan), and the payment is set against
-them — each confirmed student up to what they owe, anything left over to the
-student chosen on the convert page. Paid in full lands at a zero balance; an
+them — each confirmed student up to what they owe. Anything left over (the
+whole payment, when no time was chosen) stays with an only child as their
+credit, or, in a family with more than one child, becomes the parent's
+**parent credit** (below). Paid in full lands at a zero balance; an
 installment family lands confirmed with the remainder owing. An **unpaid** lead's
 slot is `pending_confirmation` with no charges. The registration fee is charged
 **once per family per semester**: a second child confirmed is not charged it

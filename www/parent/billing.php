@@ -52,6 +52,9 @@ foreach ($children as $child) {
     }
 }
 
+// A heads-up only: credit held for the family, not yet used by any child.
+$parentCreditCents = Billing::parentCreditBalanceCents((int)$me['id']);
+
 header_html('Billing');
 ?>
 
@@ -60,6 +63,10 @@ header_html('Billing');
 <?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
 <?php if ($flashError): ?><p class="error"><?=h($flashError)?></p><?php endif; ?>
 
+<?php if ($parentCreditCents > 0): ?>
+<p class="flash">You have a credit of <strong><?=h(Billing::formatCents($parentCreditCents))?></strong> on your
+  family account. It will be used automatically toward your children&rsquo;s upcoming charges.</p>
+<?php endif; ?>
 <div class="card">
   <?php if ($totalDue <= 0): ?>
     <h3><?=$familyHasCharges ? 'You are paid in full. Thank you!' : 'No balance due.'?></h3>

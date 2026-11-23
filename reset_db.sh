@@ -42,6 +42,7 @@ DELETE FROM incomplete_inquiry_notes;
 DELETE FROM incomplete_inquiries;
 
 -- Money
+DELETE FROM parent_credit_entries;
 DELETE FROM ledger_entries;
 DELETE FROM stripe_webhook_events;
 

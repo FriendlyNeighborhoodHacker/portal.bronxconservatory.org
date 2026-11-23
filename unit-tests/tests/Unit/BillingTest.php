@@ -344,6 +344,70 @@ final class BillingTest extends TestCase
         $this->assertSame(23000, $term['balance_cents']);
     }
 
+    // ===== Parent credit =====
+
+    public function testAChargeDrawsOnTheStudentsCreditThenTheParentCredit(): void
+    {
+        $student = fx_student();
+        $parent = fx_parent_of($student);
+        $fall = fx_semester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+
+        // The student has $200 of their own; the parent holds $300.
+        Billing::recordManualPayment($this->ctx, $student, 20000, '2030-06-01', $fall, 'Check');
+        $this->assertTrue(Billing::addParentCredit($this->ctx, $parent, 30000, 'Registration payment'));
+        $this->assertSame(30000, Billing::parentCreditBalanceCents($parent));
+        $this->assertSame(30000, Billing::parentCreditAvailableForStudent($student));
+
+        // A $400 charge: the student's $200 goes first, then $200 of the parent's.
+        Billing::addCustomEntry($this->ctx, $student, 'debit', 40000, $fall, 'Lessons');
+
+        $this->assertSame(0, Billing::balanceForStudentCents($student));
+        $this->assertSame(10000, Billing::parentCreditBalanceCents($parent));
+
+        // Both sides explain it: a payment line on the student, a use on the parent.
+        $lines = array_values(array_filter(
+            Billing::ledgerForStudent($student),
+            fn($e) => str_contains((string)$e['description'], 'Paid from parent credit')
+        ));
+        $this->assertCount(1, $lines);
+        $last = $lines[0];
+        $this->assertSame('payment', $last['entry_type']);
+        $this->assertSame(20000, (int)$last['amount_cents']);
+        $uses = array_values(array_filter(Billing::parentCreditEntries($parent), fn($e) => $e['accounting_type'] === 'debit'));
+        $this->assertCount(1, $uses);
+        $this->assertSame($student, (int)$uses[0]['applied_to_student_user_id']);
+        $this->assertSame((int)$last['id'], (int)$uses[0]['ledger_entry_id']);
+
+        // It counts as money paid, not as a reduced charge.
+        $term = Billing::semesterBalancesForStudent($student, '2030-06-02')[0];
+        $this->assertSame(40000, $term['charged_cents']);
+        $this->assertSame(40000, $term['paid_cents']);
+    }
+
+    public function testParentCreditIsNotTouchedWhenTheStudentOwesNothing(): void
+    {
+        $student = fx_student();
+        $parent = fx_parent_of($student);
+        $fall = fx_semester($this->ctx, 'fall', 2030, '2030-09-01', '2030-12-20');
+        Billing::recordManualPayment($this->ctx, $student, 50000, '2030-06-01', $fall, 'Check');
+        Billing::addParentCredit($this->ctx, $parent, 30000, 'Registration payment');
+
+        Billing::addCustomEntry($this->ctx, $student, 'debit', 40000, $fall, 'Lessons');
+
+        $this->assertSame(-10000, Billing::balanceForStudentCents($student));
+        $this->assertSame(30000, Billing::parentCreditBalanceCents($parent));
+    }
+
+    public function testAStripePaymentIsAddedToParentCreditOnlyOnce(): void
+    {
+        $parent = fx_parent_of(fx_student());
+        $this->assertTrue(Billing::addParentCredit(null, $parent, 5000, 'Registration payment', null, 'pi_once', 'pi_once'));
+        $this->assertFalse(Billing::addParentCredit(null, $parent, 5000, 'Registration payment', null, 'pi_once', 'pi_once'));
+        $this->assertSame(5000, Billing::parentCreditBalanceCents($parent));
+        $this->assertTrue(Billing::stripeReferenceRecorded('pi_once'));
+        $this->assertFalse(Billing::stripeReferenceRecorded('pi_other'));
+    }
+
     public function testNothingOwedIsOnlyPaidInFullIfThereWereCharges(): void
     {
         $student = fx_student();

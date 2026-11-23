@@ -121,7 +121,7 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
         <td>Payment (<?=h(lead_dollars((int)$lead['amount_paid_cents']))?>)</td>
         <td class="small"><span class="status-verified">Applied to the students' charges</span>
           as a Stripe payment credit (never recorded twice). A student given a time below is confirmed and
-          charged; anything left over goes to the student chosen at the bottom of this page.</td>
+          charged; where anything left over goes is described at the bottom of this page.</td>
       </tr>
       <?php endif; ?>
     </tbody>
@@ -247,14 +247,28 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
   <?php endforeach; ?>
 
   <?php if ($paid): ?>
+  <?php
+    // Where payment that no confirmed charge uses will go: an only child's
+    // own account, or — in a family with more than one child — the parent's.
+    $familyChildCount = count($students);
+    if ($existingParent) {
+        $convertedIds = array_filter(array_map(fn($s) => (int)($s['converted_student_user_id'] ?? 0), $students));
+        foreach (StudentTeacherManagement::childrenOfParent((int)$existingParent['id']) as $existingChild) {
+            if (!in_array((int)$existingChild['id'], $convertedIds, true)) {
+                $familyChildCount++;
+            }
+        }
+    }
+  ?>
   <div class="card">
-    <label>Put any of the <?=h(lead_dollars((int)$lead['amount_paid_cents']))?> payment not used by confirmed charges on
-      <select name="payment_target_lead_student_id">
-        <?php foreach ($students as $i => $student): ?>
-        <option value="<?=(int)$student['id']?>"<?=$i === 0 ? ' selected' : ''?>><?=h($student['first_name'] . ' ' . $student['last_name'])?>'s ledger</option>
-        <?php endforeach; ?>
-      </select>
-    </label>
+    <p class="small" style="margin:0;">Any of the <?=h(lead_dollars((int)$lead['amount_paid_cents']))?> payment not used by
+      confirmed charges
+      <?php if ($familyChildCount > 1): ?>
+        is held as a <strong>parent credit</strong> on <?=h($lead['parent_first_name'] . ' ' . $lead['parent_last_name'])?>&rsquo;s
+        account. It is used automatically the next time any of their children is charged.
+      <?php else: ?>
+        stays on <strong><?=h($students[0]['first_name'] . ' ' . $students[0]['last_name'])?></strong>&rsquo;s account as a credit.
+      <?php endif; ?></p>
   </div>
   <?php endif; ?>
 

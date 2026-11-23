@@ -580,6 +580,61 @@ final class LeadManagementTest extends TestCase
         $this->assertSame(1, $fees);
     }
 
+    public function testPaidSiblingsConvertedWithoutTimesHoldTheMoneyAsParentCredit(): void
+    {
+        [$ctx, $teacher, $semesterId, $locationId, $dayOfWeek] = $this->convertSetup();
+        $leadId = LeadManagement::createLead(
+            null, $semesterId, $this->parent(),
+            [$this->student(), $this->student(['first_name' => 'Mateo'])], $this->scheduling(), false
+        );
+        $quoted = (int)LeadManagement::findLead($leadId)['amount_quoted_cents'];
+        LeadManagement::attachCheckoutSession(null, $leadId, 'cs_pc_1');
+        LeadManagement::recordLeadPayment($leadId, $quoted, 'cs_pc_1', 'pi_pc_1');
+
+        // No times chosen: nobody is charged, so nothing is used yet.
+        $result = LeadManagement::convertLead($ctx, $leadId, []);
+        [$first, $second] = array_values($result['student_user_ids']);
+        $parent = $result['parent_user_id'];
+
+        $this->assertSame($quoted, $result['parent_credit_cents']);
+        $this->assertSame($quoted, Billing::parentCreditBalanceCents($parent));
+        $this->assertSame(0, Billing::balanceForStudentCents($first));
+        $this->assertSame(0, Billing::balanceForStudentCents($second));
+        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+
+        // Converting again never records the payment a second time.
+        $again = LeadManagement::convertLead($ctx, $leadId, []);
+        $this->assertFalse($again['payment_recorded']);
+        $this->assertSame($quoted, Billing::parentCreditBalanceCents($parent));
+
+        // Confirming each child later draws on the parent credit, leaving
+        // both at zero and the credit used up (one registration fee between them).
+        foreach ([[$first, '10:00'], [$second, '11:00']] as [$studentId, $time]) {
+            ReservationManagement::createReservation($ctx, [
+                'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+                'student_user_id' => $studentId, 'day_of_week' => $dayOfWeek, 'start_time' => $time,
+                'status' => 'confirmed',
+            ]);
+            $this->assertSame(0, Billing::balanceForStudentCents($studentId));
+        }
+        $this->assertSame(0, Billing::parentCreditBalanceCents($parent));
+    }
+
+    public function testAPaidOnlyChildConvertedWithoutATimeKeepsTheCreditThemself(): void
+    {
+        [$ctx, , $semesterId] = $this->convertSetup();
+        $leadId = LeadManagement::createLead(null, $semesterId, $this->parent(), [$this->student()], $this->scheduling(), false);
+        $quoted = (int)LeadManagement::findLead($leadId)['amount_quoted_cents'];
+        LeadManagement::attachCheckoutSession(null, $leadId, 'cs_pc_2');
+        LeadManagement::recordLeadPayment($leadId, $quoted, 'cs_pc_2', 'pi_pc_2');
+
+        $result = LeadManagement::convertLead($ctx, $leadId, []);
+
+        $this->assertSame(0, $result['parent_credit_cents']);
+        $this->assertSame(0, Billing::parentCreditBalanceCents($result['parent_user_id']));
+        $this->assertSame(-$quoted, Billing::balanceForStudentCents(array_values($result['student_user_ids'])[0]));
+    }
+
     public function testConvertStoresAnApproximateBirthdateFromClassOfWhenNoneIsGiven(): void
     {
         [$ctx, , $semesterId] = $this->convertSetup();

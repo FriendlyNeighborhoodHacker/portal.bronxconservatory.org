@@ -181,7 +181,7 @@ class SampleDataLoader {
                 // Leads and uncompleted forms.
                 'lead_notes', 'lead_students', 'leads', 'incomplete_inquiry_notes', 'incomplete_inquiries',
                 // Money.
-                'ledger_entries', 'stripe_webhook_events',
+                'parent_credit_entries', 'ledger_entries', 'stripe_webhook_events',
                 // People: roles and relationships (the users rows themselves go below).
                 'teacher_instruments', 'student_instruments', 'teacher_profiles', 'student_profiles',
                 'parenthood', 'private_files',

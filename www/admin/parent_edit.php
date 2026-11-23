@@ -7,6 +7,8 @@ require_once __DIR__ . '/../partials_child_modal.php';
 require_once __DIR__ . '/../partials_confirm_modal.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
 require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
+require_once __DIR__ . '/../lib/Billing.php';
+require_once __DIR__ . '/../lib/LedgerUIManager.php';
 Application::init();
 require_admin();
 
@@ -18,6 +20,9 @@ if (!$user) {
 }
 
 $children = StudentTeacherManagement::childrenOfParent($userId);
+// Parent credit: money this parent paid that no child's charges have used yet.
+$parentCreditCents = Billing::parentCreditBalanceCents($userId);
+$parentCreditEntries = Billing::parentCreditEntries($userId);
 $returnTo = '/admin/parent_edit.php?id=' . $userId;
 
 $flash = $_SESSION['people_flash'] ?? null;
@@ -76,6 +81,48 @@ header_html('Edit ' . $name);
     </div>
   <?php endforeach; ?>
 </div>
+
+<?php if ($parentCreditEntries): ?>
+<div class="card">
+  <h3>Parent credit</h3>
+  <p><?php if ($parentCreditCents > 0): ?>
+      <strong><?=h(Billing::formatCents($parentCreditCents))?></strong> credit, not yet used.
+      It is applied automatically the next time one of the children is charged
+      (after that child&rsquo;s own credit).
+    <?php else: ?>
+      No credit remaining &mdash; all of it has been used.
+    <?php endif; ?></p>
+  <div style="overflow-x:auto;">
+  <table class="list">
+    <thead><tr><th>Date</th><th>Description</th><th>Entered by</th>
+      <th style="text-align:right;">Added</th><th style="text-align:right;">Used</th></tr></thead>
+    <tbody>
+      <?php foreach ($parentCreditEntries as $entry): ?>
+      <tr>
+        <td class="small"><?=h($entry['entry_date'])?></td>
+        <td><?=h((string)$entry['description'])?>
+          <?php if (!empty($entry['applied_to_student_user_id'])): ?>
+            <div class="small"><a href="/admin/student.php?id=<?=(int)$entry['applied_to_student_user_id']?>">Open
+              <?=h(trim($entry['student_first_name'] . ' ' . $entry['student_last_name']))?></a></div>
+          <?php endif; ?>
+          <?php if ($stripe = LedgerUIManager::stripeReference($entry, ApplicationUI::paymentTestMode())): ?>
+            <div class="small">Stripe:
+              <?php if ($stripe['url'] !== null): ?>
+                <a href="<?=h($stripe['url'])?>" target="_blank" rel="noopener"><code><?=h($stripe['id'])?></code></a>
+              <?php else: ?><code><?=h($stripe['id'])?></code><?php endif; ?>
+            </div>
+          <?php endif; ?>
+        </td>
+        <td class="small"><?=h(LedgerUIManager::enteredByLabel($entry))?></td>
+        <td style="text-align:right;"><?=$entry['accounting_type'] === 'credit' ? h(Billing::formatCents((int)$entry['amount_cents'])) : ''?></td>
+        <td style="text-align:right;"><?=$entry['accounting_type'] === 'debit' ? h(Billing::formatCents((int)$entry['amount_cents'])) : ''?></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+  </div>
+</div>
+<?php endif; ?>
 
 <div class="card">
   <button type="button" class="button danger" data-modal-open="deleteParentModal">Delete this parent</button>

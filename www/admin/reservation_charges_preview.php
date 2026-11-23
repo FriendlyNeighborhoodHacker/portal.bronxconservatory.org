@@ -80,13 +80,21 @@ try {
             'installment_fee' => Billing::formatCents((int)$preview['installment_fee_cents']),
             'installment_note' => $preview['installment_note'],
         ];
-        // A student who already has a credit (a registration payment moved
-        // onto the ledger, an overpayment) — shown under the total so the
-        // admin can see the charge being met by money already received.
+        // Money already received that meets these charges — the student's own
+        // credit, and their parents' credit — shown under the total so the
+        // admin can see where the account lands.
+        // Then the parents' credit pays what the student still owes.
         $balanceCents = Billing::balanceForStudentCents($studentUserId);
-        if ($balanceCents < 0) {
-            $afterCents = $balanceCents + (int)$preview['total_cents'];
-            $payload['credit'] = Billing::formatCents(-$balanceCents);
+        $afterCents = $balanceCents + (int)$preview['total_cents'];
+        $fromParentCents = min(max(0, $afterCents), Billing::parentCreditAvailableForStudent($studentUserId));
+        if ($balanceCents < 0 || $fromParentCents > 0) {
+            $afterCents -= $fromParentCents;
+            if ($balanceCents < 0) {
+                $payload['credit'] = Billing::formatCents(-$balanceCents);
+            }
+            if ($fromParentCents > 0) {
+                $payload['parent_credit'] = Billing::formatCents($fromParentCents);
+            }
             $payload['balance_after_label'] = $afterCents > 0 ? 'Balance due after these charges'
                 : ($afterCents < 0 ? 'Credit left after these charges' : 'Balance after these charges');
             $payload['balance_after'] = Billing::formatCents(abs($afterCents));

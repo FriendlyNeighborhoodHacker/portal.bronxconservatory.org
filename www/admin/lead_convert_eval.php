@@ -105,9 +105,6 @@ foreach ($picks as $pick) {
         $convertFail($conflict);
     }
 }
-if (!empty($_POST['payment_target_lead_student_id'])) {
-    $options['payment_target_lead_student_id'] = (int)$_POST['payment_target_lead_student_id'];
-}
 
 try {
     $result = LeadManagement::convertLead($ctx, $leadId, $options);
@@ -122,7 +119,10 @@ try {
                 ? ' (confirmed — charges posted and the payment applied)'
                 : ' (pending confirmation)');
     }
-    if ($result['payment_recorded']) {
+    if ($result['payment_recorded'] && !empty($result['parent_credit_cents'])) {
+        $bits[] = 'payment recorded — ' . lead_dollars((int)$result['parent_credit_cents'])
+            . ' of it is held as a parent credit, used automatically when a child is charged';
+    } elseif ($result['payment_recorded']) {
         $bits[] = 'payment recorded on the ledger';
     } elseif (!empty($result['payment_notice'])) {
         $bits[] = $result['payment_notice'];

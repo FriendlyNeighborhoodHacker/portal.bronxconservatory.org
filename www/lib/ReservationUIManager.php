@@ -345,6 +345,11 @@ class ReservationUIManager {
               // so the charge can be checked against money already paid.
               if (json.credit) {
                 addLine('Credit already on the account', '\u2212' + json.credit, false, '');
+              }
+              if (json.parent_credit) {
+                addLine('Paid from the parent credit', '\u2212' + json.parent_credit, false, '');
+              }
+              if (json.credit || json.parent_credit) {
                 addTotal(json.balance_after_label, json.balance_after);
               }
               table.classList.remove('hidden');

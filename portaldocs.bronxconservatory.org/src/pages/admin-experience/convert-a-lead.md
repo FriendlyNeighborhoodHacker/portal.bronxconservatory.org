@@ -76,8 +76,11 @@ Then `LeadManagement::convertLead` runs, step by step:
      [confirmed on the schedule](/admin-experience/view-semester-schedule).
 4. **Payment** — if the lead holds a Stripe payment, it is recorded as
    `payment` credits: each student confirmed in step 3 is credited up to what
-   they now owe, and anything left over (or the whole payment, when no time
-   was chosen) goes to the student picked at the bottom of the page. So a
+   they now owe. Anything left over (or the whole payment, when no time was
+   chosen) stays with an only child as their credit; in a family with more
+   than one child it becomes the parent's **parent credit**, which is used
+   automatically whenever one of their children is charged. There is no
+   student to pick. So a
    family that paid in full lands at a zero balance, and an installment
    family lands confirmed with the rest owing. A check on the Stripe
    reference guarantees one payment can never be recorded twice; if it is

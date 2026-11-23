@@ -50,6 +50,19 @@ class LedgerUIManager {
               <strong><?=Billing::balanceSummaryForStudent($studentUserId)['has_charges'] ? 'Paid in full.' : 'No balance due.'?></strong>
             <?php endif; ?>
           </p>
+          <?php
+            // Credit a parent holds for the family: not on this ledger yet,
+            // but it pays this student's next charges automatically.
+            require_once __DIR__ . '/StudentTeacherManagement.php';
+            foreach (StudentTeacherManagement::parentsOfStudent($studentUserId) as $parent):
+                $parentCredit = Billing::parentCreditBalanceCents((int)$parent['id']);
+                if ($parentCredit <= 0) { continue; }
+          ?>
+            <p class="flash">Parent credit: <strong><?=h(Billing::formatCents($parentCredit))?></strong> held by
+              <a href="/admin/parent_edit.php?id=<?=(int)$parent['id']?>"><?=h(trim($parent['first_name'] . ' ' . $parent['last_name']))?></a>.
+              It is shared by the family and is used automatically when this student is next charged<?=$balance > 0
+                ? ' &mdash; it has not been applied to the balance above' : ''?>.</p>
+          <?php endforeach; ?>
 
           <?php self::entriesTable($semesterId !== null ? $semesterEntries : $allEntries,
               $semesterId !== null ? 'This semester' : 'All entries'); ?>

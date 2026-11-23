@@ -933,7 +933,6 @@ class LeadManagement {
      *       'date_of_birth' => ?string,
      *       'reservation' => ?['teacher_user_id','location_id','day_of_week','start_time','duration_minutes'],
      *   ]],
-     *   'payment_target_lead_student_id' => ?int,
      *
      * Idempotent/safe to re-enter: already-converted lead students (their
      * converted_student_user_id is set) are skipped, the parent adoption is
@@ -1084,45 +1083,59 @@ class LeadManagement {
         }
 
         // 4. Move the Stripe payment onto the ledger. Skipped (with a notice)
-        //    when the session is already on ANY ledger, so one payment can
-        //    never be credited twice.
+        //    when it is already recorded anywhere, so one payment can never
+        //    be credited twice.
         //
-        //    It is set against the charges just posted: each confirmed
-        //    student is credited up to what they now owe (the chosen student
-        //    first), and anything left over — or the whole payment, when no
-        //    slot was confirmed — goes to the chosen student as a credit.
+        //    First it is set against the charges just posted: each confirmed
+        //    student is credited up to what they now owe. What is left over —
+        //    the whole payment, when no slot was confirmed — is not parked on
+        //    a child who may never use it:
+        //      - a family with ONE child: it is that child's credit;
+        //      - a family with more than one child: it becomes the PARENT's
+        //        credit (Billing: parent credit), drawn on automatically
+        //        whenever any of their children is charged.
         $paymentRecorded = false;
         $paymentNotice = null;
+        $parentCreditCents = 0;
         // Whichever Stripe object the money came through — it doubles as the
         // ledger's idempotency key, so a payment can never be credited twice.
         $sessionId = self::paymentReference($lead);
-        $targetLeadStudentId = (int)($options['payment_target_lead_student_id'] ?? 0);
-        if ($paidCents > 0 && $sessionId !== '' && $targetLeadStudentId && isset($studentUserIds[$targetLeadStudentId])) {
-            $st = self::pdo()->prepare('SELECT COUNT(*) FROM ledger_entries WHERE stripe_checkout_session_id = ?');
-            $st->execute([$sessionId]);
-            if ((int)$st->fetchColumn() > 0) {
+        if ($paidCents > 0 && $sessionId !== '' && $studentUserIds) {
+            if (Billing::stripeReferenceRecorded($sessionId)) {
                 $paymentNotice = 'This payment is already on a ledger — not recorded again.';
             } else {
-                $targetStudentId = $studentUserIds[$targetLeadStudentId];
+                $intentId = self::orNull($lead['stripe_payment_intent_id'] ?? null);
+                $paymentSemesterId = $chargedSemesterId ?? $semesterId;
                 $owed = [];
-                foreach (array_unique(array_merge([$targetStudentId], $confirmedStudentIds)) as $studentId) {
-                    if (in_array($studentId, $confirmedStudentIds, true)) {
-                        $owed[$studentId] = Billing::balanceForStudentCents($studentId);
-                    }
+                foreach ($confirmedStudentIds as $studentId) {
+                    $owed[$studentId] = Billing::balanceForStudentCents($studentId);
                 }
                 $shares = Billing::allocatePaymentAcrossStudents($owed, $paidCents);
                 $leftover = $paidCents - array_sum($shares);
-                if ($leftover > 0) {
-                    $shares[$targetStudentId] = ($shares[$targetStudentId] ?? 0) + $leftover;
+
+                require_once __DIR__ . '/StudentTeacherManagement.php';
+                $familyChildIds = array_map(
+                    fn($child) => (int)$child['id'],
+                    StudentTeacherManagement::childrenOfParent($parentUserId)
+                );
+                if ($leftover > 0 && count($familyChildIds) <= 1) {
+                    // An only child: one ledger line carries share and leftover.
+                    $onlyChildId = $familyChildIds[0] ?? (int)array_values($studentUserIds)[0];
+                    $shares[$onlyChildId] = ($shares[$onlyChildId] ?? 0) + $leftover;
+                    $leftover = 0;
                 }
                 foreach ($shares as $studentId => $cents) {
                     $paymentRecorded = Billing::recordStripePayment(
-                        (int)$studentId,
-                        (int)$cents,
-                        $sessionId,
-                        self::orNull($lead['stripe_payment_intent_id'] ?? null),
-                        $chargedSemesterId ?? $semesterId
+                        (int)$studentId, (int)$cents, $sessionId, $intentId, $paymentSemesterId
                     ) || $paymentRecorded;
+                }
+                if ($leftover > 0) {
+                    $paymentRecorded = Billing::addParentCredit(
+                        $ctx, $parentUserId, $leftover,
+                        'Registration payment (Stripe) not yet used by any child\'s charges',
+                        $paymentSemesterId, $sessionId, $intentId
+                    ) || $paymentRecorded;
+                    $parentCreditCents = $leftover;
                 }
             }
         }
@@ -1149,6 +1162,9 @@ class LeadManagement {
             // paid), false when they are pending confirmation.
             'reservations_confirmed' => $confirmOnConvert && (bool)$reservationIds,
             'payment_recorded' => $paymentRecorded,
+            // Cents of the payment held as the parent's credit (a family with
+            // more than one child, payment not yet used by charges).
+            'parent_credit_cents' => $parentCreditCents,
             'payment_notice' => $paymentNotice,
         ];
     }
