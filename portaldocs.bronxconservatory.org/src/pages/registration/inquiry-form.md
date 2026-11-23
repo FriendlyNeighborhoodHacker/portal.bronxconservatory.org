@@ -18,8 +18,9 @@ A short multi-page flow, each page saving as it goes:
    SMS consent. The submit is protected by invisible reCAPTCHA (Enterprise,
    score-based; skipped entirely when no keys are configured). Passing it
    writes a row to `incomplete_inquiries`.
-2. **Address** (`address.php`) — mailing address (nullable by design; the form
-   tolerates non-US addresses). Updates the same row and bumps
+2. **Address** (`address.php`) — mailing address. Only the city (and, in the US,
+   the state) is required; street and postal code are optional, and the form
+   tolerates non-US addresses. Updates the same row and bumps
    `last_step_completed` to 2.
 3. **Student** (`student.php`) — the student's name, age, and whether they are
    a new or continuing student. Completing this step **promotes** the

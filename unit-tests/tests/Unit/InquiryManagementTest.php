@@ -539,7 +539,7 @@ final class InquiryManagementTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         InquiryManagement::saveContactAndAddress($ctx, $id, $this->contact(), $this->address([
-            'address_zip' => '', // started an address, so it has to be a real one
+            'address_city' => '', // started an address, so it needs at least a city
         ]));
     }
 
