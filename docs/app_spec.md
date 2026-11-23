@@ -622,9 +622,15 @@ cancelled without 24 hours' notice (not rebookable). Stored on the lesson as
 admin's student page whenever the student has a cancelled lesson that
 semester): the lessons the weekly booking generated from the first lesson date,
 minus every lesson still on the calendar (held, missed or upcoming, one-offs
-included), minus cancellations that are not rebookable. A rebookable
-cancellation is therefore one credit, and booking a one-off make-up lesson uses
-it. A cancellation from before reasons were recorded gives no credit.
+added as a make-up included), minus cancellations that are not rebookable. A
+rebookable cancellation is therefore one credit, and adding a one-off lesson as
+a make-up uses it.
+
+**A one-off lesson records why it was added** — Make-up lesson, Extra lesson, or
+Other — plus an optional note (`adhoc_reason`, `adhoc_note`). Only a make-up
+uses a make-up credit. The reason and note show in the lesson's dialog on the
+weekly calendar and in the "One-off lessons this semester" list on the admin's
+student page, with who added it. A cancellation from before reasons were recorded gives no credit.
 
 All per-occurrence, from the weekly calendar. **Cancelling** stamps the row
 (never deletes), frees the slot, keeps it visible to family and teacher, and has

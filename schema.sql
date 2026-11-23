@@ -405,6 +405,8 @@ CREATE TABLE lessons (
   start_datetime DATETIME NOT NULL,
   duration_minutes INT NOT NULL DEFAULT 30,
   lesson_number INT NOT NULL COMMENT 'Ordinal within the semester for this reservation; 0 for a one-off',
+  adhoc_reason ENUM('makeup','extra','other') DEFAULT NULL COMMENT 'One-off lessons only: why it was added (a make-up uses a make-up credit)',
+  adhoc_note VARCHAR(500) DEFAULT NULL COMMENT 'One-off lessons only: the admin''s note on why it was added',
   location_id_override INT DEFAULT NULL,
   substitute_teacher_user_id INT DEFAULT NULL COMMENT 'Teacher override: who actually taught',
   attended TINYINT(1) DEFAULT NULL COMMENT 'NULL=unmarked, 1=attended, 0=missed',

@@ -228,6 +228,11 @@ $cellFn = function (array $column, array $row) use ($cellIndex, $weekStartTs) {
             'data-location-name' => (string)$lesson['location_name'],
             'data-duration' => $duration,
             'data-context' => $context,
+            // A one-off lesson: why it was added, for the dialog.
+            'data-adhoc' => $lesson['semester_lesson_reservation_id'] === null
+                ? 'One-off lesson — ' . LessonManagement::adhocReasonLabel($lesson['adhoc_reason'] ?? null)
+                    . (trim((string)($lesson['adhoc_note'] ?? '')) !== '' ? ': ' . trim((string)$lesson['adhoc_note']) : '')
+                : '',
             // Where this box currently sits — edit mode records it before a
             // drag so Ctrl+Z can move the box straight back.
             'data-teacher-id' => (int)$lesson['effective_teacher_user_id'],

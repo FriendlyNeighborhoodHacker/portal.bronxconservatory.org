@@ -20,6 +20,12 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || !preg_match('/^\d{1,2}:\d{2}(
     exit;
 }
 
+$reason = (string)($_POST['adhoc_reason'] ?? '');
+if (!isset(LessonManagement::ADHOC_REASONS[$reason])) {
+    echo json_encode(['ok' => false, 'error' => 'Please choose why this lesson is being added.']);
+    exit;
+}
+
 try {
     $lessonId = LessonManagement::createAdHocLesson(UserContext::getLoggedInUserContext(), [
         'semester_id' => (int)($_POST['semester_id'] ?? 0),
@@ -28,6 +34,8 @@ try {
         'location_id' => (int)($_POST['location_id'] ?? 0),
         'start_datetime' => $date . ' ' . $startTime,
         'duration_minutes' => (int)($_POST['duration_minutes'] ?? 30),
+        'adhoc_reason' => $reason,
+        'adhoc_note' => (string)($_POST['adhoc_note'] ?? ''),
     ]);
     echo json_encode(['ok' => true, 'lesson_id' => $lessonId]);
 } catch (\Throwable $e) {

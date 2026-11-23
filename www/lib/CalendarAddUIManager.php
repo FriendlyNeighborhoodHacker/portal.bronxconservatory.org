@@ -5,6 +5,7 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../partials_typeahead.php';
 require_once __DIR__ . '/HoldBlockManagement.php';
 require_once __DIR__ . '/ReservationManagement.php';
+require_once __DIR__ . '/LessonManagement.php';
 
 /**
  * The weekly Calendar's add modal: clicking an empty cell books something on
@@ -51,6 +52,19 @@ class CalendarAddUIManager {
                       <option value="<?=(int)$minutes?>"><?=(int)$minutes?> minutes</option>
                     <?php endforeach; ?>
                   </select>
+                </label>
+                <label>Why is this lesson being added?
+                  <select id="calAddLessonReason">
+                    <option value="">Choose…</option>
+                    <?php foreach (LessonManagement::ADHOC_REASONS as $reasonKey => $reasonLabel): ?>
+                      <option value="<?=h($reasonKey)?>"><?=h($reasonLabel)?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </label>
+                <span class="small">A make-up lesson uses one of the student&rsquo;s make-up credits; an extra lesson does not.</span>
+                <label>Note (optional)
+                  <textarea id="calAddLessonNote" rows="2" maxlength="500"
+                            placeholder="Making up the lesson Ms. Vega cancelled on Oct 3"></textarea>
                 </label>
                 <p class="small">A one-off lesson on this date only. It is not added to the weekly
                 schedule and nothing is charged for it.</p>
@@ -167,9 +181,15 @@ class CalendarAddUIManager {
             clearErrors();
             var studentId = document.getElementById('calAddStudent_id').value;
             if (!studentId) { showError('calAddLessonErr', 'Please pick a student.'); return; }
+            if (!val('calAddLessonReason')) {
+              showError('calAddLessonErr', 'Please choose why this lesson is being added.');
+              return;
+            }
             post('/admin/lesson_adhoc_create.php', {
               student_user_id: studentId,
               duration_minutes: val('calAddLessonDuration'),
+              adhoc_reason: val('calAddLessonReason'),
+              adhoc_note: val('calAddLessonNote'),
             }, 'calAddLessonErr');
           });
 

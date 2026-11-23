@@ -145,7 +145,7 @@ header_html($name);
     &minus; <?=(int)$makeup['on_calendar']?> held or still on the calendar
     &minus; <?=(int)$makeup['not_rebookable']?> cancelled and not rebookable
     = <strong><?=(int)$makeup['credits']?> to make up</strong>.
-    Booking a one-off make-up lesson on the calendar uses a credit.</p>
+    Adding a one-off lesson on the calendar as a &ldquo;Make-up lesson&rdquo; uses a credit.</p>
   <div style="overflow-x:auto;">
   <table class="list">
     <thead><tr><th>Cancelled lesson</th><th>Reason</th><th>Rebookable</th></tr></thead>
@@ -156,6 +156,31 @@ header_html($name);
         <td><?=h(LessonManagement::cancelReasonLabel($cancelledLesson['cancel_reason']))?></td>
         <td><?=$cancelledLesson['cancel_rebookable'] === null ? '<span class="small">not recorded</span>'
             : ((int)$cancelledLesson['cancel_rebookable'] === 1 ? 'Yes' : 'No')?></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+  </div>
+</div>
+<?php endif; ?>
+
+<?php $oneOffLessons = $semesterId ? LessonManagement::adHocLessonsForStudent($userId, (int)$semesterId) : []; ?>
+<?php if ($oneOffLessons): ?>
+<div class="card" id="one-off-lessons">
+  <h3>One-off lessons this semester</h3>
+  <div style="overflow-x:auto;">
+  <table class="list">
+    <thead><tr><th>Lesson</th><th>Why it was added</th><th>Note</th><th>Added by</th></tr></thead>
+    <tbody>
+      <?php foreach ($oneOffLessons as $oneOff): ?>
+      <tr<?=$oneOff['cancelled_at'] !== null ? ' style="opacity:0.6;"' : ''?>>
+        <td><?=h(date('D, M j, Y g:i a', strtotime((string)$oneOff['start_datetime'])))?>
+          <div class="small"><?=(int)$oneOff['duration_minutes']?> min &middot;
+            <?=h(trim($oneOff['teacher_first_name'] . ' ' . $oneOff['teacher_last_name']))?><?=$oneOff['cancelled_at'] !== null ? ' &middot; cancelled' : ''?></div></td>
+        <td><?=h(LessonManagement::adhocReasonLabel($oneOff['adhoc_reason']))?></td>
+        <td><?=trim((string)$oneOff['adhoc_note']) !== '' ? nl2br(h((string)$oneOff['adhoc_note'])) : '<span class="small">&mdash;</span>'?></td>
+        <td class="small"><?=h(trim($oneOff['created_by_first_name'] . ' ' . $oneOff['created_by_last_name']) ?: '—')?>
+          <div class="small"><?=h(date('M j, Y', strtotime((string)$oneOff['created_at'])))?></div></td>
       </tr>
       <?php endforeach; ?>
     </tbody>

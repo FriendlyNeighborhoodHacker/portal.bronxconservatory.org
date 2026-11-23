@@ -73,6 +73,8 @@ class LessonUIManager {
             </h3>
             <p class="small" id="lessonModalContext"></p>
             <div class="error small hidden" id="lessonErr"></div>
+            <?php // A one-off lesson says why it is on the calendar (reason + the admin's note). ?>
+            <p class="flash small hidden" id="lessonAdhocInfo"></p>
 
             <input type="hidden" id="lessonModalId">
             <input type="hidden" id="lessonCsrf" value="<?=h(csrf_token())?>">
@@ -271,6 +273,9 @@ class LessonUIManager {
             studentLink.href = '/admin/student.php?id=' + encodeURIComponent(cell.dataset.studentId || '');
             studentLink.classList.toggle('hidden', !cell.dataset.studentId);
 
+            var adhocInfo = document.getElementById('lessonAdhocInfo');
+            adhocInfo.textContent = cell.dataset.adhoc || '';
+            adhocInfo.classList.toggle('hidden', !cell.dataset.adhoc);
             resetCancelPanel();
             modal.classList.remove('hidden');
             modal.setAttribute('aria-hidden', 'false');

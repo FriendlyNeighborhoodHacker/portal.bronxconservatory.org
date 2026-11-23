@@ -285,8 +285,29 @@ final class LessonManagementTest extends TestCase
             'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
             'student_user_id' => $student, 'location_id' => $locationId,
             'start_datetime' => '2030-09-10 15:00', 'duration_minutes' => 30,
+            'adhoc_reason' => 'makeup', 'adhoc_note' => 'For the lesson cancelled on Sep 7',
         ]);
         $this->assertSame(1, $credits()['credits']);
+
+        // An extra lesson is not a make-up: it uses no credit, and cancelling
+        // it gives none back.
+        $extraId = LessonManagement::createAdHocLesson($this->ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher,
+            'student_user_id' => $student, 'location_id' => $locationId,
+            'start_datetime' => '2030-09-11 15:00', 'duration_minutes' => 30, 'adhoc_reason' => 'extra',
+        ]);
+        $this->assertSame(1, $credits()['credits']);
+        LessonManagement::cancelLesson($this->ctx, $extraId, 'teacher');
+        $this->assertSame(1, $credits()['credits']);
+
+        // The student page's list of one-offs carries the reason and the note.
+        $oneOffs = LessonManagement::adHocLessonsForStudent($student, $semesterId);
+        $this->assertCount(2, $oneOffs);
+        $byId = array_column($oneOffs, null, 'id');
+        $this->assertSame('makeup', $byId[$makeupId]['adhoc_reason']);
+        $this->assertSame('For the lesson cancelled on Sep 7', $byId[$makeupId]['adhoc_note']);
+        $this->assertSame('Make-up lesson', LessonManagement::adhocReasonLabel('makeup'));
+        $this->assertSame('No reason recorded', LessonManagement::adhocReasonLabel(null));
 
         // …which comes back if the make-up itself is cancelled by the teacher,
         // and does not if the family cancels it late.

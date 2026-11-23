@@ -312,7 +312,9 @@ class LessonManagement {
      * is deliberately no reservation here.
      *
      * $fields: semester_id, teacher_user_id, student_user_id, location_id,
-     * start_datetime, duration_minutes. Returns the new lesson id.
+     * start_datetime, duration_minutes, and why it is being added:
+     * adhoc_reason (one of ADHOC_REASONS; the admin screens always give one)
+     * and an optional adhoc_note. Returns the new lesson id.
      */
     public static function createAdHocLesson(?UserContext $ctx, array $fields): int {
         self::assertAdmin($ctx);
@@ -344,6 +346,15 @@ class LessonManagement {
             throw new InvalidArgumentException('That is not a teacher.');
         }
 
+        $reason = trim((string)($fields['adhoc_reason'] ?? ''));
+        if ($reason !== '' && !isset(self::ADHOC_REASONS[$reason])) {
+            throw new InvalidArgumentException('Please say why this lesson is being added.');
+        }
+        $note = trim((string)($fields['adhoc_note'] ?? ''));
+        if (mb_strlen($note) > 500) {
+            throw new InvalidArgumentException('That note is too long (500 characters at most).');
+        }
+
         // The teacher has to actually be free — a one-off is a real commitment.
         $conflict = ScheduleConflicts::occurrenceConflict($teacherUserId, $startDatetime, $duration);
         if ($conflict !== null) {
@@ -354,11 +365,12 @@ class LessonManagement {
         self::pdo()->prepare(
             'INSERT INTO lessons
                (semester_lesson_reservation_id, semester_id, teacher_user_id, student_user_id, location_id,
-                start_datetime, duration_minutes, lesson_number, created_by_user_id)
-             VALUES (NULL,?,?,?,?,?,?,0,?)'
+                start_datetime, duration_minutes, lesson_number, adhoc_reason, adhoc_note, created_by_user_id)
+             VALUES (NULL,?,?,?,?,?,?,0,?,?,?)'
         )->execute([
             $semesterId, $teacherUserId, $studentUserId, $locationId,
-            $startDatetime, $duration, $ctx->id,
+            $startDatetime, $duration,
+            $reason !== '' ? $reason : null, $note !== '' ? $note : null, $ctx->id,
         ]);
         $lessonId = (int)self::pdo()->lastInsertId();
 
@@ -549,6 +561,37 @@ class LessonManagement {
         ]);
     }
 
+    /** Why a one-off lesson is put on the calendar. Only a make-up uses a make-up credit. */
+    public const ADHOC_REASONS = [
+        'makeup' => 'Make-up lesson',
+        'extra' => 'Extra lesson',
+        'other' => 'Other',
+    ];
+
+    /** "Make-up lesson" — or "No reason recorded" for an older one-off. */
+    public static function adhocReasonLabel(?string $reason): string {
+        return self::ADHOC_REASONS[(string)$reason] ?? 'No reason recorded';
+    }
+
+    /**
+     * A student's one-off lessons in a semester, newest first, with who added
+     * each one — for the admin's student page.
+     */
+    public static function adHocLessonsForStudent(int $studentUserId, int $semesterId): array {
+        $st = self::pdo()->prepare(
+            'SELECT l.id, l.start_datetime, l.duration_minutes, l.adhoc_reason, l.adhoc_note, l.cancelled_at,
+                    l.created_at, tu.first_name AS teacher_first_name, tu.last_name AS teacher_last_name,
+                    cu.first_name AS created_by_first_name, cu.last_name AS created_by_last_name
+             FROM lessons l
+             LEFT JOIN users tu ON tu.id = l.teacher_user_id
+             LEFT JOIN users cu ON cu.id = l.created_by_user_id
+             WHERE l.semester_lesson_reservation_id IS NULL AND l.student_user_id = ? AND l.semester_id = ?
+             ORDER BY l.start_datetime DESC'
+        );
+        $st->execute([$studentUserId, $semesterId]);
+        return $st->fetchAll();
+    }
+
     /**
      * Why a lesson is cancelled. 'rebookable': true/false when the reason
      * settles whether the student is owed a make-up, null when the admin
@@ -576,7 +619,9 @@ class LessonManagement {
      *                   their first lesson date to the end of the semester;
      *   on the calendar every lesson of theirs this semester that is not
      *                   cancelled — held, missed, or still to come — including
-     *                   one-off lessons, which is how a make-up is booked;
+     *                   one-off lessons added as a MAKE-UP, which is how a
+     *                   credit is used. One-offs added as an extra lesson or
+     *                   for another reason are outside this sum altogether;
      *   not rebookable  cancelled lessons the student is not owed a make-up
      *                   for (a cancellation with no reason recorded counts
      *                   here: nothing says a make-up was promised).
@@ -590,7 +635,7 @@ class LessonManagement {
     public static function makeupCreditsForStudent(int $studentUserId, int $semesterId): array {
         $st = self::pdo()->prepare(
             "SELECT l.id, l.start_datetime, l.lesson_number, l.cancelled_at, l.cancel_reason, l.cancel_rebookable,
-                    l.semester_lesson_reservation_id
+                    l.semester_lesson_reservation_id, l.adhoc_reason
              FROM lessons l
              LEFT JOIN semester_lesson_reservations r ON r.id = l.semester_lesson_reservation_id
              WHERE COALESCE(r.student_user_id, l.student_user_id) = ?
@@ -602,7 +647,11 @@ class LessonManagement {
         $entitled = $onCalendar = $notRebookable = $rebookable = 0;
         $cancelled = [];
         foreach ($st->fetchAll() as $lesson) {
-            if ($lesson['semester_lesson_reservation_id'] !== null && (int)$lesson['lesson_number'] > 0) {
+            $isOneOff = $lesson['semester_lesson_reservation_id'] === null;
+            if ($isOneOff && $lesson['adhoc_reason'] !== 'makeup') {
+                continue; // an extra lesson neither uses a credit nor creates one
+            }
+            if (!$isOneOff && (int)$lesson['lesson_number'] > 0) {
                 $entitled++;
             }
             if ($lesson['cancelled_at'] === null) {
