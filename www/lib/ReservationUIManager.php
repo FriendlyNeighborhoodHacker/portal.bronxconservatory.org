@@ -341,6 +341,12 @@ class ReservationUIManager {
                 addLine(line.label, line.amount, !line.will_post, line.will_post ? '' : line.skip_reason);
               });
               addTotal('Total charged now', json.total);
+              // The student's existing credit, and where the account lands,
+              // so the charge can be checked against money already paid.
+              if (json.credit) {
+                addLine('Credit already on the account', '\u2212' + json.credit, false, '');
+                addTotal(json.balance_after_label, json.balance_after);
+              }
               table.classList.remove('hidden');
               if (json.installment_available) {
                 document.getElementById('resChargesInstallmentLabel').textContent =

@@ -80,6 +80,17 @@ try {
             'installment_fee' => Billing::formatCents((int)$preview['installment_fee_cents']),
             'installment_note' => $preview['installment_note'],
         ];
+        // A student who already has a credit (a registration payment moved
+        // onto the ledger, an overpayment) — shown under the total so the
+        // admin can see the charge being met by money already received.
+        $balanceCents = Billing::balanceForStudentCents($studentUserId);
+        if ($balanceCents < 0) {
+            $afterCents = $balanceCents + (int)$preview['total_cents'];
+            $payload['credit'] = Billing::formatCents(-$balanceCents);
+            $payload['balance_after_label'] = $afterCents > 0 ? 'Balance due after these charges'
+                : ($afterCents < 0 ? 'Credit left after these charges' : 'Balance after these charges');
+            $payload['balance_after'] = Billing::formatCents(abs($afterCents));
+        }
     } elseif ($action === 'unconfirm') {
         $reservation = ReservationManagement::findReservation($reservationId);
         if (!$reservation) {
