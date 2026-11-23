@@ -65,7 +65,41 @@ class LedgerUIManager {
         self::renderModals($studentUserId, $semesterId, $returnTo);
     }
 
+    /**
+     * The Stripe transaction behind a ledger line, for cross-referencing with
+     * the Stripe Dashboard: ['id' => 'pi_…', 'url' => dashboard link or null],
+     * or null when the line did not come from Stripe.
+     *
+     * The id is the PaymentIntent where there is one (every card payment
+     * taken by the embedded form), else the older Checkout Session. Only a
+     * PaymentIntent has a Dashboard page to link to; searching the Dashboard
+     * for either id finds the payment. $testMode picks the test Dashboard.
+     */
+    public static function stripeReference(array $entry, bool $testMode = false): ?array {
+        $candidates = [
+            trim((string)($entry['stripe_payment_intent_id'] ?? '')),
+            // A registration payment moved here from a lead keeps its
+            // PaymentIntent id in the session column.
+            trim((string)($entry['stripe_checkout_session_id'] ?? '')),
+        ];
+        $fallback = null;
+        foreach ($candidates as $id) {
+            if ($id === '') {
+                continue;
+            }
+            if (preg_match('/^pi_[A-Za-z0-9_]+$/', $id)) {
+                return [
+                    'id' => $id,
+                    'url' => 'https://dashboard.stripe.com/' . ($testMode ? 'test/' : '') . 'payments/' . $id,
+                ];
+            }
+            $fallback = $fallback ?? $id;
+        }
+        return $fallback !== null ? ['id' => $fallback, 'url' => null] : null;
+    }
+
     private static function entriesTable(array $entries, string $caption): void {
+        $stripeTestMode = ApplicationUI::paymentTestMode();
         if (!$entries) {
             echo '<p class="small">No charges or payments yet.</p>';
             return;
@@ -83,7 +117,18 @@ class LedgerUIManager {
                   <div class="small"><?=h(ucfirst((string)$entry['season']) . ' ' . $entry['year'])?></div>
                 <?php endif; ?>
               </td>
-              <td><?=h((string)($entry['description'] ?? ''))?></td>
+              <td><?=h((string)($entry['description'] ?? ''))?>
+                <?php if ($stripe = self::stripeReference($entry, $stripeTestMode)): ?>
+                  <div class="small">Stripe:
+                    <?php if ($stripe['url'] !== null): ?>
+                      <a href="<?=h($stripe['url'])?>" target="_blank" rel="noopener"
+                         title="Open this payment in the Stripe Dashboard"><code><?=h($stripe['id'])?></code></a>
+                    <?php else: ?>
+                      <code><?=h($stripe['id'])?></code>
+                    <?php endif; ?>
+                  </div>
+                <?php endif; ?>
+              </td>
               <td class="small"><?=h(self::enteredByLabel($entry))?>
                 <?php if (!empty($entry['created_at'])): ?>
                   <div class="small"><?=h(date('M j, Y g:i a', strtotime((string)$entry['created_at'])))?></div>
