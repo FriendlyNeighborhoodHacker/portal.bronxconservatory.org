@@ -181,7 +181,7 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
           <?=h($preferenceBits ? implode(' · ', $preferenceBits) : '(see note)')?><?php
           if ($schedulingNotes !== ''): ?> — &ldquo;<?=h($schedulingNotes)?>&rdquo;<?php endif; ?></em></p>
         <?php endif; ?>
-        <p class="small" style="margin-bottom:6px;">Reservation:
+        <p class="small" style="margin-bottom:6px;">Reservation<?=$semester ? ' in ' . h(SemesterManagement::label($semester)) : ''?>:
           <strong id="pick<?=$lsId?>_summary"><?=h($pickedSummary !== ''
               ? $pickedSummary
               : 'not placed — convert now and place them from the Schedule later')?></strong>
@@ -195,7 +195,7 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
       </div>
       <?php // Shown only while a time is chosen; the picker toggles it. ?>
       <p id="pick<?=$lsId?>_note" class="flash<?=$pickedSummary !== '' ? '' : ' hidden'?>" style="margin-top:8px;">
-        Converting this lead will create a reservation for this time with a
+        Converting this lead will create a reservation for this time<?=$semester ? ' in ' . h(SemesterManagement::label($semester)) : ''?> with a
         <strong>&ldquo;pending confirmation&rdquo;</strong> status. It will <strong>not</strong> charge
         anything to the user&rsquo;s account until the reservation is confirmed.</p>
       <?php else: ?>

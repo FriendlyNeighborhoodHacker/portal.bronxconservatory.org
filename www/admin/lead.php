@@ -5,6 +5,7 @@ require_once __DIR__ . '/lead_ui.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
 require_once __DIR__ . '/../lib/StudentTeacherManagement.php';
 require_once __DIR__ . '/../lib/ReservationManagement.php';
+require_once __DIR__ . '/../lib/SemesterManagement.php';
 Application::init();
 require_admin();
 
@@ -82,6 +83,16 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
               . ' · ' . $slot['location_name']
           )?></a>
           <strong>(<?=h($statusLabels[(string)$slot['status']] ?? (string)$slot['status'])?>)</strong>
+          <?php
+            // Name the semester and offer the way there: the Schedule shows
+            // whichever semester the admin last worked in, which is often
+            // not the one a new family registered for.
+            $slotSemester = SemesterManagement::find((int)$slot['semester_id']);
+          ?>
+          <?php if ($slotSemester): ?>
+            in <?=h(SemesterManagement::label($slotSemester))?> ·
+            <a href="/admin/semester_select.php?semester_id=<?=(int)$slot['semester_id']?>&amp;return=<?=h(urlencode('/admin/schedule.php'))?>">view on the <?=h(SemesterManagement::label($slotSemester))?> schedule</a>
+          <?php endif; ?>
         <?php endforeach; ?>
       </p>
     <?php endif; ?>

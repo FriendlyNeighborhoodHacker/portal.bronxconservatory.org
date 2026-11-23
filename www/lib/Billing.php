@@ -67,7 +67,11 @@ class Billing {
     /** The base confirmation charges (installment fee handled separately). */
     private static function confirmationChargeAmounts(array $semester, int $durationMinutes, ?int $lessonCount = null): array {
         $lessonFee = SemesterManagement::lessonFeeCents($semester, $durationMinutes);
-        $lessonLabel = 'Semester lessons';
+        // Say which price this is: the rate and the lesson length. Only the
+        // Bronx-resident rate is ever charged here — the non-resident/online
+        // fees are stored on the semester but no flow applies them yet; when
+        // one does, this label must follow the rate actually used.
+        $lessonLabel = 'Semester lessons, Bronx Resident, ' . $durationMinutes . '-minutes';
         // Late start: the package price divided by the semester's lesson
         // count, times the lessons that remain. Registration and recital
         // fees are not prorated.
@@ -75,7 +79,7 @@ class Billing {
         if ($lessonCount !== null && $lessonCount < $package) {
             $lessonCount = max(0, $lessonCount);
             $lessonFee = (int)round($lessonFee * $lessonCount / $package);
-            $lessonLabel = 'Semester lessons (' . $lessonCount . ' of ' . $package . ', late start)';
+            $lessonLabel .= ' (' . $lessonCount . ' of ' . $package . ', late start)';
         }
         return [
             'registration' => [SemesterManagement::registrationFeeCents($semester), 'Semester registration'],

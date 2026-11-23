@@ -8,6 +8,7 @@
 // means a bad pick costs nothing.
 require_once __DIR__ . '/lead_ui.php';
 require_once __DIR__ . '/../lib/ScheduleConflicts.php';
+require_once __DIR__ . '/../lib/SemesterManagement.php';
 Application::init();
 require_admin();
 
@@ -108,7 +109,10 @@ try {
     $bits[] = $result['parent_existed'] ? 'Adopted the existing parent account' : 'Created the parent account';
     $bits[] = count($result['student_user_ids']) . ' student' . (count($result['student_user_ids']) === 1 ? '' : 's');
     if ($result['reservation_ids']) {
-        $bits[] = count($result['reservation_ids']) . ' reservation' . (count($result['reservation_ids']) === 1 ? '' : 's') . ' placed (pending confirmation)';
+        $placedSemesterId = !empty($lead['semester_id']) ? (int)$lead['semester_id'] : Application::adminSelectedSemesterId();
+        $placedSemester = $placedSemesterId ? SemesterManagement::find($placedSemesterId) : null;
+        $bits[] = count($result['reservation_ids']) . ' reservation' . (count($result['reservation_ids']) === 1 ? '' : 's')
+            . ' placed' . ($placedSemester ? ' in ' . SemesterManagement::label($placedSemester) : '') . ' (pending confirmation)';
     }
     if ($result['payment_recorded']) {
         $bits[] = 'payment recorded on the ledger';
