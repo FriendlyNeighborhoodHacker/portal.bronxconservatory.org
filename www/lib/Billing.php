@@ -57,6 +57,10 @@ class Billing {
             if (self::liveDebitCents($studentUserId, $semesterId, $entryType) > 0) {
                 continue;
             }
+            // The registration fee is one per family per semester.
+            if ($entryType === 'registration' && self::siblingCarriesRegistrationFee($studentUserId, $semesterId)) {
+                continue;
+            }
             self::insertEntry($ctx, $studentUserId, date('Y-m-d'), 'debit', $entryType, $amountCents, $semesterId, $description);
         }
         self::log($ctx, 'billing.confirmation_charges_posted', [
@@ -133,12 +137,17 @@ class Billing {
                 continue;
             }
             $willPost = self::liveDebitCents($studentUserId, $semesterId, $entryType) <= 0;
+            $skipReason = $willPost ? null : 'already charged this semester';
+            if ($willPost && $entryType === 'registration' && self::siblingCarriesRegistrationFee($studentUserId, $semesterId)) {
+                $willPost = false;
+                $skipReason = 'one per family — already charged to a sibling this semester';
+            }
             $lines[] = [
                 'entry_type' => $entryType,
                 'description' => $description,
                 'amount_cents' => $amountCents,
                 'will_post' => $willPost,
-                'skip_reason' => $willPost ? null : 'already charged this semester',
+                'skip_reason' => $skipReason,
             ];
             if ($willPost) {
                 $total += $amountCents;
@@ -1175,6 +1184,28 @@ class Billing {
     }
 
     /** Debited minus reversed for one (student, semester, entry_type) — what still stands. */
+    /**
+     * Has a sibling (another child of one of this student's parents) already
+     * been charged this semester's registration fee, un-reversed? The fee is
+     * one per family per semester — which is also how the registration form
+     * quotes it — so the second child confirmed is not charged it again.
+     */
+    private static function siblingCarriesRegistrationFee(int $studentUserId, int $semesterId): bool {
+        $st = self::pdo()->prepare(
+            'SELECT DISTINCT sib.child_user_id
+             FROM parenthood mine
+             JOIN parenthood sib ON sib.parent_user_id = mine.parent_user_id
+             WHERE mine.child_user_id = ? AND sib.child_user_id <> ?'
+        );
+        $st->execute([$studentUserId, $studentUserId]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $siblingId) {
+            if (self::liveDebitCents((int)$siblingId, $semesterId, 'registration') > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static function liveDebitCents(int $studentUserId, int $semesterId, string $entryType): int {
         return self::sumCents($studentUserId, $semesterId, 'debit', $entryType)
             - self::reversedCents($studentUserId, $semesterId, $entryType);

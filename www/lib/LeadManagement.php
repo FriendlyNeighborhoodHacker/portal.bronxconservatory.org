@@ -880,8 +880,10 @@ class LeadManagement {
     /**
      * Turn a lead into live data: parent user (created or adopted by email),
      * child users with student profiles + instruments + parenthood links,
-     * optional reservation placements, and the lead's Stripe payment moved to
-     * a chosen student's ledger.
+     * optional reservation placements, and the lead's Stripe payment moved
+     * onto the ledger. A lead that has paid gets its slots CONFIRMED with the
+     * semester charges posted and the payment set against them; an unpaid
+     * lead's slots are pending_confirmation with no charges.
      *
      * $options:
      *   'students' => [lead_student_id => [
@@ -983,14 +985,26 @@ class LeadManagement {
             $studentUserIds[$leadStudentId] = $studentUserId;
         }
 
-        // 3. Optional reservation placements. They start as
-        //    pending_confirmation, not pending_reach_out: the family has
-        //    already been in touch (that is what a lead is), so what is left
-        //    is their yes to this slot. No charges — those post when the
-        //    reservation is later confirmed.
+        // 3. Optional reservation placements.
+        //
+        //    A family that PAID while registering (in full, or the first
+        //    installment) has said yes with money: their slot is created
+        //    CONFIRMED, the semester charges post, and step 4 sets the payment
+        //    against them — so the student lands on the schedule with a zero
+        //    balance, or with what is left to pay on the installment plan.
+        //
+        //    A family that has not paid starts as pending_confirmation (not
+        //    pending_reach_out: they have already been in touch, so what is
+        //    left is their yes to this slot) with no charges — those post
+        //    when the reservation is later confirmed.
         require_once __DIR__ . '/ReservationManagement.php';
+        require_once __DIR__ . '/Billing.php';
         $reservationIds = [];
         $semesterId = !empty($lead['semester_id']) ? (int)$lead['semester_id'] : null;
+        $paidCents = (int)$lead['amount_paid_cents'];
+        $confirmOnConvert = $paidCents > 0;
+        $confirmedStudentIds = [];   // students given a confirmed slot here
+        $chargedSemesterId = null;   // the term those charges (and the payment) belong to
         foreach ($leadStudents as $leadStudent) {
             $leadStudentId = (int)$leadStudent['id'];
             $reservation = $studentOptions[$leadStudentId]['reservation'] ?? null;
@@ -1003,24 +1017,40 @@ class LeadManagement {
             $duration = (int)($reservation['duration_minutes'] ?? 0)
                 ?: (int)($leadStudent['lesson_length_minutes'] ?? 0)
                 ?: 30;
+            $reservationSemesterId = (int)($reservation['semester_id'] ?? $semesterId);
             $reservationIds[] = ReservationManagement::createReservation($ctx, [
-                'semester_id' => $reservation['semester_id'] ?? $semesterId,
+                'semester_id' => $reservationSemesterId,
                 'teacher_user_id' => (int)$reservation['teacher_user_id'],
                 'location_id' => (int)($reservation['location_id'] ?? 0),
                 'student_user_id' => $studentUserIds[$leadStudentId],
                 'day_of_week' => (int)($reservation['day_of_week'] ?? -1),
                 'start_time' => (string)($reservation['start_time'] ?? ''),
                 'duration_minutes' => $duration,
-                'status' => 'pending_confirmation',
-            ], ['post_charges' => false]);
+                'status' => $confirmOnConvert ? 'confirmed' : 'pending_confirmation',
+            ], $confirmOnConvert
+                ? [
+                    'post_charges' => true,
+                    // The installment fee is one per family: on the first
+                    // student confirmed, when the family chose the plan.
+                    'include_installment_fee' => !empty($lead['installment_plan']) && !$confirmedStudentIds,
+                ]
+                : ['post_charges' => false]);
+            if ($confirmOnConvert) {
+                $confirmedStudentIds[] = $studentUserIds[$leadStudentId];
+                $chargedSemesterId = $chargedSemesterId ?? $reservationSemesterId;
+            }
         }
 
-        // 4. Move the Stripe payment onto a student's ledger. Skipped (with a
-        //    notice) when the session is already on ANY ledger, so one session
-        //    can never credit two students.
+        // 4. Move the Stripe payment onto the ledger. Skipped (with a notice)
+        //    when the session is already on ANY ledger, so one payment can
+        //    never be credited twice.
+        //
+        //    It is set against the charges just posted: each confirmed
+        //    student is credited up to what they now owe (the chosen student
+        //    first), and anything left over — or the whole payment, when no
+        //    slot was confirmed — goes to the chosen student as a credit.
         $paymentRecorded = false;
         $paymentNotice = null;
-        $paidCents = (int)$lead['amount_paid_cents'];
         // Whichever Stripe object the money came through — it doubles as the
         // ledger's idempotency key, so a payment can never be credited twice.
         $sessionId = self::paymentReference($lead);
@@ -1031,14 +1061,27 @@ class LeadManagement {
             if ((int)$st->fetchColumn() > 0) {
                 $paymentNotice = 'This payment is already on a ledger — not recorded again.';
             } else {
-                require_once __DIR__ . '/Billing.php';
-                $paymentRecorded = Billing::recordStripePayment(
-                    $studentUserIds[$targetLeadStudentId],
-                    $paidCents,
-                    $sessionId,
-                    self::orNull($lead['stripe_payment_intent_id'] ?? null),
-                    $semesterId
-                );
+                $targetStudentId = $studentUserIds[$targetLeadStudentId];
+                $owed = [];
+                foreach (array_unique(array_merge([$targetStudentId], $confirmedStudentIds)) as $studentId) {
+                    if (in_array($studentId, $confirmedStudentIds, true)) {
+                        $owed[$studentId] = Billing::balanceForStudentCents($studentId);
+                    }
+                }
+                $shares = Billing::allocatePaymentAcrossStudents($owed, $paidCents);
+                $leftover = $paidCents - array_sum($shares);
+                if ($leftover > 0) {
+                    $shares[$targetStudentId] = ($shares[$targetStudentId] ?? 0) + $leftover;
+                }
+                foreach ($shares as $studentId => $cents) {
+                    $paymentRecorded = Billing::recordStripePayment(
+                        (int)$studentId,
+                        (int)$cents,
+                        $sessionId,
+                        self::orNull($lead['stripe_payment_intent_id'] ?? null),
+                        $chargedSemesterId ?? $semesterId
+                    ) || $paymentRecorded;
+                }
             }
         }
 
@@ -1060,6 +1103,9 @@ class LeadManagement {
             'parent_existed' => (bool)$adopted['existed'],
             'student_user_ids' => $studentUserIds,
             'reservation_ids' => $reservationIds,
+            // True when the slots were created confirmed (the family had
+            // paid), false when they are pending confirmation.
+            'reservations_confirmed' => $confirmOnConvert && (bool)$reservationIds,
             'payment_recorded' => $paymentRecorded,
             'payment_notice' => $paymentNotice,
         ];

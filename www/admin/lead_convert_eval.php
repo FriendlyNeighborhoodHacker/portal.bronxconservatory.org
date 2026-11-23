@@ -117,7 +117,10 @@ try {
     if ($result['reservation_ids']) {
         $placedSemester = $placeSemesterId ? SemesterManagement::find($placeSemesterId) : null;
         $bits[] = count($result['reservation_ids']) . ' reservation' . (count($result['reservation_ids']) === 1 ? '' : 's')
-            . ' placed' . ($placedSemester ? ' in ' . SemesterManagement::label($placedSemester) : '') . ' (pending confirmation)';
+            . ' placed' . ($placedSemester ? ' in ' . SemesterManagement::label($placedSemester) : '')
+            . (!empty($result['reservations_confirmed'])
+                ? ' (confirmed — charges posted and the payment applied)'
+                : ' (pending confirmation)');
     }
     if ($result['payment_recorded']) {
         $bits[] = 'payment recorded on the ledger';

@@ -119,8 +119,9 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
       <?php if ($paid): ?>
       <tr>
         <td>Payment (<?=h(lead_dollars((int)$lead['amount_paid_cents']))?>)</td>
-        <td class="small"><span class="status-verified">Moves onto the chosen student's ledger</span>
-          as a Stripe payment credit (never recorded twice).</td>
+        <td class="small"><span class="status-verified">Applied to the students' charges</span>
+          as a Stripe payment credit (never recorded twice). A student given a time below is confirmed and
+          charged; anything left over goes to the student chosen at the bottom of this page.</td>
       </tr>
       <?php endif; ?>
     </tbody>
@@ -227,9 +228,16 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
       </div>
       <?php // Shown only while a time is chosen; the picker toggles it. ?>
       <p id="pick<?=$lsId?>_note" class="flash<?=$pickedSummary !== '' ? '' : ' hidden'?>" style="margin-top:8px;">
+        <?php if ($paid): ?>
+        This family has already paid <?=h(lead_dollars((int)$lead['amount_paid_cents']))?>, so converting this lead will
+        create a <strong>confirmed</strong> reservation for this time<?=$semester ? ' in ' . h(SemesterManagement::label($semester)) : ''?>,
+        post the semester&rsquo;s charges to the student&rsquo;s account, and apply the payment against them.
+        Anything not covered by the payment is left as a balance.
+        <?php else: ?>
         Converting this lead will create a reservation for this time<?=$semester ? ' in ' . h(SemesterManagement::label($semester)) : ''?> with a
         <strong>&ldquo;pending confirmation&rdquo;</strong> status. It will <strong>not</strong> charge
-        anything to the user&rsquo;s account until the reservation is confirmed.</p>
+        anything to the user&rsquo;s account until the reservation is confirmed.
+        <?php endif; ?></p>
       <?php else: ?>
       <p class="small">No semester schedule to place into<?=$semester ? ' (no teachers are assigned to locations yet)' : ''?> —
         convert now and place them from the Schedule grid later.</p>
@@ -240,7 +248,7 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
 
   <?php if ($paid): ?>
   <div class="card">
-    <label>Record the <?=h(lead_dollars((int)$lead['amount_paid_cents']))?> payment on
+    <label>Put any of the <?=h(lead_dollars((int)$lead['amount_paid_cents']))?> payment not used by confirmed charges on
       <select name="payment_target_lead_student_id">
         <?php foreach ($students as $i => $student): ?>
         <option value="<?=(int)$student['id']?>"<?=$i === 0 ? ' selected' : ''?>><?=h($student['first_name'] . ' ' . $student['last_name'])?>'s ledger</option>

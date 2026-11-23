@@ -309,6 +309,17 @@ rate. The ledger line names the rate ("Semester lessons, Non-resident,
 
 Abandoning checkout still leaves a lead, so the family can be called.
 
+**Converting a paid lead.** A lead that paid while registering (in full, or the
+first installment) is converted straight onto the schedule: each student given
+a time gets a **confirmed** reservation, the semester charges post (with the
+installment fee when the family chose the plan), and the payment is set against
+them — each confirmed student up to what they owe, anything left over to the
+student chosen on the convert page. Paid in full lands at a zero balance; an
+installment family lands confirmed with the remainder owing. An **unpaid** lead's
+slot is `pending_confirmation` with no charges. The registration fee is charged
+**once per family per semester**: a second child confirmed is not charged it
+again (`Billing`), which is also how the form quotes it.
+
 ---
 
 # 6. Parent experience

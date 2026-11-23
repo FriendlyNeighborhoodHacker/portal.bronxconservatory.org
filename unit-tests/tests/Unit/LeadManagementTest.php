@@ -422,20 +422,97 @@ final class LeadManagementTest extends TestCase
         $this->assertSame('rosa@example.org', $parentRow['email']);
         $this->assertSame('100 Willis Ave', $parentRow['address_street_1']);
 
-        // Reservation is pending_confirmation with ZERO debits.
+        // The family paid in full, so the slot is CONFIRMED, the semester's
+        // charges are posted, and the payment is set against them.
         $this->assertCount(1, $result['reservation_ids']);
+        $this->assertTrue($result['reservations_confirmed']);
         $reservation = ReservationManagement::findReservation($result['reservation_ids'][0]);
-        $this->assertSame('pending_confirmation', $reservation['status']);
-        $debits = (int)pdo()->query("SELECT COUNT(*) FROM ledger_entries WHERE accounting_type='debit'")->fetchColumn();
-        $this->assertSame(0, $debits);
+        $this->assertSame('confirmed', $reservation['status']);
+        $debits = (int)pdo()->query("SELECT COALESCE(SUM(amount_cents),0) FROM ledger_entries WHERE accounting_type='debit'")->fetchColumn();
+        $this->assertSame((int)LeadManagement::findLead($leadId)['amount_quoted_cents'], $debits, 'charges match the quote');
 
-        // The Stripe payment moved onto the student's ledger.
         $this->assertTrue($result['payment_recorded']);
-        $this->assertSame(-46500, Billing::balanceForStudentCents($studentId)); // credit only
+        $this->assertSame($debits - 46500, Billing::balanceForStudentCents($studentId));
 
         $lead = LeadManagement::findLead($leadId);
         $this->assertSame('converted', $lead['status']);
         $this->assertSame($parentId, (int)$lead['converted_parent_user_id']);
+    }
+
+    /** Convert a lead placing every student in consecutive half-hour slots; returns the result. */
+    private function convertPlacingAll(UserContext $ctx, int $leadId, int $teacher, int $locationId, int $dayOfWeek): array
+    {
+        $options = ['students' => []];
+        foreach (LeadManagement::studentsForLead($leadId) as $i => $leadStudent) {
+            $options['students'][(int)$leadStudent['id']] = ['reservation' => [
+                'teacher_user_id' => $teacher, 'location_id' => $locationId, 'day_of_week' => $dayOfWeek,
+                'start_time' => sprintf('%02d:00', 10 + $i), 'duration_minutes' => 30,
+            ]];
+            $options['payment_target_lead_student_id'] ??= (int)$leadStudent['id'];
+        }
+        return LeadManagement::convertLead($ctx, $leadId, $options);
+    }
+
+    public function testConvertingAnUnpaidLeadLeavesTheSlotPendingWithNoCharges(): void
+    {
+        [$ctx, $teacher, $semesterId, $locationId, $dayOfWeek] = $this->convertSetup();
+        $leadId = LeadManagement::createLead(null, $semesterId, $this->parent(), [$this->student()], $this->scheduling(), false);
+
+        $result = $this->convertPlacingAll($ctx, $leadId, $teacher, $locationId, $dayOfWeek);
+
+        $this->assertFalse($result['reservations_confirmed']);
+        $this->assertSame('pending_confirmation', ReservationManagement::findReservation($result['reservation_ids'][0])['status']);
+        $this->assertSame(0, (int)pdo()->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn());
+    }
+
+    public function testConvertingAnInstallmentLeadConfirmsAndLeavesTheRestOwing(): void
+    {
+        [$ctx, $teacher, $semesterId, $locationId, $dayOfWeek] = $this->convertSetup();
+        $leadId = LeadManagement::createLead(null, $semesterId, $this->parent(), [$this->student()], $this->scheduling(), true);
+        $lead = LeadManagement::findLead($leadId);
+        $quoted = (int)$lead['amount_quoted_cents'];
+        $dueNow = (int)$lead['amount_due_now_cents'];
+        $this->assertLessThan($quoted, $dueNow);
+        LeadManagement::attachCheckoutSession(null, $leadId, 'cs_inst_1');
+        LeadManagement::recordLeadPayment($leadId, $dueNow, 'cs_inst_1', 'pi_inst_1');
+
+        $result = $this->convertPlacingAll($ctx, $leadId, $teacher, $locationId, $dayOfWeek);
+        $studentId = array_values($result['student_user_ids'])[0];
+
+        $this->assertSame('confirmed', ReservationManagement::findReservation($result['reservation_ids'][0])['status']);
+        // Charged what was quoted (installment fee included), credited what was paid.
+        $this->assertSame($quoted - $dueNow, Billing::balanceForStudentCents($studentId));
+        $summary = Billing::balanceSummaryForStudent($studentId);
+        $this->assertSame($quoted, $summary['semesters'][0]['charged_cents']);
+        $this->assertSame($dueNow, $summary['semesters'][0]['paid_cents']);
+    }
+
+    public function testConvertingAPaidLeadSplitsThePaymentAcrossSiblings(): void
+    {
+        [$ctx, $teacher, $semesterId, $locationId, $dayOfWeek] = $this->convertSetup();
+        $leadId = LeadManagement::createLead(
+            null, $semesterId, $this->parent(),
+            [$this->student(), $this->student(['first_name' => 'Mateo'])], $this->scheduling(), false
+        );
+        $quoted = (int)LeadManagement::findLead($leadId)['amount_quoted_cents'];
+        LeadManagement::attachCheckoutSession(null, $leadId, 'cs_sib_1');
+        LeadManagement::recordLeadPayment($leadId, $quoted, 'cs_sib_1', 'pi_sib_1');
+
+        $result = $this->convertPlacingAll($ctx, $leadId, $teacher, $locationId, $dayOfWeek);
+        [$first, $second] = array_values($result['student_user_ids']);
+
+        // Both confirmed, and every cent of the payment is on a ledger once.
+        foreach ($result['reservation_ids'] as $reservationId) {
+            $this->assertSame('confirmed', ReservationManagement::findReservation($reservationId)['status']);
+        }
+        $credits = (int)pdo()->query("SELECT SUM(amount_cents) FROM ledger_entries WHERE accounting_type='credit'")->fetchColumn();
+        $this->assertSame($quoted, $credits);
+        // One registration fee for the family, as quoted — so the payment
+        // covers both children exactly.
+        $this->assertSame(0, Billing::balanceForStudentCents($first));
+        $this->assertSame(0, Billing::balanceForStudentCents($second));
+        $fees = (int)pdo()->query("SELECT COUNT(*) FROM ledger_entries WHERE entry_type='registration' AND accounting_type='debit'")->fetchColumn();
+        $this->assertSame(1, $fees);
     }
 
     public function testConvertStoresAnApproximateBirthdateFromClassOfWhenNoneIsGiven(): void
