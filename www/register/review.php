@@ -15,7 +15,8 @@ $scheduling = (array)$state['scheduling'];
 $installment = (int)$state['installment'] === 1;
 $online = LeadManagement::wantsOnlineLessons($scheduling);
 $nonresident = registration_uses_nonresident_pricing($state);
-$quote = LeadManagement::priceQuote((int)$semester['id'], $students, $installment, $nonresident);
+$feeWaived = registration_fee_waived($state, $semester);
+$quote = LeadManagement::priceQuote((int)$semester['id'], $students, $installment, $nonresident, $feeWaived);
 $twoRates = SemesterManagement::hasNonresidentPricing($semester);
 $stripeReady = StripeCheckout::isConfigured();
 
@@ -29,6 +30,10 @@ ApplicationUI::minimalHeaderHtml('Register — Review');
 
   <div class="card">
     <h3 style="margin-top:0;">Tuition &amp; fees</h3>
+    <?php if ($feeWaived): ?>
+    <p class="flash">Your family has already paid the <?=h(registration_semester_label($semester))?> registration fee,
+      so it is <strong>waived</strong> for this registration.</p>
+    <?php endif; ?>
     <?php if ($twoRates): ?>
     <p class="small"><?php if ($online): ?>
         Online lessons are at the non-resident / online tuition.

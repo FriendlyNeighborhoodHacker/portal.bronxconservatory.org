@@ -1206,6 +1206,22 @@ class Billing {
         return false;
     }
 
+    /**
+     * Has this person's family already been charged the semester's
+     * registration fee (un-reversed)? $userId is a parent — any of their
+     * children counts — or an adult student paying for themself.
+     */
+    public static function familyRegistrationFeeCharged(int $userId, int $semesterId): bool {
+        $st = self::pdo()->prepare('SELECT child_user_id FROM parenthood WHERE parent_user_id = ?');
+        $st->execute([$userId]);
+        foreach (array_merge([$userId], $st->fetchAll(PDO::FETCH_COLUMN)) as $id) {
+            if (self::liveDebitCents((int)$id, $semesterId, 'registration') > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static function liveDebitCents(int $studentUserId, int $semesterId, string $entryType): int {
         return self::sumCents($studentUserId, $semesterId, 'debit', $entryType)
             - self::reversedCents($studentUserId, $semesterId, $entryType);

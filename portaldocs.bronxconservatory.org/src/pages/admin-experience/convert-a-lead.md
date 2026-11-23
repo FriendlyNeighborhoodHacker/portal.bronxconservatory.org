@@ -65,22 +65,31 @@ Then `LeadManagement::convertLead` runs, step by step:
    email and no login, a student profile (DOB, class-of), instruments, shirt
    size, and the `parenthood` link. Each student's
    `converted_student_user_id` is written immediately, so progress is durable.
-3. **Reservations** — created as **`pending_confirmation`**, with the slot
-   re-checked at booking time. No lessons are generated and nothing is
-   charged; that happens when the reservation is later
-   [confirmed on the schedule](/admin-experience/view-semester-schedule).
-4. **Payment** — if the lead holds a Stripe payment and a target student was
-   picked, it is recorded as a `payment` credit on that student's ledger.
-   A cross-student check plus a unique key on the Stripe reference guarantee
-   one payment can never be recorded twice or credited to two students; if
-   it is already on a ledger, the admin sees "This payment is already on a
-   ledger — not recorded again."
+3. **Reservations** — the slot is re-checked at booking time, then:
+   - **the lead has paid** (in full, or the first installment): the
+     reservation is created **`confirmed`**, its lessons are generated and the
+     semester charges are posted (plus the installment fee when the family
+     chose the plan; the registration fee once per family);
+   - **the lead has not paid**: it is created **`pending_confirmation`**. No
+     lessons are generated and nothing is charged; that happens when the
+     reservation is later
+     [confirmed on the schedule](/admin-experience/view-semester-schedule).
+4. **Payment** — if the lead holds a Stripe payment, it is recorded as
+   `payment` credits: each student confirmed in step 3 is credited up to what
+   they now owe, and anything left over (or the whole payment, when no time
+   was chosen) goes to the student picked at the bottom of the page. So a
+   family that paid in full lands at a zero balance, and an installment
+   family lands confirmed with the rest owing. A check on the Stripe
+   reference guarantees one payment can never be recorded twice; if it is
+   already on a ledger, the admin sees "This payment is already on a ledger —
+   not recorded again."
 5. **Mark converted** — the lead gets `status='converted'`,
    `converted_parent_user_id`, and `converted_at` (preserved on re-entry).
 
 The success flash summarizes it: "Converted! Created the parent account · 2
-students · 1 reservation placed (pending confirmation) · payment recorded on
-the ledger."
+students · 1 reservation placed in Spring 2027 (confirmed — charges posted
+and the payment applied) · payment recorded on the ledger." For an unpaid lead
+it reads "(pending confirmation)".
 
 ## Re-entry and failure behavior
 

@@ -183,6 +183,17 @@ function registration_uses_nonresident_pricing(array $state): bool {
     return LeadManagement::usesNonresidentPricing((array)($state['family'] ?? []), (array)($state['scheduling'] ?? []));
 }
 
+// Has this family (by the email from step 1) already covered this semester's
+// registration fee? Same rule the lead is created with. The lead being
+// re-submitted after Back from checkout does not count itself.
+function registration_fee_waived(array $state, array $semester): bool {
+    return LeadManagement::registrationFeeAlreadyCovered(
+        (string)($state['family']['email'] ?? ''),
+        (int)$semester['id'],
+        (int)($state['lead_id'] ?? 0) ?: null
+    );
+}
+
 // One rate's three tuition lines, as <li>s.
 function registration_tuition_lines_html(array $semester, bool $nonresident): string {
     $lessonsPerSemester = SemesterManagement::lessonsPerSemester($semester);

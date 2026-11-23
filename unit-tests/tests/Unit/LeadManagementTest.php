@@ -160,6 +160,71 @@ final class LeadManagementTest extends TestCase
         $this->assertSame('[]', $online['availability_blocks']);
     }
 
+    // ===== Registration fee: one per family per semester =====
+
+    public function testSecondRegistrationInTheSameSemesterWaivesTheRegistrationFee(): void
+    {
+        // First child: registered and paid, not yet converted by staff.
+        $first = $this->makeLead();
+        $this->assertSame(46500, (int)LeadManagement::findLead($first)['amount_quoted_cents']); // 35 + 420 + 10
+        $this->assertFalse(LeadManagement::registrationFeeAlreadyCovered('rosa@example.org', $this->semesterId));
+        LeadManagement::attachCheckoutSession(null, $first, 'cs_fee_1');
+        LeadManagement::recordLeadPayment($first, 46500, 'cs_fee_1', 'pi_fee_1');
+
+        $this->assertTrue(LeadManagement::registrationFeeAlreadyCovered(' Rosa@Example.org ', $this->semesterId));
+        $this->assertFalse(LeadManagement::registrationFeeAlreadyCovered('rosa@example.org', $this->semesterId, $first), 'a lead never waives itself');
+        $this->assertFalse(LeadManagement::registrationFeeAlreadyCovered('someone.else@example.org', $this->semesterId));
+
+        // Second child, same email, same semester: no registration fee.
+        $second = LeadManagement::createLead(
+            null, $this->semesterId, $this->parent(), [$this->student(['first_name' => 'Mateo'])], $this->scheduling(), false
+        );
+        $lead = LeadManagement::findLead($second);
+        $this->assertSame(43000, (int)$lead['amount_quoted_cents']); // 420 + 10
+        $this->assertStringContainsString('waived', json_decode($lead['quote_json'], true)[0]['label']);
+
+        // A different semester is a new fee.
+        $other = SemesterManagement::createSemester(fx_admin_ctx(), 'spring', 2026, '2026-02-01', '2026-06-30', [
+            'registration_fee' => '35.00', 'lesson_fee_30_minutes' => '420.00', 'lesson_fee_60_minutes' => '840.00',
+            'guitar_ensemble_fee' => '270.00', 'recital_fee' => '10.00', 'installment_plan_fee' => '20.00',
+            'lessons_per_semester' => 15,
+        ]);
+        $this->assertFalse(LeadManagement::registrationFeeAlreadyCovered('rosa@example.org', $other));
+    }
+
+    public function testRegistrationFeeIsWaivedOnceTheFamilyAccountHasBeenCharged(): void
+    {
+        [$ctx, $teacher, $semesterId, $locationId, $dayOfWeek] = $this->convertSetup();
+        $leadId = LeadManagement::createLead(null, $semesterId, $this->parent(), [$this->student()], $this->scheduling(), false);
+        $quoted = (int)LeadManagement::findLead($leadId)['amount_quoted_cents'];
+        LeadManagement::attachCheckoutSession(null, $leadId, 'cs_fee_2');
+        LeadManagement::recordLeadPayment($leadId, $quoted, 'cs_fee_2', 'pi_fee_2');
+        $this->convertPlacingAll($ctx, $leadId, $teacher, $locationId, $dayOfWeek);
+
+        // The parent now has an account with a charged child: the next
+        // registration from that email is quoted without the fee…
+        $this->assertTrue(LeadManagement::registrationFeeAlreadyCovered('rosa@example.org', $semesterId, $leadId));
+        $second = LeadManagement::createLead(
+            null, $semesterId, $this->parent(), [$this->student(['first_name' => 'Mateo'])], $this->scheduling(), false
+        );
+        $secondQuoted = (int)LeadManagement::findLead($second)['amount_quoted_cents'];
+        $this->assertSame($quoted - SemesterManagement::registrationFeeCents(SemesterManagement::find($semesterId)), $secondQuoted);
+
+        // …and paying that quote covers the second child exactly at conversion.
+        LeadManagement::attachCheckoutSession(null, $second, 'cs_fee_3');
+        LeadManagement::recordLeadPayment($second, $secondQuoted, 'cs_fee_3', 'pi_fee_3');
+        $options = ['students' => []];
+        foreach (LeadManagement::studentsForLead($second) as $leadStudent) {
+            $options['students'][(int)$leadStudent['id']] = ['reservation' => [
+                'teacher_user_id' => $teacher, 'location_id' => $locationId, 'day_of_week' => $dayOfWeek,
+                'start_time' => '12:00', 'duration_minutes' => 30,
+            ]];
+            $options['payment_target_lead_student_id'] = (int)$leadStudent['id'];
+        }
+        $result = LeadManagement::convertLead($ctx, $second, $options);
+        $this->assertSame(0, Billing::balanceForStudentCents(array_values($result['student_user_ids'])[0]));
+    }
+
     // ===== Back from checkout: the same lead is rewritten =====
 
     public function testResubmittingRewritesTheSameLead(): void

@@ -115,6 +115,38 @@ class LeadManagement {
         return Residency::isBronxAddress($city, $zip);
     }
 
+    /**
+     * The registration fee is one per family per semester. Has the family
+     * registering with this email already covered it for this semester? Yes
+     * when either:
+     *   - the email belongs to an account whose family (the person, or any of
+     *     their children) has been charged the fee this semester; or
+     *   - an earlier registration with the same email for this semester has
+     *     been paid (a first child registered, not yet converted by staff).
+     * $excludeLeadId: the lead being (re)submitted, which must not count
+     * itself. A family returning for a NEW semester pays that semester's fee.
+     */
+    public static function registrationFeeAlreadyCovered(string $email, int $semesterId, ?int $excludeLeadId = null): bool {
+        $email = strtolower(trim($email));
+        if ($email === '' || $semesterId <= 0) {
+            return false;
+        }
+        $st = self::pdo()->prepare(
+            "SELECT COUNT(*) FROM leads
+             WHERE LOWER(email) = ? AND semester_id = ? AND source = 'registration'
+               AND amount_paid_cents > 0 AND id <> ?"
+        );
+        $st->execute([$email, $semesterId, (int)$excludeLeadId]);
+        if ((int)$st->fetchColumn() > 0) {
+            return true;
+        }
+        require_once __DIR__ . '/UserManagement.php';
+        require_once __DIR__ . '/Billing.php';
+        $user = UserManagement::findByEmailAnyState($email);
+        return $user && empty($user['is_deleted'])
+            && Billing::familyRegistrationFeeCharged((int)$user['id'], $semesterId);
+    }
+
     public static function wantsOnlineLessons(array $scheduling): bool {
         return (string)($scheduling['location_preference'] ?? '') === self::ONLINE_LOCATION_PREFERENCE;
     }
@@ -141,8 +173,11 @@ class LeadManagement {
      * $nonresident prices tuition at the non-resident / online rate (see
      * usesNonresidentPricing) and says so on each tuition line; the
      * registration, recital and installment fees are the same for everyone.
+     * $waiveRegistration: the family has already covered this semester's
+     * registration fee (registrationFeeAlreadyCovered) — the line stays on
+     * the quote at $0 so they can see it was not forgotten.
      */
-    public static function priceQuote(int $semesterId, array $students, bool $installmentPlan, bool $nonresident = false): array {
+    public static function priceQuote(int $semesterId, array $students, bool $installmentPlan, bool $nonresident = false, bool $waiveRegistration = false): array {
         $semester = SemesterManagement::find($semesterId);
         if (!$semester) {
             throw new InvalidArgumentException('Semester not found.');
@@ -152,7 +187,12 @@ class LeadManagement {
         $feeCents = 0;
 
         $registration = SemesterManagement::registrationFeeCents($semester);
-        if ($registration > 0) {
+        if ($registration > 0 && $waiveRegistration) {
+            $lines[] = [
+                'label' => 'Registration fee — waived (one per family per semester; yours is already paid)',
+                'amount_cents' => 0,
+            ];
+        } elseif ($registration > 0) {
             $lines[] = ['label' => 'Registration fee (one per family per semester)', 'amount_cents' => $registration];
             $feeCents += $registration;
         }
@@ -279,7 +319,9 @@ class LeadManagement {
             $scheduling['availability_blocks'] = [];
         }
         $nonresident = self::usesNonresidentPricing($parent, $scheduling);
-        $quote = self::priceQuote($semesterId, $cleanStudents, $installmentPlan, $nonresident);
+        $waiveRegistration = $semesterId !== null
+            && self::registrationFeeAlreadyCovered($email, (int)$semesterId, $replaceLeadId);
+        $quote = self::priceQuote($semesterId, $cleanStudents, $installmentPlan, $nonresident, $waiveRegistration);
 
         $pdo = self::pdo();
         $pdo->beginTransaction();

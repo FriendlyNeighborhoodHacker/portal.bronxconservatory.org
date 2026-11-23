@@ -56,6 +56,18 @@ email is sent again if it changed. A paid or converted lead can no longer be
 changed this way. The wizard's answers are cleared on the thank-you page, so
 the next registration started in the same browser is a separate lead.
 
+### The registration fee is one per family per semester
+
+A family registering a second child is not charged the fee again. After the
+family step, the wizard checks the email
+(`LeadManagement::registrationFeeAlreadyCovered`): the fee is waived when that
+email's account — the parent, or any of their children — has already been
+charged this semester's registration fee, or when an earlier registration from
+the same email for the same semester has been paid. The students and review
+pages say so, and the quote keeps the line at $0 ("waived"). A new semester is
+a new fee. The charges posted at confirmation follow the same once-per-family
+rule, so the two always agree.
+
 ### Who pays which tuition
 
 One flow serves Bronx residents, families outside the Bronx, and online

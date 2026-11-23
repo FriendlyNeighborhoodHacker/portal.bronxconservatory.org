@@ -52,6 +52,12 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
       <a href="/register/family.php">Change address</a></p>
     <?php endif; ?>
 
+    <?php if (registration_fee_waived($state, $semester)): ?>
+    <p class="flash">Welcome back! Your family has already paid the <?=h(registration_semester_label($semester))?>
+      registration fee (<?=$dollars(SemesterManagement::registrationFeeCents($semester))?>, one per family per semester),
+      so it is <strong>waived</strong> for this registration.</p>
+    <?php endif; ?>
+
     <h3>Student Information</h3>
     <p class="small">Please tell us about the student(s) who will be studying.</p>
 
