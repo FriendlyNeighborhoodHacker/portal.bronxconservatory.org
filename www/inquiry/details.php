@@ -90,7 +90,7 @@ ApplicationUI::minimalHeaderHtml('Request Information — Details');
     </label>
 
     <div class="actions actions-split">
-      <button type="submit" name="action" value="back" class="btn-outline">Back</button>
+      <button type="submit" name="action" value="back" class="btn-outline" formnovalidate>Back</button>
       <span class="actions-right">
         <button type="submit" name="action" value="next" class="btn-cta">Submit</button>
       </span>

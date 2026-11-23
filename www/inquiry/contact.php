@@ -50,7 +50,7 @@ ApplicationUI::minimalHeaderHtml('Request Information — Contact');
     </label>
     <label class="inline">
       <input type="checkbox" name="sms_consent" value="1"<?=!empty($contact['sms_consent']) ? ' checked' : ''?>>
-      May we text you with important updates from Bronx Conservatory of Music?
+      May we text you with important updates from Bronx Conservatory of Music? (limited to three per year)
     </label>
     <p class="small">We send out messages three times a year. See
       <a href="https://www.bronxconservatory.org/privacy-policy/" target="_blank" rel="noopener">Privacy
