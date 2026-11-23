@@ -4,6 +4,26 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/LeadManagement.php';
 require_once __DIR__ . '/../lib/InquiryManagement.php';
 
+/**
+ * The semester a conversion places reservations into, unless the admin picks
+ * another on the convert page: the one the lead registered for, else the one
+ * open for registration, else the admin's working semester.
+ */
+function lead_convert_default_semester_id(array $lead): ?int {
+    require_once __DIR__ . '/../lib/SemesterManagement.php';
+    $candidates = [
+        (int)($lead['semester_id'] ?? 0),
+        (int)Settings::registrationSemesterId(),
+        (int)Application::adminSelectedSemesterId(),
+    ];
+    foreach ($candidates as $id) {
+        if ($id > 0 && SemesterManagement::find($id)) {
+            return $id;
+        }
+    }
+    return null;
+}
+
 function lead_status_html(string $status): string {
     $label = LeadManagement::STATUS_LABELS[$status] ?? $status;
     return '<span class="status-pill lead-' . h($status) . '">' . h($label) . '</span>';

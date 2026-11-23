@@ -55,12 +55,13 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
   <?php foreach ($students as $student): ?>
     <?php if (!empty($student['converted_student_user_id'])): ?>
       <?php
-        // The slot(s) this student holds now, in the semester the lead was
-        // for — read live, so the status here follows the Schedule.
+        // The slot(s) this student holds now, in any semester (the admin
+        // chooses the semester when converting) — read live, so the status
+        // here follows the Schedule.
         $studentUrl = '/admin/student.php?id=' . (int)$student['converted_student_user_id'];
         $slots = ReservationManagement::reservationsForStudent(
             (int)$student['converted_student_user_id'],
-            !empty($lead['semester_id']) ? (int)$lead['semester_id'] : null
+            null
         );
         $statusLabels = [
             'pending_reach_out' => 'Pending reach out',

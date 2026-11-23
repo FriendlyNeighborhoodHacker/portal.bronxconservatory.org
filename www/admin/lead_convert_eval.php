@@ -34,10 +34,17 @@ foreach (LeadManagement::studentsForLead($leadId) as $leadStudent) {
     $lessonLengths[(int)$leadStudent['id']] = (int)($leadStudent['lesson_length_minutes'] ?? 0);
 }
 
-$convertFail = function (string $message) use ($leadId, $postedStudents): void {
+// The semester chosen on the convert page; the page's default when the post
+// carries none or one that no longer exists.
+$placeSemesterId = (int)($_POST['semester_id'] ?? 0);
+if (!$placeSemesterId || !SemesterManagement::find($placeSemesterId)) {
+    $placeSemesterId = (int)lead_convert_default_semester_id($lead);
+}
+
+$convertFail = function (string $message) use ($leadId, $postedStudents, $placeSemesterId): void {
     $_SESSION['lead_flash_error'] = $message;
-    $_SESSION['lead_convert_old'] = ['students' => $postedStudents];
-    header('Location: /admin/lead_convert.php?id=' . $leadId);
+    $_SESSION['lead_convert_old'] = ['students' => $postedStudents, 'semester_id' => $placeSemesterId];
+    header('Location: /admin/lead_convert.php?id=' . $leadId . ($placeSemesterId ? '&semester_id=' . $placeSemesterId : ''));
     exit;
 };
 
@@ -64,8 +71,7 @@ foreach ($postedStudents as $leadStudentId => $row) {
             'day_of_week' => (int)($row['res_day'] ?? 6),
             'start_time' => $resTime,
             'duration_minutes' => $duration,
-            'semester_id' => !empty($lead['semester_id'])
-                ? (int)$lead['semester_id'] : Application::adminSelectedSemesterId(),
+            'semester_id' => $placeSemesterId,
         ];
         $picks[$leadStudentId] = $entry['reservation'];
     } elseif ($resLocation || $resTeacher || $resTime !== '') {
@@ -109,8 +115,7 @@ try {
     $bits[] = $result['parent_existed'] ? 'Adopted the existing parent account' : 'Created the parent account';
     $bits[] = count($result['student_user_ids']) . ' student' . (count($result['student_user_ids']) === 1 ? '' : 's');
     if ($result['reservation_ids']) {
-        $placedSemesterId = !empty($lead['semester_id']) ? (int)$lead['semester_id'] : Application::adminSelectedSemesterId();
-        $placedSemester = $placedSemesterId ? SemesterManagement::find($placedSemesterId) : null;
+        $placedSemester = $placeSemesterId ? SemesterManagement::find($placeSemesterId) : null;
         $bits[] = count($result['reservation_ids']) . ' reservation' . (count($result['reservation_ids']) === 1 ? '' : 's')
             . ' placed' . ($placedSemester ? ' in ' . SemesterManagement::label($placedSemester) : '') . ' (pending confirmation)';
     }

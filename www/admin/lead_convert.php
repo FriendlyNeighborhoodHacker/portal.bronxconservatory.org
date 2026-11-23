@@ -29,19 +29,33 @@ $instruments = InstrumentCatalog::all();
 
 $existingParent = UserManagement::findByEmailAnyState((string)$lead['email']);
 
-// The semester the lead registered for (falls back to the admin's working
-// semester so conversion still works if the lead predates a semester).
-$semesterId = !empty($lead['semester_id']) ? (int)$lead['semester_id'] : Application::adminSelectedSemesterId();
-$semester = $semesterId ? SemesterManagement::find($semesterId) : null;
-
-// The same weekly grid the Semester Schedule draws, reused as a slot picker.
-$grid = $semester ? ScheduleGridData::semesterWeeklyGrid((int)$semester['id']) : null;
-$canPlace = $grid && $grid['columns'];
-
 $flashError = $_SESSION['lead_flash_error'] ?? null;
 unset($_SESSION['lead_flash_error']);
 $old = $_SESSION['lead_convert_old'] ?? [];
 unset($_SESSION['lead_convert_old']);
+
+// The semester the reservations go into is the admin's choice (the picker
+// above the students). It defaults to the lead's own semester, else the one
+// open for registration — not whichever semester the admin last worked in.
+$defaultSemesterId = lead_convert_default_semester_id($lead);
+$semesterId = (int)($_GET['semester_id'] ?? $old['semester_id'] ?? 0) ?: (int)$defaultSemesterId;
+$semester = $semesterId ? SemesterManagement::find($semesterId) : null;
+if (!$semester && $defaultSemesterId) {
+    $semester = SemesterManagement::find($defaultSemesterId);
+}
+$semesterChoices = SemesterManagement::currentAndFutureSemesters();
+if ($semester && !in_array((int)$semester['id'], array_map(fn($s) => (int)$s['id'], $semesterChoices), true)) {
+    $semesterChoices[] = $semester;
+}
+// Picks belong to one semester's grid; a failed submit's picks are only
+// restored when the page is showing the semester they were made in.
+if ($old && (int)($old['semester_id'] ?? 0) !== (int)($semester['id'] ?? 0)) {
+    $old = [];
+}
+
+// The same weekly grid the Semester Schedule draws, reused as a slot picker.
+$grid = $semester ? ScheduleGridData::semesterWeeklyGrid((int)$semester['id']) : null;
+$canPlace = $grid && $grid['columns'];
 
 $paid = (int)$lead['amount_paid_cents'] > 0;
 
@@ -113,9 +127,25 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
   </table>
 </div>
 
+<?php if (count($semesterChoices) > 1): ?>
+<form method="get" action="/admin/lead_convert.php" class="card">
+  <input type="hidden" name="id" value="<?=$leadId?>">
+  <label>Semester for the reservation<?=count($students) === 1 ? '' : 's'?>
+    <select name="semester_id" onchange="this.form.submit()">
+      <?php foreach ($semesterChoices as $choice): ?>
+      <option value="<?=(int)$choice['id']?>"<?=$semester && (int)$choice['id'] === (int)$semester['id'] ? ' selected' : ''?>><?=h(SemesterManagement::label($choice))?><?=
+          (int)$choice['id'] === (int)Settings::registrationSemesterId() ? ' (open for registration)' : ''?></option>
+      <?php endforeach; ?>
+    </select>
+  </label>
+  <p class="small">Changing the semester reloads this page with that semester&rsquo;s schedule, and clears any time already chosen below.</p>
+</form>
+<?php endif; ?>
+
 <form method="post" action="/admin/lead_convert_eval.php" class="stack">
   <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
   <input type="hidden" name="lead_id" value="<?=$leadId?>">
+  <input type="hidden" name="semester_id" value="<?=(int)($semester['id'] ?? 0)?>">
 
   <?php foreach ($students as $student): ?>
     <?php
