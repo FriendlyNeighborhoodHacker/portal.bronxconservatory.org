@@ -168,11 +168,38 @@ function require_login(): void {
     }
 }
 
+/**
+ * End the request with a 403 and a way forward: a link to the login page that
+ * comes back to this address (GET only — a form post cannot be replayed).
+ * The usual cause is a session that timed out, or being signed in to an
+ * account without the access.
+ */
+function deny_access(string $message, bool $signedIn): void {
+    http_response_code(403);
+    $isGet = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET';
+    $next = $isGet ? (string)($_SERVER['REQUEST_URI'] ?? '') : '';
+    $loginUrl = '/login.php' . ($next !== '' ? '?next=' . urlencode($next) : '');
+    $e = static fn(string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+    echo '<!doctype html><html><head><meta charset="utf-8">'
+        . '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        . '<title>' . $e($message) . '</title><link rel="stylesheet" href="/styles.css"></head>'
+        . '<body class="minimal"><div style="max-width:520px;margin:60px auto;padding:0 16px;text-align:center;">'
+        . '<h1>' . $e($message) . '</h1>'
+        . ($signedIn
+            ? '<p>The account you are signed in with does not have access to this page.</p>'
+                . '<p><a class="button" href="/">Go to your home page</a> '
+                . '<a class="button" href="/logout.php">Log out</a></p>'
+                . '<p class="small">To use a different account, log out and then log in again.</p>'
+            : '<p>You are not signed in — your session may have timed out.</p>'
+                . '<p><a class="button primary" href="' . $e($loginUrl) . '">Log in</a></p>')
+        . '</div></body></html>';
+    exit;
+}
+
 function require_admin(): void {
     $user = current_user();
     if (!$user || empty($user['is_admin'])) {
-        http_response_code(403);
-        die('Admin access required');
+        deny_access('Admin access required', (bool)$user);
     }
 }
 
@@ -194,8 +221,7 @@ function is_developer(): bool {
 
 function require_developer(): void {
     if (!is_developer()) {
-        http_response_code(403);
-        die('Developer access required');
+        deny_access('Developer access required', (bool)current_user());
     }
 }
 
