@@ -24,6 +24,39 @@ class LessonUIHelper {
         return $counts;
     }
 
+    /**
+     * The most recent note on each of these lessons, as [lesson_id => note
+     * row] — one query however many lessons a page lists. Lessons with no
+     * notes are absent from the map.
+     */
+    public static function latestNotesForLessons(array $lessons): array {
+        $ids = array_map(fn($lesson) => (int)$lesson['id'], $lessons);
+        $latest = [];
+        // notesForLessons returns each lesson's notes newest first, so the
+        // first one seen for a lesson is its latest.
+        foreach (NotesManagement::notesForLessons($ids) as $note) {
+            $latest[(int)$note['lesson_id']] ??= $note;
+        }
+        return $latest;
+    }
+
+    /**
+     * A note's text squeezed onto one line for a preview: whitespace
+     * collapsed, and cut at a word boundary with "…" past $maxChars.
+     */
+    public static function notePreviewText(string $body, int $maxChars = 100): string {
+        $text = trim((string)preg_replace('/\s+/u', ' ', $body));
+        if (mb_strlen($text) <= $maxChars) {
+            return $text;
+        }
+        $cut = mb_substr($text, 0, $maxChars);
+        $lastSpace = mb_strrpos($cut, ' ');
+        if ($lastSpace !== false && $lastSpace > $maxChars * 0.6) {
+            $cut = mb_substr($cut, 0, $lastSpace);
+        }
+        return rtrim($cut, " \t.,;:") . '…';
+    }
+
     /** "2 notes · 1 material" — empty string when there is nothing to count. */
     public static function countsLabel(int $notes, int $materials): string {
         $parts = [];

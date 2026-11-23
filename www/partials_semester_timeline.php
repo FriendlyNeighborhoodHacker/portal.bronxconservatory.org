@@ -17,8 +17,9 @@ require_once __DIR__ . '/lib/LessonUIHelper.php';
  * @param array    $entries  from ScheduleTimeline::forTeacher/forStudents
  * @param callable $whoFn    fn(array $lesson): string — "" to omit the line
  * @param bool     $withDetailLinks  add a compact notes-and-materials link to
- *   each lesson row — "2 notes · 1 material" where the lesson has any (so a
- *   completed lesson's teacher notes are one tap away), "Add Note" where it
+ *   each lesson row — the latest note's text in a shaded box where there is
+ *   one (plus "2 notes · 1 material" when there is more than that note),
+ *   the counts alone for materials with no notes, "Add Note" where it
  *   has none yet. The links open the lesson detail modal, so a page passing
  *   true must also render LessonDetailUIManager::renderModal().
  */
@@ -27,10 +28,10 @@ function semester_timeline_html(array $entries, callable $whoFn, bool $withDetai
         return '<div class="card"><p>Nothing scheduled yet.</p></div>';
     }
 
-    $counts = $withDetailLinks
-        ? LessonUIHelper::countsForLessons(array_column(
-            array_filter($entries, fn($e) => $e['kind'] === 'lesson'), 'lesson'))
-        : [];
+    $timelineLessons = array_column(
+        array_filter($entries, fn($e) => $e['kind'] === 'lesson'), 'lesson');
+    $counts = $withDetailLinks ? LessonUIHelper::countsForLessons($timelineLessons) : [];
+    $latestNotes = $withDetailLinks ? LessonUIHelper::latestNotesForLessons($timelineLessons) : [];
 
     $labels = ScheduleTimeline::semesterLabels($entries);
     $tagRows = count($labels) > 1;
@@ -88,7 +89,19 @@ function semester_timeline_html(array $entries, callable $whoFn, bool $withDetai
         if ($withDetailLinks) {
             $lessonCounts = $counts[(int)$lesson['id']] ?? ['notes' => 0, 'materials' => 0];
             $countLabel = LessonUIHelper::countsLabel($lessonCounts['notes'], $lessonCounts['materials']);
-            if ($countLabel !== '') {
+            $latestNote = $latestNotes[(int)$lesson['id']] ?? null;
+            if ($latestNote) {
+                // The note itself, not just "1 note": a family reads what the
+                // teacher said right on the calendar, and taps for the rest.
+                $html .= '<a href="#" class="sem-date-note-preview" data-lesson-detail="'
+                    . (int)$lesson['id'] . '">' . h(LessonUIHelper::notePreviewText((string)$latestNote['body'])) . '</a>';
+                // The count only adds something when the preview isn't the
+                // whole story: more notes, or materials too.
+                if ($lessonCounts['notes'] > 1 || $lessonCounts['materials'] > 0) {
+                    $html .= '<div class="small" style="margin-top:2px;"><a href="#" data-lesson-detail="'
+                        . (int)$lesson['id'] . '">' . h($countLabel) . '</a></div>';
+                }
+            } elseif ($countLabel !== '') {
                 $html .= '<div class="small" style="margin-top:2px;"><a href="#" data-lesson-detail="'
                     . (int)$lesson['id'] . '">' . h($countLabel) . '</a></div>';
             } elseif (!$cancelled) {

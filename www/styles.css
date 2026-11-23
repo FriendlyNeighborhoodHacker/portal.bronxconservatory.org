@@ -1567,6 +1567,27 @@ body.auth .brand-logo {
   padding-left: 16px;
 }
 
+/* A lesson's latest note, quoted on the calendar row so it stands out;
+   tapping it opens the lesson's notes. */
+.sem-date-note-preview {
+  display: block;
+  margin: 6px 0 2px 16px;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-notes-text);
+  background: var(--color-notes-bg);
+  border: 1px solid var(--color-notes-border);
+  border-radius: 6px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.sem-date-note-preview:hover {
+  background: var(--color-notes-bg-hover);
+  text-decoration: none;
+}
+
 /* Which semester a row belongs to. Only rendered once the list spans more
    than one, so a date is never ambiguous. */
 .sem-date-tag {
