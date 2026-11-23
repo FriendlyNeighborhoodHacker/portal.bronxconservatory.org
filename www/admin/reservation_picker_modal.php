@@ -165,7 +165,11 @@ function render_reservation_picker_modal(int $semesterId, array $grid, ?array $d
           cell.classList.add('picked');
           if (!first) {
             first = cell;
-            if (!cell.textContent.trim()) { cell.textContent = 'Chosen'; cell.dataset.pickedLabel = '1'; }
+            if (!cell.textContent.trim()) {
+              // The student's name, as a booked cell would show it.
+              cell.textContent = document.getElementById('slotPickWho').textContent.trim() || 'Chosen';
+              cell.dataset.pickedLabel = '1';
+            }
           }
         }
         if (first && first.scrollIntoView) {
