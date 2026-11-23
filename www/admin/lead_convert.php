@@ -193,9 +193,11 @@ header_html('Convert lead — ' . $lead['parent_first_name'] . ' ' . $lead['pare
                 data-student-name="<?=h($student['first_name'] . ' ' . $student['last_name'])?>"
                 data-default-duration="<?=$defaultDuration?>">Choose a time…</button>
       </div>
-      <p class="small">Placed reservations start as <strong>pending confirmation</strong> —
-        no lessons are generated and nothing is charged until you confirm them on the
-        Schedule.</p>
+      <?php // Shown only while a time is chosen; the picker toggles it. ?>
+      <p id="pick<?=$lsId?>_note" class="flash<?=$pickedSummary !== '' ? '' : ' hidden'?>" style="margin-top:8px;">
+        Converting this lead will create a reservation for this time with a
+        <strong>&ldquo;pending confirmation&rdquo;</strong> status. It will <strong>not</strong> charge
+        anything to the user&rsquo;s account until the reservation is confirmed.</p>
       <?php else: ?>
       <p class="small">No semester schedule to place into<?=$semester ? ' (no teachers are assigned to locations yet)' : ''?> —
         convert now and place them from the Schedule grid later.</p>

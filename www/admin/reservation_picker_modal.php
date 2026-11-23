@@ -186,6 +186,8 @@ function render_reservation_picker_modal(int $semesterId, array $grid, ?array $d
             document.getElementById(p + 'dur').value = duration;
             document.getElementById(p + 'summary').textContent = json.summary;
             document.getElementById(p + 'clear').classList.remove('hidden');
+            var note = document.getElementById(p + 'note');
+            if (note) note.classList.remove('hidden');
             closeModal();
           })
           .catch(function () { showError('Network error.'); });
@@ -213,6 +215,8 @@ function render_reservation_picker_modal(int $semesterId, array $grid, ?array $d
           document.getElementById(p + 'summary').textContent =
             'not placed — convert now and place them from the Schedule later';
           clear.classList.add('hidden');
+          var note = document.getElementById(p + 'note');
+          if (note) note.classList.add('hidden');
           return;
         }
 
