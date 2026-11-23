@@ -40,7 +40,7 @@ Key columns:
   `preferred_contact_method` ENUM(`email`,`phone`,`text`), and a five-part
   address block.
 - **Emergency & personal:** `emergency_contact_name`/`_phone`,
-  `medical_notes`, `shirt_size`.
+  `medical_notes`.
 - **`photo_public_file_id`** → `public_files` (`ON DELETE SET NULL`) — the
   profile photo.
 - **`is_deleted`** — soft delete. The row and its history stay, but the user

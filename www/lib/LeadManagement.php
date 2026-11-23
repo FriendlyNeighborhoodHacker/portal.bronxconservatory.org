@@ -48,13 +48,6 @@ class LeadManagement {
 
     public const LESSON_LENGTHS = [30, 60];
 
-    // Recital/performance shirt sizes. Kept within users.shirt_size's
-    // VARCHAR(10) so a converted student's size copies across as-is.
-    public const SHIRT_SIZES = [
-        'Youth XS', 'Youth S', 'Youth M', 'Youth L',
-        'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL',
-    ];
-
     public const AVAILABILITY_BLOCKS = [
         '9-11' => '9:00AM–11:00AM',
         '11-1' => '11:00AM–1:00PM',
@@ -294,10 +287,6 @@ class LeadManagement {
             if (!in_array($length, self::LESSON_LENGTHS, true)) {
                 throw new InvalidArgumentException('Please choose a lesson length for ' . $sFirst . '.');
             }
-            $shirtSize = trim((string)($student['shirt_size'] ?? ''));
-            if ($shirtSize !== '' && !in_array($shirtSize, self::SHIRT_SIZES, true)) {
-                throw new InvalidArgumentException('Please choose a shirt size for ' . $sFirst . ' from the list.');
-            }
             $cleanStudents[] = [
                 'first_name' => $sFirst,
                 'last_name' => $sLast,
@@ -305,7 +294,6 @@ class LeadManagement {
                 'instrument' => $instrument,
                 'lesson_length_minutes' => $length,
                 'guitar_ensemble' => !empty($student['guitar_ensemble']) ? 1 : 0,
-                'shirt_size' => $shirtSize !== '' ? $shirtSize : null,
             ];
         }
         if (!$cleanStudents) {
@@ -371,14 +359,13 @@ class LeadManagement {
             $leadId = $replaceLeadId ?? (int)$pdo->lastInsertId();
 
             $insert = $pdo->prepare(
-                'INSERT INTO lead_students (lead_id, first_name, last_name, class_of, instrument, lesson_length_minutes, guitar_ensemble, shirt_size)
-                 VALUES (?,?,?,?,?,?,?,?)'
+                'INSERT INTO lead_students (lead_id, first_name, last_name, class_of, instrument, lesson_length_minutes, guitar_ensemble)
+                 VALUES (?,?,?,?,?,?,?)'
             );
             foreach ($cleanStudents as $student) {
                 $insert->execute([
                     $leadId, $student['first_name'], $student['last_name'], $student['class_of'],
                     $student['instrument'], $student['lesson_length_minutes'], $student['guitar_ensemble'],
-                    $student['shirt_size'],
                 ]);
             }
             $pdo->commit();
@@ -1009,11 +996,6 @@ class LeadManagement {
                 'date_of_birth_is_approximate' => $dobIsApproximate,
                 'class_of' => $leadStudent['class_of'] ?? null,
             ]);
-            if (trim((string)($leadStudent['shirt_size'] ?? '')) !== '') {
-                UserManagement::updateProfile($ctx, $studentUserId, [
-                    'shirt_size' => (string)$leadStudent['shirt_size'],
-                ]);
-            }
             $instrumentId = (int)($opts['instrument_id'] ?? 0)
                 ?: self::defaultInstrumentIdForLeadStudent($leadStudent);
             if ($instrumentId) {

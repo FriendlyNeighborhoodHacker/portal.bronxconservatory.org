@@ -115,7 +115,6 @@ final class UserManagementTest extends TestCase
             'address_street_1' => '1 Grand Concourse', 'address_street_2' => 'Apt 2',
             'address_city' => 'Bronx', 'address_state' => 'NY', 'address_zip' => '10451',
             'emergency_contact_name' => 'Ed Emergency', 'emergency_contact_phone' => '718-555-0102',
-            'shirt_size' => 'L',
         ]);
 
         $user = UserManagement::findById($id);
@@ -124,7 +123,6 @@ final class UserManagementTest extends TestCase
         $this->assertSame('1 Grand Concourse', $user['address_street_1']);
         $this->assertSame('10451', $user['address_zip']);
         $this->assertSame('Ed Emergency', $user['emergency_contact_name']);
-        $this->assertSame('L', $user['shirt_size']);
 
         // Cleared fields come back as NULL rather than empty strings.
         UserManagement::updateProfile(new UserContext($id, false), $id, ['suffix' => '']);
@@ -155,12 +153,12 @@ final class UserManagementTest extends TestCase
         $parentId = fx_parent_of($childId);
 
         UserManagement::updateProfile(new UserContext($parentId, false), $childId, [
-            'cell_phone' => '718-555-0200', 'shirt_size' => 'YM',
+            'cell_phone' => '718-555-0200', 'home_phone' => '718-555-0201',
         ]);
 
         $child = UserManagement::findById($childId);
         $this->assertSame('718-555-0200', $child['cell_phone']);
-        $this->assertSame('YM', $child['shirt_size']);
+        $this->assertSame('718-555-0201', $child['home_phone']);
     }
 
     public function testUnrelatedUserMayNotUpdateSomeoneElsesProfile(): void

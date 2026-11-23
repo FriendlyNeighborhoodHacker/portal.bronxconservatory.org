@@ -87,14 +87,6 @@ ApplicationUI::minimalHeaderHtml('Register — Students');
             <?php endforeach; ?>
           </select>
         </label>
-        <label>Shirt size <span class="small">(optional)</span>
-          <select name="students[<?=$i?>][shirt_size]">
-            <option value="">Choose…</option>
-            <?php foreach (LeadManagement::SHIRT_SIZES as $size): ?>
-            <option value="<?=h($size)?>"<?=($student['shirt_size'] ?? '') === $size ? ' selected' : ''?>><?=h($size)?></option>
-            <?php endforeach; ?>
-          </select>
-        </label>
         <label>Lesson length
           <select name="students[<?=$i?>][lesson_length_minutes]">
             <option value="30"<?=(int)($student['lesson_length_minutes'] ?? 30) === 30 ? ' selected' : ''?><?=$priceAttrs($fee(30, false), $fee(30, true), '30 minutes (', '/semester)')?>>30 minutes (<?=$dollars($fee(30, $nonresident))?>/semester)</option>

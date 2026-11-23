@@ -25,7 +25,6 @@ header_html('Edit Profile');
   <form method="post" action="/profile/edit_eval.php" class="stack" data-warn-unsaved>
     <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
     <?php person_basic_info_fields_html($values); ?>
-    <?php person_other_fields_html($values); ?>
 
     <div class="actions">
       <button class="primary" type="submit">Save Profile</button>

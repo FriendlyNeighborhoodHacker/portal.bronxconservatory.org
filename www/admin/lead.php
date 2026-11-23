@@ -194,7 +194,7 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
         <?php if ($isInquiry): ?>
           <th>Age</th><th>New or continuing</th><th>Instruments of interest</th>
         <?php else: ?>
-          <th>Class of</th><th>Instrument</th><th>Lesson</th><th>Guitar Ensemble</th><th>Shirt</th>
+          <th>Class of</th><th>Instrument</th><th>Lesson</th><th>Guitar Ensemble</th>
         <?php endif; ?>
         <th>Converted</th>
       </tr>
@@ -212,7 +212,6 @@ header_html($lead['parent_first_name'] . ' ' . $lead['parent_last_name'] . ' —
           <td><?=h($student['instrument'] ?: '—')?></td>
           <td><?=!empty($student['lesson_length_minutes']) ? (int)$student['lesson_length_minutes'] . ' min' : '—'?></td>
           <td><?=!empty($student['guitar_ensemble']) ? 'Yes' : '—'?></td>
-          <td><?=h($student['shirt_size'] ?: '—')?></td>
         <?php endif; ?>
         <td class="small"><?=!empty($student['converted_student_user_id'])
             ? '<a href="/admin/student.php?id=' . (int)$student['converted_student_user_id'] . '">view student</a>'

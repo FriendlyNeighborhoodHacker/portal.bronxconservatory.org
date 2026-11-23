@@ -184,7 +184,6 @@ function import_columns_help_html(array $flow): string {
                 ['Address Zip', 'optional', ''],
                 ['Emergency Contact Name', 'optional', ''],
                 ['Emergency Contact Phone', 'optional', ''],
-                ['Shirt Size', 'optional', ''],
             ];
             $example = "First Name,Last Name,Email,Cell Phone Number\n"
                 . "Marisol,Vega,marisol@example.org,718-555-0101\n"

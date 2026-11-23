@@ -52,7 +52,6 @@ header_html('Edit ' . $name);
     <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
     <input type="hidden" name="id" value="<?=$childId?>">
     <?php person_basic_info_fields_html($values); ?>
-    <?php person_other_fields_html($values); ?>
     <div class="actions">
       <button class="primary" type="submit">Save</button>
       <a class="button" href="/parent/child.php?id=<?=$childId?>">Schedule &amp; notes</a>

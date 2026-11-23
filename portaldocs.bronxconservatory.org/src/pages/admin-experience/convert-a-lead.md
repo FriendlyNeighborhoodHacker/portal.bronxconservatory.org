@@ -62,8 +62,8 @@ Then `LeadManagement::convertLead` runs, step by step:
    fields — an existing account's data is never blanked. Creation makes a
    user with no password (`password_hash = ''`) and **sends no email**.
 2. **Students** — for each lead student not yet converted: a user with no
-   email and no login, a student profile (DOB, class-of), instruments, shirt
-   size, and the `parenthood` link. Each student's
+   email and no login, a student profile (DOB, class-of), instruments,
+   and the `parenthood` link. Each student's
    `converted_student_user_id` is written immediately, so progress is durable.
 3. **Reservations** — the slot is re-checked at booking time, then:
    - **the lead has paid** (in full, or the first installment): the

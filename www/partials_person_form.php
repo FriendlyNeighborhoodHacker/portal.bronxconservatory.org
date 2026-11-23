@@ -76,16 +76,6 @@ function person_basic_info_fields_html(array $form): void {
     <?php
 }
 
-/** The "Other" inputs, shown on the self-service profile screens. */
-function person_other_fields_html(array $form): void {
-    ?>
-    <h3>Other</h3>
-    <div class="grid-2">
-      <label>Shirt size <input type="text" name="shirt_size" value="<?=h((string)($form['shirt_size'] ?? ''))?>"></label>
-    </div>
-    <?php
-}
-
 /**
  * Collect the person fields from $_POST for updateProfile. Only keys the
  * form actually posted are returned, so a screen that omits a section (the
@@ -119,7 +109,6 @@ function person_field_labels(): array {
         'home_phone' => 'Home phone',
         'emergency_contact_name' => 'Contact name',
         'emergency_contact_phone' => 'Contact phone',
-        'shirt_size' => 'Shirt size',
     ];
 }
 
@@ -157,7 +146,6 @@ function person_details_html(array $user): string {
         'Name' => ['first_name', 'last_name', 'suffix', 'preferred_name'],
         'Contact' => ['email', 'cell_phone', 'secondary_email', 'home_phone'],
         'Emergency Contact' => ['emergency_contact_name', 'emergency_contact_phone'],
-        'Other' => ['shirt_size'],
     ];
 
     $html = '';

@@ -20,7 +20,7 @@ told registration is closed.
    siblings: name, graduation year (`class_of`), instrument (the form's
    choices include a combined "Cello/Bass" that an admin resolves to a real
    instrument at convert time), lesson length (30 or 60 minutes), optional
-   Guitar Ensemble, shirt size. Plus scheduling preferences: preferred
+   Guitar Ensemble. Plus scheduling preferences: preferred
    location (either site, or Online Lessons), preferred days, availability blocks (9–11, 11–1, 1–3, 3–5, 5–7),
    and free-text scheduling notes ("siblings need back-to-back").
 3. **Policies** (`policies.php`) — the conservatory's policies, agreed to with

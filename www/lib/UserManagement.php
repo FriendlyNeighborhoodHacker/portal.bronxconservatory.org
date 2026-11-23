@@ -444,7 +444,7 @@ class UserManagement {
             'suffix', 'preferred_name', 'secondary_email', 'cell_phone', 'home_phone',
             'preferred_contact_method',
             'address_street_1', 'address_street_2', 'address_city', 'address_state', 'address_zip',
-            'emergency_contact_name', 'emergency_contact_phone', 'medical_notes', 'shirt_size',
+            'emergency_contact_name', 'emergency_contact_phone', 'medical_notes',
         ];
         $set = [];
         $params = [];

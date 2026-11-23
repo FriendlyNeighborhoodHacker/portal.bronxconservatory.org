@@ -58,7 +58,7 @@ The students named on a lead. The two sources fill different columns:
 
 | | Registration lead | Inquiry lead |
 | --- | --- | --- |
-| Filled | `instrument` (as entered, incl. "Cello/Bass"), `lesson_length_minutes` (30 or 60), `class_of`, `guitar_ensemble`, `shirt_size` | `age`, `enrollment_status` ENUM(`new`,`continuing`), `instruments_of_interest` (JSON) + `instruments_other` |
+| Filled | `instrument` (as entered, incl. "Cello/Bass"), `lesson_length_minutes` (30 or 60), `class_of`, `guitar_ensemble` | `age`, `enrollment_status` ENUM(`new`,`continuing`), `instruments_of_interest` (JSON) + `instruments_other` |
 | Left NULL | inquiry columns | `instrument`, `lesson_length_minutes` — nothing has been decided yet |
 
 The mapping to a real `instruments` row is picked by the admin at convert

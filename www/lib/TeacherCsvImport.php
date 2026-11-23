@@ -29,7 +29,6 @@ class TeacherCsvImport {
             'address_zip' => 'Address Zip',
             'emergency_contact_name' => 'Emergency Contact Name',
             'emergency_contact_phone' => 'Emergency Contact Phone',
-            'shirt_size' => 'Shirt Size',
         ];
     }
 
@@ -196,7 +195,7 @@ class TeacherCsvImport {
         $columns = [
             'suffix', 'preferred_name', 'cell_phone', 'secondary_email', 'home_phone',
             'address_street_1', 'address_street_2', 'address_city', 'address_state', 'address_zip',
-            'emergency_contact_name', 'emergency_contact_phone', 'shirt_size',
+            'emergency_contact_name', 'emergency_contact_phone',
         ];
         $set = ['first_name = ?', 'last_name = ?'];
         $params = [trim((string)$row['first_name']), trim((string)$row['last_name'])];

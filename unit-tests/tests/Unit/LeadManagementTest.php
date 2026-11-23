@@ -42,7 +42,6 @@ final class LeadManagementTest extends TestCase
         return $overrides + [
             'first_name' => 'Lucia', 'last_name' => 'Ramos', 'class_of' => 2031,
             'instrument' => 'Piano', 'lesson_length_minutes' => 30, 'guitar_ensemble' => 0,
-            'shirt_size' => 'Youth M',
         ];
     }
 
@@ -378,7 +377,6 @@ final class LeadManagementTest extends TestCase
             'bad length' => [[$this->parent(), [$this->student(['lesson_length_minutes' => 45])]]],
             'short phone' => [[$this->parent(['phone' => '123']), [$this->student()]]],
             'class of is an age' => [[$this->parent(), [$this->student(['class_of' => 9])]]],
-            'shirt size off the list' => [[$this->parent(), [$this->student(['shirt_size' => 'Huge'])]]],
         ];
         foreach ($cases as $label => [[$parent, $students]]) {
             try {
@@ -481,8 +479,6 @@ final class LeadManagementTest extends TestCase
         $st = pdo()->prepare('SELECT class_of FROM student_profiles WHERE user_id = ?');
         $st->execute([$studentId]);
         $this->assertSame(2031, (int)$st->fetchColumn());
-        // …and the shirt size onto the user record.
-        $this->assertSame('Youth M', UserManagement::findById($studentId)['shirt_size']);
         $parentRow = UserManagement::findById($parentId);
         $this->assertSame('rosa@example.org', $parentRow['email']);
         $this->assertSame('100 Willis Ave', $parentRow['address_street_1']);
