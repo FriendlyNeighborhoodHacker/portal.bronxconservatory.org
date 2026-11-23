@@ -620,6 +620,90 @@ final class LeadManagementTest extends TestCase
         $this->assertSame(0, Billing::parentCreditBalanceCents($parent));
     }
 
+    /**
+     * Two children on the installment plan, one placed at conversion and one
+     * later. Fixture semester: registration 50, 30-minute lessons 300,
+     * recital 25, installment fee 25 (per family).
+     */
+    public function testInstallmentSiblingsEachUseOnlyTheirFirstInstallment(): void
+    {
+        [$ctx, $teacher, $semesterId, $locationId, $dayOfWeek] = $this->convertSetup();
+        $semester = SemesterManagement::find($semesterId);
+        $registration = SemesterManagement::registrationFeeCents($semester);
+        $lessons = SemesterManagement::lessonFeeCents($semester, 30);
+        $recital = SemesterManagement::recitalFeeCents($semester);
+        $planFee = SemesterManagement::installmentPlanFeeCents($semester);
+        $this->assertGreaterThan(0, $planFee);
+
+        $leadId = LeadManagement::createLead(
+            null, $semesterId, $this->parent(),
+            [$this->student(), $this->student(['first_name' => 'Mateo'])], $this->scheduling(), true
+        );
+        $lead = LeadManagement::findLead($leadId);
+        // Due now: every fee, plus half of both tuitions.
+        $dueNow = (int)$lead['amount_due_now_cents'];
+        $this->assertSame($registration + 2 * $recital + $planFee + $lessons, $dueNow);
+        LeadManagement::attachCheckoutSession(null, $leadId, 'cs_is_1');
+        LeadManagement::recordLeadPayment($leadId, $dueNow, 'cs_is_1', 'pi_is_1');
+
+        // Convert, placing only the first child.
+        $leadStudents = LeadManagement::studentsForLead($leadId);
+        $result = LeadManagement::convertLead($ctx, $leadId, ['students' => [
+            (int)$leadStudents[0]['id'] => ['reservation' => [
+                'teacher_user_id' => $teacher, 'location_id' => $locationId, 'day_of_week' => $dayOfWeek,
+                'start_time' => '10:00', 'duration_minutes' => 30,
+            ]],
+        ]]);
+        $first = $result['student_user_ids'][(int)$leadStudents[0]['id']];
+        $second = $result['student_user_ids'][(int)$leadStudents[1]['id']];
+        $parent = $result['parent_user_id'];
+
+        // The first child: charged everything of theirs, paid their first
+        // installment, still owes the second half of the tuition — no more.
+        $this->assertSame(intdiv($lessons, 2), Billing::balanceForStudentCents($first));
+        // The rest of the payment waits for the second child: their recital
+        // fee and half their tuition.
+        $this->assertSame($recital + intdiv($lessons, 2), Billing::parentCreditBalanceCents($parent));
+        $this->assertSame($recital + intdiv($lessons, 2), $result['parent_credit_cents']);
+        $this->assertSame(0, Billing::balanceForStudentCents($second));
+
+        // A later charge to the first child does not raid the second child's money
+        // for the half of the tuition that is not due yet.
+        $this->assertSame(0, Billing::applyParentCreditToStudent($ctx, $first, $semesterId));
+
+        // The dialog for the second child: no second registration or installment fee.
+        $preview = Billing::confirmationChargesPreview($second, $semesterId, 30);
+        $this->assertSame($lessons + $recital, $preview['total_cents']);
+        $this->assertFalse($preview['installment_available']);
+        $this->assertTrue($preview['installment_default']);
+
+        // Confirm the second child, even ticking "include installment fee".
+        ReservationManagement::createReservation($ctx, [
+            'semester_id' => $semesterId, 'teacher_user_id' => $teacher, 'location_id' => $locationId,
+            'student_user_id' => $second, 'day_of_week' => $dayOfWeek, 'start_time' => '11:00',
+            'status' => 'confirmed',
+        ], ['include_installment_fee' => true]);
+
+        $count = fn(string $type) => (int)pdo()->query(
+            "SELECT COUNT(*) FROM ledger_entries WHERE accounting_type='debit' AND entry_type='$type'"
+        )->fetchColumn();
+        $this->assertSame(1, $count('registration'), 'one registration fee for the family');
+        $this->assertSame(1, $count('installment_plan_fee'), 'one installment fee for the family');
+
+        // Both children now owe exactly their second installment; the credit is used up.
+        $this->assertSame(intdiv($lessons, 2), Billing::balanceForStudentCents($second));
+        $this->assertSame(intdiv($lessons, 2), Billing::balanceForStudentCents($first));
+        $this->assertSame(0, Billing::parentCreditBalanceCents($parent));
+        // …which is the whole quote less what was paid.
+        $this->assertSame((int)$lead['amount_quoted_cents'] - $dueNow,
+            Billing::balanceForStudentCents($first) + Billing::balanceForStudentCents($second));
+
+        // The second child follows the family's plan, so is not "past due" for
+        // lacking a plan fee of their own.
+        $term = Billing::balanceSummaryForStudent($second)['semesters'][0];
+        $this->assertTrue($term['on_installment_plan']);
+    }
+
     public function testAPaidOnlyChildConvertedWithoutATimeKeepsTheCreditThemself(): void
     {
         [$ctx, , $semesterId] = $this->convertSetup();

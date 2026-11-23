@@ -57,8 +57,9 @@ class Billing {
             if (self::liveDebitCents($studentUserId, $semesterId, $entryType) > 0) {
                 continue;
             }
-            // The registration fee is one per family per semester.
-            if ($entryType === 'registration' && self::siblingCarriesRegistrationFee($studentUserId, $semesterId)) {
+            // The registration fee and the installment plan fee are each one
+            // per family per semester.
+            if (in_array($entryType, self::ONCE_PER_FAMILY, true) && self::siblingCarriesFee($studentUserId, $semesterId, $entryType)) {
                 continue;
             }
             self::insertEntry($ctx, $studentUserId, date('Y-m-d'), 'debit', $entryType, $amountCents, $semesterId, $description);
@@ -139,7 +140,7 @@ class Billing {
             }
             $willPost = self::liveDebitCents($studentUserId, $semesterId, $entryType) <= 0;
             $skipReason = $willPost ? null : 'already charged this semester';
-            if ($willPost && $entryType === 'registration' && self::siblingCarriesRegistrationFee($studentUserId, $semesterId)) {
+            if ($willPost && $entryType === 'registration' && self::siblingCarriesFee($studentUserId, $semesterId, 'registration')) {
                 $willPost = false;
                 $skipReason = 'one per family — already charged to a sibling this semester';
             }
@@ -159,8 +160,16 @@ class Billing {
             'lines' => $lines,
             'total_cents' => $total,
             'installment_fee_cents' => $feeCents,
+            // Not offered once the family has it: on this student, or on a sibling.
             'installment_available' => $feeCents > 0
-                && self::liveDebitCents($studentUserId, $semesterId, 'installment_plan_fee') <= 0,
+                && self::liveDebitCents($studentUserId, $semesterId, 'installment_plan_fee') <= 0
+                && !self::siblingCarriesFee($studentUserId, $semesterId, 'installment_plan_fee'),
+            // The family chose the plan when registering: the dialog ticks the box.
+            'installment_default' => self::familyOnInstallmentPlan($studentUserId, $semesterId),
+            // What a confirmation would leave for the second installment (see installmentHoldbackCents).
+            'installment_holdback_lessons_cents' => (int)(array_values(array_filter(
+                $lines, fn($line) => $line['entry_type'] === 'lessons' && $line['will_post']
+            ))[0]['amount_cents'] ?? 0),
             'installment_note' => SemesterManagement::installmentFeeNotice($semester),
         ];
     }
@@ -244,8 +253,9 @@ class Billing {
             $st->execute([$semesterId]);
             foreach ($st->fetchAll() as $student) {
                 $studentUserId = (int)$student['student_user_id'];
-                if (self::liveDebitCents($studentUserId, $semesterId, 'installment_plan_fee') > 0) {
-                    $skipped++;
+                if (self::liveDebitCents($studentUserId, $semesterId, 'installment_plan_fee') > 0
+                    || self::siblingCarriesFee($studentUserId, $semesterId, 'installment_plan_fee')) {
+                    $skipped++; // one installment fee per family per semester
                     continue;
                 }
                 $unpaid = false;
@@ -574,7 +584,10 @@ class Billing {
      * a debit on the parent's credit pointing at it. Returns the cents used.
      */
     public static function applyParentCreditToStudent(?UserContext $ctx, int $studentUserId, ?int $semesterId = null): int {
-        $owed = self::balanceForStudentCents($studentUserId);
+        // On the installment plan the second half of the tuition is left
+        // owing; the family's credit is kept for a sibling's first installment.
+        $owed = self::balanceForStudentCents($studentUserId)
+            - self::installmentHoldbackCents($studentUserId, $semesterId);
         $used = 0;
         foreach (self::parentIdsOfStudent($studentUserId) as $parentUserId) {
             if ($owed <= 0) {
@@ -1074,6 +1087,12 @@ class Billing {
                 $surplus = 0;
             }
 
+            // The installment plan is the family's: a sibling carrying the
+            // (one per family) fee puts this student on the same schedule.
+            $onPlan = (int)$row['installment_fee_cents'] > 0
+                || ($balance > 0 && $semesterId !== null
+                    && self::siblingCarriesFee($studentUserId, $semesterId, 'installment_plan_fee'));
+
             $counts = ($balance > 0 && $semesterId !== null)
                 ? self::lessonCountsForStudentInSemester($studentUserId, $semesterId, $today)
                 : ['total' => 0, 'elapsed' => 0];
@@ -1082,7 +1101,7 @@ class Billing {
                 ? self::semesterPaymentBehindReason(
                     $balance, $charged, $paid, (string)$row['start_date'],
                     $counts['elapsed'], $counts['total'],
-                    (int)$row['installment_fee_cents'] > 0,
+                    $onPlan,
                     $row['second_installment_due_date'] !== null ? (string)$row['second_installment_due_date'] : null,
                     $today
                 )
@@ -1098,7 +1117,7 @@ class Billing {
                 'second_installment_due_date' => $row['second_installment_due_date'] !== null
                     ? (string)$row['second_installment_due_date'] : null,
                 'installment_plan_fee_cents' => (int)round((float)($row['installment_plan_fee'] ?? 0) * 100),
-                'on_installment_plan' => (int)$row['installment_fee_cents'] > 0,
+                'on_installment_plan' => $onPlan,
                 'charged_cents' => $charged,
                 'paid_cents' => $paid,
                 'balance_cents' => $balance,
@@ -1111,7 +1130,7 @@ class Billing {
                         $balance, $charged, $paid,
                         $row['start_date'] !== null ? (string)$row['start_date'] : null,
                         $counts['total'],
-                        (int)$row['installment_fee_cents'] > 0,
+                        $onPlan,
                         $row['second_installment_due_date'] !== null ? (string)$row['second_installment_due_date'] : null
                     )
                     : null,
@@ -1435,7 +1454,7 @@ class Billing {
      * one per family per semester — which is also how the registration form
      * quotes it — so the second child confirmed is not charged it again.
      */
-    private static function siblingCarriesRegistrationFee(int $studentUserId, int $semesterId): bool {
+    private static function siblingCarriesFee(int $studentUserId, int $semesterId, string $entryType): bool {
         $st = self::pdo()->prepare(
             'SELECT DISTINCT sib.child_user_id
              FROM parenthood mine
@@ -1444,11 +1463,51 @@ class Billing {
         );
         $st->execute([$studentUserId, $studentUserId]);
         foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $siblingId) {
-            if (self::liveDebitCents((int)$siblingId, $semesterId, 'registration') > 0) {
+            if (self::liveDebitCents((int)$siblingId, $semesterId, $entryType) > 0) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** Fees charged once per family per semester, not once per child. */
+    private const ONCE_PER_FAMILY = ['registration', 'installment_plan_fee'];
+
+    /**
+     * Is this student's family paying this semester in two installments?
+     * Yes when the installment plan fee is on the student's ledger or a
+     * sibling's (it is one per family), or when the family chose the plan on
+     * a registration that has been paid and converted for this semester —
+     * which covers the time between converting and confirming a first slot.
+     */
+    public static function familyOnInstallmentPlan(int $studentUserId, int $semesterId): bool {
+        if (self::liveDebitCents($studentUserId, $semesterId, 'installment_plan_fee') > 0
+            || self::siblingCarriesFee($studentUserId, $semesterId, 'installment_plan_fee')) {
+            return true;
+        }
+        $st = self::pdo()->prepare(
+            "SELECT COUNT(*) FROM leads l
+             JOIN parenthood ph ON ph.parent_user_id = l.converted_parent_user_id
+             WHERE ph.child_user_id = ? AND l.semester_id = ? AND l.installment_plan = 1
+               AND l.status = 'converted' AND l.amount_paid_cents > 0"
+        );
+        $st->execute([$studentUserId, $semesterId]);
+        return (int)$st->fetchColumn() > 0;
+    }
+
+    /**
+     * On the installment plan, half of a student's tuition is not due until
+     * the second installment. Money already received for the family — the
+     * registration payment, the parent credit — is therefore NOT used for
+     * that half: it stays available for a sibling's first installment. This
+     * is that half, in cents (0 off the plan). $onPlan overrides the lookup
+     * (lead conversion knows the answer before the lead is marked converted).
+     */
+    public static function installmentHoldbackCents(int $studentUserId, ?int $semesterId, ?bool $onPlan = null): int {
+        if ($semesterId === null || !($onPlan ?? self::familyOnInstallmentPlan($studentUserId, $semesterId))) {
+            return 0;
+        }
+        return intdiv(max(0, self::liveDebitCents($studentUserId, $semesterId, 'lessons')), 2);
     }
 
     /**

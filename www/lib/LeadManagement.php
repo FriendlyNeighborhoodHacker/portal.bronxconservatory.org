@@ -1107,8 +1107,12 @@ class LeadManagement {
                 $intentId = self::orNull($lead['stripe_payment_intent_id'] ?? null);
                 $paymentSemesterId = $chargedSemesterId ?? $semesterId;
                 $owed = [];
+                // On the installment plan each child's share is their first
+                // installment only (fees + half the tuition); the rest of
+                // the payment is kept for the other children.
                 foreach ($confirmedStudentIds as $studentId) {
-                    $owed[$studentId] = Billing::balanceForStudentCents($studentId);
+                    $owed[$studentId] = Billing::balanceForStudentCents($studentId)
+                        - Billing::installmentHoldbackCents($studentId, $paymentSemesterId, !empty($lead['installment_plan']));
                 }
                 $shares = Billing::allocatePaymentAcrossStudents($owed, $paidCents);
                 $leftover = $paidCents - array_sum($shares);

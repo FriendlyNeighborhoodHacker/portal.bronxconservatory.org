@@ -79,6 +79,7 @@ try {
             'installment_available' => (bool)$preview['installment_available'],
             'installment_fee' => Billing::formatCents((int)$preview['installment_fee_cents']),
             'installment_note' => $preview['installment_note'],
+            'installment_default' => (bool)$preview['installment_default'],
         ];
         // Money already received that meets these charges — the student's own
         // credit, and their parents' credit — shown under the total so the
@@ -86,7 +87,13 @@ try {
         // Then the parents' credit pays what the student still owes.
         $balanceCents = Billing::balanceForStudentCents($studentUserId);
         $afterCents = $balanceCents + (int)$preview['total_cents'];
-        $fromParentCents = min(max(0, $afterCents), Billing::parentCreditAvailableForStudent($studentUserId));
+        // (On the installment plan, half the tuition is left for the second
+        // installment and the parent credit is not used for it.)
+        $holdbackCents = $preview['installment_default']
+            ? Billing::installmentHoldbackCents($studentUserId, $semesterId, true)
+                + intdiv((int)$preview['installment_holdback_lessons_cents'], 2)
+            : 0;
+        $fromParentCents = min(max(0, $afterCents - $holdbackCents), Billing::parentCreditAvailableForStudent($studentUserId));
         if ($balanceCents < 0 || $fromParentCents > 0) {
             $afterCents -= $fromParentCents;
             if ($balanceCents < 0) {

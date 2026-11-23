@@ -356,7 +356,8 @@ class ReservationUIManager {
               if (json.installment_available) {
                 document.getElementById('resChargesInstallmentLabel').textContent =
                   'Include installment fee (' + json.installment_fee + ') — the family is paying in two installments';
-                document.getElementById('resChargesInstallment').checked = false;
+                // Ticked for a family that chose the plan when registering.
+                document.getElementById('resChargesInstallment').checked = !!json.installment_default;
                 installmentRow.classList.remove('hidden');
               }
               if (json.installment_note) {

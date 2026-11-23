@@ -235,6 +235,20 @@ a payment line "Paid from parent credit (Name)" and the parent credit a
 matching "Used for …" line. A $400 charge to a student holding $200, whose
 parent holds $300, leaves the student at zero and the parent with $100.
 
+**On the installment plan**, half of each child's tuition is not due until the
+second installment, so family money is never used for it: a registration
+payment, and the parent credit, pay a child's fees and the first half of the
+tuition only (`Billing::installmentHoldbackCents`). Two children on the plan,
+one placed at conversion: the first is confirmed owing exactly their second
+installment, and the rest of the payment waits as parent credit for the second
+child's first installment. The **registration fee and the installment plan fee
+are each charged once per family per semester** — confirming a second child
+posts neither again (nor does the daily installment-fee sweep), and the second
+child follows the family's plan for the past-due schedule. A family is "on the
+plan" when the fee is on any of their children's ledgers, or they chose it on a
+paid, converted registration for that semester (the confirm dialog then ticks
+"Include installment fee" by itself).
+
 It shows on the admin's parent page (balance and history), on the admin's
 student page beside the balance, in the confirm-reservation dialog, and as a
 one-line heads-up on the parent's home and billing pages.
