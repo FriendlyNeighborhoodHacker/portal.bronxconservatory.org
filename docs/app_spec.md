@@ -675,7 +675,8 @@ student / parent, completing an inquiry on a family's behalf, and every
 scheduling change including substitutes and cancellations.
 
 **Demo safety.** Setting `EMAIL_REDIRECT_TO` in `config.local.php` delivers every
-outgoing email to that one address instead of its real recipient, tagged
+outgoing email to that address (or to every address, when it is an array)
+instead of its real recipient, tagged
 `[Redirected — was to …]` in the subject; `EMAIL_REDIRECT_ALLOWLIST` lets named
 addresses through. Enforced at the single send function, so no code path can
 bypass it. Stripe's own receipts are not covered. While the redirect is on, a

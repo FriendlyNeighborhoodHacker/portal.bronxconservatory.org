@@ -34,17 +34,20 @@ define('SMTP_FROM_EMAIL', '');         // often the same as SMTP_USER
 define('SMTP_FROM_NAME', 'Bronx Conservatory of Music'); // From name seen in emails
 
 // ===== Email redirect (the "do not email real people" switch) =====
-// When EMAIL_REDIRECT_TO is a non-empty address, EVERY email the portal sends
+// When EMAIL_REDIRECT_TO is a non-empty address — or an array of addresses,
+// each of which gets a copy — EVERY email the portal sends
 // is delivered there instead of to its real recipient, with the subject
 // tagged "[Redirected — was to <address>]". Addresses on
 // EMAIL_REDIRECT_ALLOWLIST are the exceptions: mail to them is delivered
-// normally (case-insensitive). Leave EMAIL_REDIRECT_TO as '' to send normally.
+// normally (case-insensitive). Leave EMAIL_REDIRECT_TO as '' (or []) to send normally.
 // While it is on, every page shows a thin yellow strip saying "Emails
 // suppressed" (signed-in admins also see the address and the exceptions),
 // whether or not DEV_SITE is set. Also shown on Admin > Maintenance. Stripe's own payment receipts are not covered.
 // Example for a soft launch where only staff should get mail:
 //   define('EMAIL_REDIRECT_TO', 'you@example.org');
 //   define('EMAIL_REDIRECT_ALLOWLIST', ['director@example.org', 'you@example.org']);
+// Several people watching the redirected mail:
+//   define('EMAIL_REDIRECT_TO', ['you@example.org', 'colleague@example.org']);
 define('EMAIL_REDIRECT_TO', '');
 define('EMAIL_REDIRECT_ALLOWLIST', []);
 

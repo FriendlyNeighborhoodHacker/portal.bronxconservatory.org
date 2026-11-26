@@ -157,7 +157,35 @@ final class RealDataLoaderTest extends TestCase
     public function testEmailRedirectStatusReflectsTheConfig(): void
     {
         // The test config leaves the redirect off.
-        $this->assertSame(['on' => false, 'to' => '', 'allowlist' => []], email_redirect_status());
+        $this->assertSame(['on' => false, 'to' => '', 'to_list' => [], 'allowlist' => []], email_redirect_status());
+    }
+
+    public function testEmailRedirectTakesOneAddressOrSeveral(): void
+    {
+        $this->assertSame([], email_redirect_normalize(''));
+        $this->assertSame([], email_redirect_normalize([]));
+        $this->assertSame(['a@example.org'], email_redirect_normalize(' a@example.org '));
+        $this->assertSame(
+            ['a@example.org', 'b@example.org'],
+            email_redirect_normalize(['a@example.org', '', ' b@example.org', 'A@example.org'])
+        );
+
+        // Off: delivered as addressed.
+        $this->assertNull(email_redirect_targets('family@example.org', [], []));
+
+        $both = ['a@example.org', 'b@example.org'];
+        $this->assertSame($both, email_redirect_targets('family@example.org', $both, []));
+        // Allowlisted recipients, and the redirect addresses themselves, go through untouched.
+        $this->assertNull(email_redirect_targets('Director@example.org', $both, ['director@example.org']));
+        $this->assertNull(email_redirect_targets('B@example.org', $both, []));
+
+        $this->assertSame(
+            ['Emails suppressed: all mail goes to a@example.org, b@example.org, except to director@example.org'],
+            ApplicationUI::siteBarParts(false, [
+                'on' => true, 'to' => 'a@example.org, b@example.org', 'to_list' => $both,
+                'allowlist' => ['b@example.org', 'director@example.org'],
+            ], true)
+        );
     }
 
     public function testTheTopStripSaysDevModeAndWhetherEmailIsSuppressed(): void

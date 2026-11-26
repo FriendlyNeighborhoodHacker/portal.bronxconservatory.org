@@ -502,8 +502,8 @@ class ApplicationUI {
             } else {
                 $text = 'Emails suppressed: all mail goes to ' . h((string)$emailRedirect['to']);
                 $allowlist = (array)($emailRedirect['allowlist'] ?? []);
-                // The redirect address itself is not an exception worth listing.
-                $allowlist = array_values(array_diff($allowlist, [strtolower((string)$emailRedirect['to'])]));
+                // The redirect addresses themselves are not exceptions worth listing.
+                $allowlist = array_values(array_diff($allowlist, array_map('strtolower', (array)($emailRedirect['to_list'] ?? [$emailRedirect['to']]))));
                 $text .= $allowlist
                     ? ', except to ' . h(implode(', ', $allowlist))
                     : ' (no exceptions)';

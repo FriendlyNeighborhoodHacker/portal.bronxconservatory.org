@@ -4,41 +4,71 @@ require_once __DIR__ . '/lib/UserContext.php';
 require_once __DIR__ . '/lib/EmailLog.php';
 
 /**
- * Demo/staging safety net. When EMAIL_REDIRECT_TO is set (config.local.php),
- * every outgoing email is delivered to that address instead of its real
- * recipient, so a live demo can never accidentally email a family. Recipients
- * on EMAIL_REDIRECT_ALLOWLIST are still delivered normally. Returns the
- * address to actually deliver to, or null to deliver as addressed. The email
- * log keeps the intended recipient either way; the subject is tagged with it
- * so the demo inbox shows who each message was for.
+ * Normalise an EMAIL_REDIRECT_TO value — one address or an array of them —
+ * into a list of trimmed, non-empty addresses, duplicates (case-insensitive)
+ * dropped. [] means the redirect is off.
  */
-function email_redirect_target(string $toEmail): ?string {
-  if (!defined('EMAIL_REDIRECT_TO') || trim((string)EMAIL_REDIRECT_TO) === '') {
+function email_redirect_normalize($raw): array {
+  $out = [];
+  foreach (is_array($raw) ? $raw : [$raw] as $address) {
+    $address = trim((string)$address);
+    if ($address !== '' && !isset($out[strtolower($address)])) {
+      $out[strtolower($address)] = $address;
+    }
+  }
+  return array_values($out);
+}
+
+/** The configured redirect addresses; [] when the redirect is off. */
+function email_redirect_addresses(): array {
+  return defined('EMAIL_REDIRECT_TO') ? email_redirect_normalize(EMAIL_REDIRECT_TO) : [];
+}
+
+/**
+ * Demo/staging safety net. When EMAIL_REDIRECT_TO is set (config.local.php)
+ * to an address, or an array of addresses, every outgoing email is delivered
+ * there instead of to its real recipient, so a live demo can never
+ * accidentally email a family. Recipients on EMAIL_REDIRECT_ALLOWLIST — and
+ * the redirect addresses themselves — are still delivered normally. Returns
+ * the addresses to actually deliver to, or null to deliver as addressed. The
+ * email log keeps the intended recipient either way; the subject is tagged
+ * with it so the demo inbox shows who each message was for.
+ */
+function email_redirect_targets(string $toEmail, ?array $redirectTo = null, ?array $allowlist = null): ?array {
+  $redirectTo = $redirectTo ?? email_redirect_addresses();
+  if (!$redirectTo) {
     return null;
   }
+  if ($allowlist === null) {
+    $allowlist = (defined('EMAIL_REDIRECT_ALLOWLIST') && is_array(EMAIL_REDIRECT_ALLOWLIST))
+      ? EMAIL_REDIRECT_ALLOWLIST : [];
+  }
   $needle = strtolower(trim($toEmail));
-  $allowlist = (defined('EMAIL_REDIRECT_ALLOWLIST') && is_array(EMAIL_REDIRECT_ALLOWLIST))
-    ? EMAIL_REDIRECT_ALLOWLIST : [];
-  foreach ($allowlist as $allowed) {
+  // Already going to a redirect address: nothing to rewrite.
+  foreach (array_merge($allowlist, $redirectTo) as $allowed) {
     if (strtolower(trim((string)$allowed)) === $needle) {
       return null;
     }
   }
-  $redirect = trim((string)EMAIL_REDIRECT_TO);
-  // Already going to the redirect address: nothing to rewrite.
-  return strtolower($redirect) === $needle ? null : $redirect;
+  return $redirectTo;
 }
 
 /**
  * The redirect as configured, for showing admins what will happen to mail:
- * ['on' => bool, 'to' => address, 'allowlist' => [addresses still delivered normally]].
+ * ['on' => bool, 'to' => the addresses as one display string,
+ *  'to_list' => [addresses], 'allowlist' => [addresses still delivered normally]].
  */
 function email_redirect_status(): array {
-  $to = defined('EMAIL_REDIRECT_TO') ? trim((string)EMAIL_REDIRECT_TO) : '';
+  $toList = email_redirect_addresses();
   $allowlist = (defined('EMAIL_REDIRECT_ALLOWLIST') && is_array(EMAIL_REDIRECT_ALLOWLIST))
     ? array_values(array_filter(array_map(static fn($a) => strtolower(trim((string)$a)), EMAIL_REDIRECT_ALLOWLIST)))
     : [];
-  return ['on' => $to !== '', 'to' => $to, 'allowlist' => $to !== '' ? $allowlist : []];
+  return [
+    'on' => (bool)$toList,
+    'to' => implode(', ', $toList),
+    'to_list' => $toList,
+    'allowlist' => $toList ? $allowlist : [],
+  ];
 }
 
 /**
@@ -142,10 +172,12 @@ function send_email_with_error(string $toEmail, string $subject, string $html, s
 
   // Every send in the app funnels through here, so the demo redirect cannot
   // be bypassed by a code path that forgot about it.
-  $redirect = email_redirect_target($toEmail);
+  // A redirect may name several addresses; each gets the one message.
+  $recipients = [$toEmail];
+  $redirect = email_redirect_targets($toEmail);
   if ($redirect !== null) {
     $subject = '[Redirected — was to ' . $toEmail . '] ' . $subject;
-    $toEmail = $redirect;
+    $recipients = $redirect;
   }
 
   if ($smtp !== null) {
@@ -292,15 +324,17 @@ function send_email_with_error(string $toEmail, string $subject, string $html, s
     $errorMessage = "MAIL FROM failed: $lastResponse";
     return false;
   }
-  if (!$send("RCPT TO:<$toEmail>")) { 
-    fclose($fp); 
-    $errorMessage = "Failed to send RCPT TO command";
-    return false;
-  }
-  if (!$expect([250,251])) { 
-    fclose($fp); 
-    $errorMessage = "RCPT TO failed: $lastResponse";
-    return false;
+  foreach ($recipients as $recipient) {
+    if (!$send("RCPT TO:<$recipient>")) {
+      fclose($fp);
+      $errorMessage = "Failed to send RCPT TO command";
+      return false;
+    }
+    if (!$expect([250,251])) {
+      fclose($fp);
+      $errorMessage = "RCPT TO failed: $lastResponse";
+      return false;
+    }
   }
   if (!$send("DATA")) { 
     fclose($fp); 
@@ -318,7 +352,9 @@ function send_email_with_error(string $toEmail, string $subject, string $html, s
   $headers = [];
   $headers[] = "Date: $date";
   $headers[] = "From: ".mb_encode_mimeheader($fromName)." <{$fromEmail}>";
-  $headers[] = "To: ".mb_encode_mimeheader($toName)." <{$toEmail}>";
+  $headers[] = "To: ".implode(', ', array_map(
+    static fn($recipient) => mb_encode_mimeheader($toName)." <{$recipient}>", $recipients
+  ));
   $headers[] = "Subject: ".mb_encode_mimeheader($subject);
   if ($replyTo !== '') {
     $headers[] = "Reply-To: <{$replyTo}>";
