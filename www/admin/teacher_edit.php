@@ -61,7 +61,18 @@ header_html('Edit ' . $name);
 
 <div class="page-head">
   <h2>Edit Teacher — <?=h($name)?><?=$user['is_deleted'] ? ' <span class="badge">Deleted</span>' : ''?></h2>
-  <a class="button" href="/admin/teachers.php">Back to Teachers</a>
+  <span class="actions">
+    <?php // Developers only, as on the student page: see the portal exactly as this teacher does. ?>
+    <?php if (is_developer() && empty($user['is_deleted']) && (int)$user['id'] !== (int)current_user()['id']): ?>
+      <form method="post" action="/admin/login_as_eval.php" style="display:inline;">
+        <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+        <input type="hidden" name="user_id" value="<?=$userId?>">
+        <input type="hidden" name="return_to" value="<?=h($returnTo)?>">
+        <button class="button">Login as this user</button>
+      </form>
+    <?php endif; ?>
+    <a class="button" href="/admin/teachers.php">Back to Teachers</a>
+  </span>
 </div>
 
 <?php if ($flash): ?><p class="flash"><?=h($flash)?></p><?php endif; ?>
